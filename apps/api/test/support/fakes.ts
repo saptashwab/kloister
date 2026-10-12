@@ -1,7 +1,7 @@
 import { jest } from '@jest/globals';
 import type { AuditService } from '../../src/audit/audit.service.js';
 import { AppConfig } from '../../src/config/app-config.js';
-import type { User } from '../../src/generated/prisma/client.js';
+import type { Project, User } from '../../src/generated/prisma/client.js';
 import type { PrismaService } from '../../src/prisma/prisma.service.js';
 import {
   DEFAULT_SECURITY_SETTINGS,
@@ -28,6 +28,15 @@ export interface FakePrisma {
   session: { findUnique: Fn; create: Fn; update: Fn; deleteMany: Fn };
   auditLog: { create: Fn; findMany: Fn };
   appSetting: { findUnique: Fn };
+  project: { findUnique: Fn; findMany: Fn; create: Fn; update: Fn };
+  projectMember: {
+    findUnique: Fn;
+    findMany: Fn;
+    create: Fn;
+    update: Fn;
+    delete: Fn;
+    count: Fn;
+  };
   $transaction: Fn;
 }
 
@@ -43,6 +52,15 @@ export function fakePrisma(): { fake: FakePrisma; prisma: PrismaService } {
     session: { findUnique: fn(), create: fn(), update: fn(), deleteMany: fn() },
     auditLog: { create: fn(), findMany: fn() },
     appSetting: { findUnique: fn() },
+    project: { findUnique: fn(), findMany: fn(), create: fn(), update: fn() },
+    projectMember: {
+      findUnique: fn(),
+      findMany: fn(),
+      create: fn(),
+      update: fn(),
+      delete: fn(),
+      count: fn(),
+    },
     $transaction: fn(),
   };
   fake.$transaction.mockImplementation((callback: unknown) =>
@@ -108,6 +126,27 @@ export function makeUser(overrides: Partial<User> = {}): User {
     lockedUntil: null,
     themePrefs: {},
     lastLoginAt: null,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+/**
+ * Builds a project row with sensible defaults.
+ *
+ * @param overrides Fields to change.
+ * @returns The project.
+ */
+export function makeProject(overrides: Partial<Project> = {}): Project {
+  const now = new Date('2026-01-01T00:00:00Z');
+  return {
+    id: '33333333-3333-4333-8333-333333333333',
+    key: 'KLO',
+    name: 'Test project',
+    description: '',
+    archivedAt: null,
+    settings: {},
     createdAt: now,
     updatedAt: now,
     ...overrides,

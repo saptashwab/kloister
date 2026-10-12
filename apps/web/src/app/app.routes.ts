@@ -28,10 +28,16 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/admin-audit/admin-audit').then((m) => m.AdminAuditPage),
   },
   {
+    path: 'p/:key/settings',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/project-settings/project-settings').then((m) => m.ProjectSettingsPage),
+  },
+  {
     path: '',
     pathMatch: 'full',
     canActivate: [authGuard],
-    loadComponent: () => import('./pages/home/home').then((m) => m.HomePage),
+    loadComponent: () => import('./pages/projects/projects').then((m) => m.ProjectsPage),
   },
   { path: '**', redirectTo: '' },
 ];

@@ -16,7 +16,7 @@ import { SESSION_COOKIE, SessionService } from './session.service.js';
  *    `@AllowPendingPasswordChange()` (403 `PASSWORD_CHANGE_REQUIRED`).
  * 4. Routes marked `@AdminOnly()` require the `ADMIN` system role (403 `FORBIDDEN`).
  *
- * Project-level permissions are checked later by `ProjectAccessService` (M2).
+ * Project-level permissions are checked afterwards by `ProjectAccessGuard`.
  */
 @Injectable()
 export class SessionGuard implements CanActivate {

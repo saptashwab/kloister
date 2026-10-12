@@ -1,6 +1,5 @@
 /**
- * Actions written to the audit log. Later milestones add project and item
- * actions; `ADMIN_CROSS_PROJECT_ACCESS` (SPEC §3.1) arrives with projects in M2.
+ * Actions written to the audit log. Later milestones add item actions.
  */
 export const AuditAction = {
   LOGIN_SUCCEEDED: 'LOGIN_SUCCEEDED',
@@ -13,6 +12,15 @@ export const AuditAction = {
   USER_CREATED: 'USER_CREATED',
   USER_UPDATED: 'USER_UPDATED',
   ADMIN_BOOTSTRAPPED: 'ADMIN_BOOTSTRAPPED',
+  PROJECT_CREATED: 'PROJECT_CREATED',
+  PROJECT_UPDATED: 'PROJECT_UPDATED',
+  PROJECT_ARCHIVED: 'PROJECT_ARCHIVED',
+  PROJECT_UNARCHIVED: 'PROJECT_UNARCHIVED',
+  MEMBER_ADDED: 'MEMBER_ADDED',
+  MEMBER_UPDATED: 'MEMBER_UPDATED',
+  MEMBER_REMOVED: 'MEMBER_REMOVED',
+  /** An admin opened or read a project they are not a member of (SPEC §3.1). */
+  ADMIN_CROSS_PROJECT_ACCESS: 'ADMIN_CROSS_PROJECT_ACCESS',
 } as const;
 
 /** One of the {@link AuditAction} values. */

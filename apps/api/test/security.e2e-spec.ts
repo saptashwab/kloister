@@ -35,6 +35,18 @@ describe('API security without a session (e2e)', () => {
     ['PATCH', `/api/v1/admin/users/${SOME_ID}`],
     ['POST', `/api/v1/admin/users/${SOME_ID}/reset-password`],
     ['GET', '/api/v1/admin/audit'],
+    ['GET', '/api/v1/projects'],
+    ['POST', '/api/v1/projects'],
+    ['GET', `/api/v1/projects/${SOME_ID}`],
+    ['GET', '/api/v1/projects/KLO'],
+    ['PATCH', `/api/v1/projects/${SOME_ID}`],
+    ['POST', `/api/v1/projects/${SOME_ID}/archive`],
+    ['POST', `/api/v1/projects/${SOME_ID}/unarchive`],
+    ['GET', `/api/v1/projects/${SOME_ID}/members`],
+    ['GET', `/api/v1/projects/${SOME_ID}/member-candidates`],
+    ['POST', `/api/v1/projects/${SOME_ID}/members`],
+    ['PATCH', `/api/v1/projects/${SOME_ID}/members/${SOME_ID}`],
+    ['DELETE', `/api/v1/projects/${SOME_ID}/members/${SOME_ID}`],
   ] as const)('%s %s returns 401 without a session', async (method, url) => {
     const res = await app.inject({ method, url, headers: CSRF, payload: {} });
     expect(res.statusCode).toBe(401);

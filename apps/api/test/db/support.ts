@@ -2,7 +2,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { CSRF_HEADER, CSRF_HEADER_VALUE, type SystemRole } from '@kloister/shared';
 import { createApp } from '../../src/app.factory.js';
 import { PasswordService } from '../../src/auth/password.service.js';
-import type { User } from '../../src/generated/prisma/client.js';
+import type { Project, User } from '../../src/generated/prisma/client.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 
 // Helpers for tests against a real, disposable Postgres (see jest.db.config.js).
@@ -36,7 +36,7 @@ export async function startApp(): Promise<{ app: NestFastifyApplication; prisma:
  */
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "Session", "AppSetting", "User" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "AuditLog", "Session", "AppSetting", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
   );
 }
 
@@ -72,6 +72,38 @@ export async function seedUser(
       passwordHash: await passwords.hash(fields.password ?? PASSWORD),
       mustChangePassword: fields.mustChangePassword ?? false,
       isActive: fields.isActive ?? true,
+    },
+  });
+}
+
+/**
+ * Inserts a project with its members directly.
+ *
+ * @param prisma Database client.
+ * @param key Project key.
+ * @param members Memberships to create.
+ * @param fields Optional extra project fields.
+ * @param fields.archivedAt Archive timestamp.
+ * @param fields.settings Stored settings JSON.
+ * @returns The created project.
+ */
+export async function seedProject(
+  prisma: PrismaService,
+  key: string,
+  members: {
+    userId: string;
+    role: 'PM' | 'LEAD' | 'MEMBER' | 'VIEWER';
+    visibility?: 'ALL' | 'BUCKETS' | 'OWN';
+  }[],
+  fields: { archivedAt?: Date; settings?: object } = {},
+): Promise<Project> {
+  return prisma.project.create({
+    data: {
+      key,
+      name: `Project ${key}`,
+      ...(fields.archivedAt === undefined ? {} : { archivedAt: fields.archivedAt }),
+      ...(fields.settings === undefined ? {} : { settings: fields.settings }),
+      members: { create: members },
     },
   });
 }
