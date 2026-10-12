@@ -176,6 +176,122 @@ describe('MembersService last-PM rule (SPEC §3.2)', () => {
   });
 });
 
+describe('MembersService admin PM assignment (SPEC §3.1)', () => {
+  const adminAccess = {
+    ...access,
+    role: null,
+    isSystemAdmin: true,
+    permissions: new Set(['VIEW_ITEMS', 'ASSIGN_PMS']),
+  } as unknown as ProjectAccess;
+  const adminAuth: AuthContext = {
+    user: makeUser({ id: PM_ID, systemRole: 'ADMIN' }),
+    sessionId: 's',
+  };
+
+  /**
+   * Builds the service with the admin still active in the database.
+   *
+   * @param targetRole The target member's role.
+   * @param otherActivePms Count returned for other active PMs.
+   * @returns Service, fake and audit records.
+   */
+  function adminSetup(targetRole: string, otherActivePms = 1) {
+    const ctx = setup(targetRole, otherActivePms);
+    ctx.fake.projectMember.findUnique.mockResolvedValue(row(TARGET_ID, targetRole));
+    ctx.fake.user.findUnique.mockImplementation((args: unknown) => {
+      const { id } = (args as { where: { id: string } }).where;
+      return Promise.resolve(
+        id === PM_ID
+          ? makeUser({ id: PM_ID, systemRole: 'ADMIN' })
+          : makeUser({ id: TARGET_ID, email: 'target@example.org' }),
+      );
+    });
+    ctx.fake.projectMember.create.mockImplementation((args: unknown) =>
+      Promise.resolve({ ...row(TARGET_ID, 'PM'), ...(args as { data: object }).data }),
+    );
+    return ctx;
+  }
+
+  it('adds users as PM only', async () => {
+    const { service, audit } = adminSetup('MEMBER');
+    expect(
+      (await rejection(service.add(adminAuth, adminAccess, { userId: TARGET_ID, role: 'LEAD' })))
+        .status,
+    ).toBe(403);
+    await service.add(adminAuth, adminAccess, { userId: TARGET_ID, role: 'PM' });
+    expect(audit.records[0]).toMatchObject({
+      action: AuditAction.MEMBER_ADDED,
+      meta: expect.objectContaining({ role: 'PM', asAdmin: true }) as unknown,
+    });
+  });
+
+  it('promotes to and demotes from PM, but changes nothing else', async () => {
+    const promote = adminSetup('MEMBER');
+    await expect(
+      promote.service.update(adminAuth, adminAccess, TARGET_ID, { role: 'PM' }),
+    ).resolves.toMatchObject({ role: 'PM' });
+    const demote = adminSetup('PM');
+    await expect(
+      demote.service.update(adminAuth, adminAccess, TARGET_ID, { role: 'LEAD' }),
+    ).resolves.toMatchObject({ role: 'LEAD' });
+    const other = adminSetup('MEMBER');
+    expect(
+      (await rejection(other.service.update(adminAuth, adminAccess, TARGET_ID, { role: 'VIEWER' })))
+        .status,
+    ).toBe(403);
+    expect(other.fake.projectMember.update).not.toHaveBeenCalled();
+  });
+
+  it('removes PMs only, and still keeps one active PM', async () => {
+    const nonPm = adminSetup('MEMBER');
+    expect((await rejection(nonPm.service.remove(adminAuth, adminAccess, TARGET_ID))).status).toBe(
+      403,
+    );
+    const last = adminSetup('PM', 0);
+    expect((await rejection(last.service.remove(adminAuth, adminAccess, TARGET_ID))).code).toBe(
+      ErrorCode.LAST_PM,
+    );
+    const ok = adminSetup('PM', 1);
+    await ok.service.remove(adminAuth, adminAccess, TARGET_ID);
+    expect(ok.fake.projectMember.delete).toHaveBeenCalled();
+  });
+
+  it('cannot change visibility while demoting a PM', async () => {
+    const { service, fake } = adminSetup('PM');
+    expect(
+      (
+        await rejection(
+          service.update(adminAuth, adminAccess, TARGET_ID, { role: 'MEMBER', visibility: 'OWN' }),
+        )
+      ).status,
+    ).toBe(403);
+    expect(fake.projectMember.update).not.toHaveBeenCalled();
+  });
+
+  it('limits admins who are PMs to PM-role changes while the project is archived', async () => {
+    const archivedAdminPm = {
+      ...access,
+      project: makeProject({ archivedAt: new Date() }),
+      isSystemAdmin: true,
+      permissions: new Set(['MANAGE_MEMBERS', 'ASSIGN_PMS', 'VIEW_ITEMS']),
+    } as unknown as ProjectAccess;
+    const { service } = adminSetup('MEMBER');
+    expect(
+      (await rejection(service.update(adminAuth, archivedAdminPm, TARGET_ID, { role: 'VIEWER' })))
+        .status,
+    ).toBe(403);
+    await expect(
+      service.update(adminAuth, archivedAdminPm, TARGET_ID, { role: 'PM' }),
+    ).resolves.toMatchObject({ role: 'PM' });
+  });
+
+  it('refuses when the caller is no longer an active admin', async () => {
+    const { service, fake } = adminSetup('PM');
+    fake.user.findUnique.mockResolvedValue(makeUser({ id: PM_ID, systemRole: 'USER' }));
+    expect((await rejection(service.remove(adminAuth, adminAccess, TARGET_ID))).status).toBe(403);
+  });
+});
+
 describe('ProjectsService.list', () => {
   it('refuses scope=all to non-admins', async () => {
     const { prisma } = fakePrisma();

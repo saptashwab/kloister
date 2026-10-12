@@ -64,7 +64,8 @@ kloister/
 
 ### 3.1 System roles
 - **Admin**: manages users (create, deactivate, reset password, promote to Admin), creates projects
-  and assigns the first PM, edits app settings, views the audit log. Has a header toggle,
+  with one or more PMs, assigns, reassigns or removes PMs in any existing project at any time (a project
+  may have several PMs; the last active PM rule in 3.2 still applies), edits app settings, views the audit log. Has a header toggle,
   "All projects" vs "My projects", that only filters the UI. Every time an admin opens or reads a project
   they are not a member of, an audit entry `ADMIN_CROSS_PROJECT_ACCESS` is written.
 - **User**: everything else is decided per project.

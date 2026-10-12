@@ -59,6 +59,12 @@ export const ProjectPermission = {
   MANAGE_BOARD: 'MANAGE_BOARD',
   /** Manage members, roles and visibility. */
   MANAGE_MEMBERS: 'MANAGE_MEMBERS',
+  /**
+   * Grant or take away the PM role: add a user as PM, promote a member to
+   * PM, demote or remove a PM (SPEC §3.1). PMs have it through their role;
+   * system admins have it in every project, member or not.
+   */
+  ASSIGN_PMS: 'ASSIGN_PMS',
   /** Project settings, ADO settings, archive project. */
   MANAGE_PROJECT: 'MANAGE_PROJECT',
   /** ADO CSV export. */
@@ -100,26 +106,43 @@ const ROLE_PERMISSIONS: Record<ProjectRole, readonly ProjectPermission[]> = {
 
 /**
  * Resolves the permissions a project role grants, including the Member
- * "assign items to others" project setting.
+ * "assign items to others" project setting and the admin right to assign
+ * PMs.
  *
  * The API is the authority (SPEC §3.4); the web app uses the same function
  * only to hide controls.
  *
  * @param role The member's project role, or null for a system admin who is
- *   not a member (read-only access).
+ *   not a member (read-only, plus assigning PMs).
  * @param settings The project's settings.
+ * @param isSystemAdmin Whether the caller has the ADMIN system role, which
+ *   adds `ASSIGN_PMS` in every project.
  * @returns The granted permissions.
  */
 export function permissionsFor(
   role: ProjectRole | null,
   settings: Pick<ProjectSettings, 'membersCanAssignOthers'>,
+  isSystemAdmin = false,
 ): ProjectPermission[] {
-  if (role === null) return [P.VIEW_ITEMS];
-  const granted = [...ROLE_PERMISSIONS[role]];
+  const granted: ProjectPermission[] = role === null ? [P.VIEW_ITEMS] : [...ROLE_PERMISSIONS[role]];
   if (role === ProjectRole.MEMBER && settings.membersCanAssignOthers) {
     granted.push(P.ASSIGN_OTHERS);
   }
+  if (isSystemAdmin && !granted.includes(P.ASSIGN_PMS)) granted.push(P.ASSIGN_PMS);
   return granted;
+}
+
+/**
+ * Reports whether a caller may change memberships only as far as the PM
+ * role goes: they hold `ASSIGN_PMS` (a system admin) but not
+ * `MANAGE_MEMBERS` (not a PM of the project).
+ *
+ * @param permissions The caller's permissions.
+ * @returns True when only PM-role changes are allowed.
+ */
+export function assignsPmsOnly(permissions: Iterable<ProjectPermission>): boolean {
+  const set = new Set(permissions);
+  return set.has(P.ASSIGN_PMS) && !set.has(P.MANAGE_MEMBERS);
 }
 
 /**
@@ -189,9 +212,12 @@ export interface CreateProjectRequest {
   name: string;
   /** Optional plain-text description. */
   description?: string;
-  /** The first Project Manager (SPEC §3.1). Must be an active user. */
-  pmUserId: string;
+  /** The Project Managers (SPEC §3.1): one or more distinct active users. */
+  pmUserIds: string[];
 }
+
+/** Most PMs that can be named when creating a project. */
+export const MAX_INITIAL_PMS = 20;
 
 /** Body of `PATCH /projects/:id` (PM only). Omitted fields are left unchanged. */
 export interface UpdateProjectRequest {

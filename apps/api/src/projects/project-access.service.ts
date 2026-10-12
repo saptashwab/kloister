@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  assignsPmsOnly,
   AuditAction,
   ErrorCode,
   isScopedRole,
@@ -34,14 +35,17 @@ export interface ProjectAccess {
   userId: string;
   /**
    * The caller's project role, or null for a system admin who is not a
-   * member (read-only access, audited as `ADMIN_CROSS_PROJECT_ACCESS`).
+   * member (read-only plus assigning PMs, audited as
+   * `ADMIN_CROSS_PROJECT_ACCESS`).
    */
   role: ProjectRole | null;
+  /** True when the caller has the ADMIN system role. */
+  isSystemAdmin: boolean;
   /** Effective visibility: always `ALL` for PM, Lead and non-member admins. */
   visibility: Visibility;
   /** Visible buckets when {@link visibility} is `BUCKETS`; empty otherwise. */
   allowedBucketIds: readonly string[];
-  /** Granted permissions (SPEC §3.2). */
+  /** Granted permissions (SPEC §3.2, plus `ASSIGN_PMS` for admins, SPEC §3.1). */
   permissions: ReadonlySet<ProjectPermission>;
 }
 
@@ -79,13 +83,15 @@ type ProjectLookup = { id: string } | { key: string };
  *
  * - {@link resolve} loads the caller's membership. Non-members get 404 so
  *   project existence is not revealed; system admins who are not members get
- *   read-only access and every such request is audited (SPEC §3.1).
+ *   read-only access plus PM assignment, and every such request is audited
+ *   (SPEC §3.1).
  * - {@link has} answers the role table in SPEC §3.2.
  * - The item checks combine the role table with the visibility scope and
  *   "own" conditions, and {@link itemScopeFilter} builds the scope into
  *   queries. Items outside the scope must be answered with 404, not 403.
  *
- * Admins who are members are bound by their membership like anyone else.
+ * Admins who are members are bound by their membership like anyone else,
+ * except that every admin may assign PMs (`ASSIGN_PMS`).
  */
 @Injectable()
 export class ProjectAccessService {
@@ -104,8 +110,9 @@ export class ProjectAccessService {
    * Resolves the caller's access to a project referenced by id or key.
    *
    * Permissions: members get their role's access; system admins who are not
-   * members get read-only access and an `ADMIN_CROSS_PROJECT_ACCESS` entry is
-   * written before anything is returned; everyone else gets 404.
+   * members get read-only access plus `ASSIGN_PMS`, and an
+   * `ADMIN_CROSS_PROJECT_ACCESS` entry is written before anything is
+   * returned; everyone else gets 404. Admins always hold `ASSIGN_PMS`.
    *
    * @param auth The signed-in caller.
    * @param ref Project uuid or key (case-insensitive) from the URL.
@@ -125,6 +132,7 @@ export class ProjectAccessService {
     const { members, ...row } = project;
     const settings = parseProjectSettings(row.settings);
     const member = members[0];
+    const isSystemAdmin = auth.user.systemRole === SystemRole.ADMIN;
     if (member !== undefined) {
       const scoped = isScopedRole(member.role);
       return {
@@ -132,14 +140,15 @@ export class ProjectAccessService {
         settings,
         userId,
         role: member.role,
+        isSystemAdmin,
         visibility: scoped ? member.visibility : Visibility.ALL,
         allowedBucketIds:
           scoped && member.visibility === Visibility.BUCKETS ? member.allowedBucketIds : [],
-        permissions: new Set(permissionsFor(member.role, settings)),
+        permissions: new Set(permissionsFor(member.role, settings, isSystemAdmin)),
       };
     }
 
-    if (auth.user.systemRole !== SystemRole.ADMIN) throw projectNotFound();
+    if (!isSystemAdmin) throw projectNotFound();
     await this.audit.record({
       actorId: userId,
       action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS,
@@ -153,9 +162,10 @@ export class ProjectAccessService {
       settings,
       userId,
       role: null,
+      isSystemAdmin,
       visibility: Visibility.ALL,
       allowedBucketIds: [],
-      permissions: new Set(permissionsFor(null, settings)),
+      permissions: new Set(permissionsFor(null, settings, true)),
     };
   }
 
@@ -178,7 +188,8 @@ export class ProjectAccessService {
    * Permissions: 403 `FORBIDDEN` when the role lacks the permission (the
    * caller can already see the project, so 404 would hide nothing); 409
    * `PROJECT_ARCHIVED` when `blockIfArchived` is set and the project is
-   * archived. The guard sets it for every non-GET request except unarchive.
+   * archived. The guard sets it for every non-GET request except unarchive
+   * and admin PM assignment.
    *
    * @param access The caller's access.
    * @param permission The permission required.
@@ -363,6 +374,23 @@ export function parseProjectRef(ref: string): ProjectLookup | null {
   if (isUUID(ref)) return { id: ref.toLowerCase() };
   const key = ref.toUpperCase();
   return PROJECT_KEY_PATTERN.test(key) ? { key } : null;
+}
+
+/**
+ * Reports whether a membership change by this caller is limited to the PM
+ * role (SPEC §3.1): true for system admins who are not PMs of the project,
+ * and for every system admin while the project is archived (the PM-role
+ * exception is then the only write an admin may make, so a project left
+ * without an active PM can always be recovered).
+ *
+ * @param access The caller's access.
+ * @returns True when only PM-role changes are allowed.
+ */
+export function pmAssignmentOnly(access: ProjectAccess): boolean {
+  return (
+    assignsPmsOnly(access.permissions) ||
+    (access.isSystemAdmin && access.project.archivedAt !== null)
+  );
 }
 
 /**

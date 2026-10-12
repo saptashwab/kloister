@@ -8,7 +8,11 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { ProjectPermission } from '@kloister/shared';
 import type { FastifyRequest } from 'fastify';
-import { type ProjectAccess, ProjectAccessService } from './project-access.service.js';
+import {
+  type ProjectAccess,
+  ProjectAccessService,
+  pmAssignmentOnly,
+} from './project-access.service.js';
 
 /** Metadata key set by {@link RequireProjectPermission}. */
 export const PROJECT_PERMISSION_KEY = 'kloister:projectPermission';
@@ -18,10 +22,16 @@ const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /** What {@link RequireProjectPermission} stores on a route. */
 export interface ProjectPermissionRequirement {
-  /** The permission the route needs. */
-  permission: ProjectPermission;
+  /** The route needs at least one of these permissions. */
+  permissions: readonly ProjectPermission[];
   /** Allow the route on archived projects even though it writes. */
   allowArchived: boolean;
+  /**
+   * Allow the route on archived projects for system admins, limited by the
+   * service to PM-role changes, so a project left without an active PM can be
+   * recovered even while archived.
+   */
+  allowArchivedForPmAssignment: boolean;
 }
 
 declare module 'fastify' {
@@ -36,19 +46,22 @@ declare module 'fastify' {
  * Routes guarded by {@link ProjectAccessGuard} without this decorator are
  * refused, so a forgotten decorator fails closed.
  *
- * @param permission The permission required (SPEC §3.2).
- * @param options Set `allowArchived` for the few writes allowed on archived
- *   projects (unarchive).
- * @param options.allowArchived Skip the archived-project check.
+ * @param permission The permission required (SPEC §3.2), or a list of which
+ *   any one suffices.
+ * @param options Archived-project exemptions.
+ * @param options.allowArchived Skip the archived-project check (unarchive).
+ * @param options.allowArchivedForPmAssignment Skip it for system admins
+ *   making PM-role changes (recovering a project).
  * @returns The metadata decorator.
  */
 export const RequireProjectPermission = (
-  permission: ProjectPermission,
-  options: { allowArchived?: boolean } = {},
+  permission: ProjectPermission | readonly ProjectPermission[],
+  options: { allowArchived?: boolean; allowArchivedForPmAssignment?: boolean } = {},
 ): MethodDecorator =>
   SetMetadata(PROJECT_PERMISSION_KEY, {
-    permission,
+    permissions: typeof permission === 'string' ? [permission] : permission,
     allowArchived: options.allowArchived ?? false,
+    allowArchivedForPmAssignment: options.allowArchivedForPmAssignment ?? false,
   } satisfies ProjectPermissionRequirement);
 
 /**
@@ -70,12 +83,13 @@ export const CurrentProject = createParamDecorator(
  * project parameter (uuid or key). Runs after the global session guard.
  *
  * Permissions, in order:
- * 1. The caller must be a member, or a system admin (read-only, audited as
+ * 1. The caller must be a member, or a system admin (read-only plus PM
+ *    assignment, audited as
  *    `ADMIN_CROSS_PROJECT_ACCESS`); otherwise 404 `NOT_FOUND`.
- * 2. Their role must grant the route's {@link RequireProjectPermission}
- *    (403 `FORBIDDEN`); a route without one is refused.
+ * 2. They must hold one of the route's {@link RequireProjectPermission}
+ *    permissions (403 `FORBIDDEN`); a route without one is refused.
  * 3. Writes (any method but GET/HEAD/OPTIONS) to archived projects get 409
- *    `PROJECT_ARCHIVED`, unless the route sets `allowArchived`.
+ *    `PROJECT_ARCHIVED`, unless the route is exempt for this caller.
  *
  * Because guards run before body validation, a non-member never learns
  * anything about a project from validation errors.
@@ -118,7 +132,13 @@ export class ProjectAccessGuard implements CanActivate {
     // Reads stay open on archived projects whatever permission they need
     // (e.g. member candidates); every write is refused unless the route opts out.
     const isWrite = !READ_METHODS.has(request.method);
-    this.access.assert(access, requirement.permission, isWrite && !requirement.allowArchived);
+    const exempt =
+      requirement.allowArchived ||
+      (requirement.allowArchivedForPmAssignment && pmAssignmentOnly(access));
+    const permission =
+      requirement.permissions.find((p) => this.access.has(access, p)) ?? requirement.permissions[0];
+    if (permission === undefined) throw new Error('RequireProjectPermission needs a permission');
+    this.access.assert(access, permission, isWrite && !exempt);
     request.projectAccess = access;
     return true;
   }

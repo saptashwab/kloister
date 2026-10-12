@@ -84,45 +84,50 @@ export class ProjectsService {
       ...pageArgs(query),
     });
     return toPage(rows, query, ({ members, ...project }) =>
-      toProjectListDto(project, members[0] ?? null),
+      toProjectListDto(project, members[0] ?? null, auth.user.systemRole === SystemRole.ADMIN),
     );
   }
 
   /**
-   * Creates a project with its first Project Manager (SPEC §3.1).
+   * Creates a project with one or more Project Managers (SPEC §3.1).
    *
    * Permissions: system admins only (enforced by the controller). The admin
-   * does not become a member unless they name themselves as the PM.
+   * does not become a member unless they name themselves as a PM.
    *
    * @param auth The admin.
-   * @param dto Key, name, description and the PM's user id.
+   * @param dto Key, name, description and the PMs' user ids.
    * @returns The project from the admin's point of view (201).
    */
   async create(auth: AuthContext, dto: CreateProjectDto): Promise<ProjectDto> {
+    const pmUserIds = [...new Set(dto.pmUserIds)];
     try {
-      const project = await this.prisma.$transaction(async (tx) => {
-        const pm = await tx.user.findUnique({ where: { id: dto.pmUserId } });
-        if (pm === null || !pm.isActive) {
+      const created = await this.prisma.$transaction(async (tx) => {
+        const pms = await tx.user.findMany({ where: { id: { in: pmUserIds }, isActive: true } });
+        if (pms.length !== pmUserIds.length) {
           throw new ApiException(
             HttpStatus.BAD_REQUEST,
             ErrorCode.VALIDATION_FAILED,
-            'The Project Manager must be an active user',
-            [{ field: 'pmUserId', messages: ['must be an active user'] }],
+            'Every Project Manager must be an active user',
+            [{ field: 'pmUserIds', messages: ['must all be active users'] }],
           );
         }
-        const created = await tx.project.create({
+        const project = await tx.project.create({
           data: {
             key: dto.key,
             name: dto.name,
             description: dto.description ?? '',
             settings: { ...DEFAULT_PROJECT_SETTINGS },
             members: {
-              create: { userId: pm.id, role: ProjectRole.PM, visibility: Visibility.ALL },
+              create: pms.map((pm) => ({
+                userId: pm.id,
+                role: ProjectRole.PM,
+                visibility: Visibility.ALL,
+              })),
             },
           },
           include: { members: true },
         });
-        const { members, ...row } = created;
+        const { members, ...row } = project;
         await this.audit.record(
           {
             actorId: auth.user.id,
@@ -134,24 +139,25 @@ export class ProjectsService {
           },
           tx,
         );
-        await this.audit.record(
-          {
-            actorId: auth.user.id,
-            action: AuditAction.MEMBER_ADDED,
-            entityType: 'ProjectMember',
-            entityId: members[0]?.id ?? null,
-            projectId: row.id,
-            meta: { userId: pm.id, email: pm.email, role: ProjectRole.PM },
-          },
-          tx,
-        );
-        return { row, pmUserId: pm.id };
+        for (const pm of pms) {
+          await this.audit.record(
+            {
+              actorId: auth.user.id,
+              action: AuditAction.MEMBER_ADDED,
+              entityType: 'ProjectMember',
+              entityId: members.find((m) => m.userId === pm.id)?.id ?? null,
+              projectId: row.id,
+              meta: { userId: pm.id, email: pm.email, role: ProjectRole.PM },
+            },
+            tx,
+          );
+        }
+        return row;
       });
-      const membership =
-        project.pmUserId === auth.user.id
-          ? { role: ProjectRole.PM, visibility: Visibility.ALL }
-          : null;
-      return toProjectListDto(project.row, membership);
+      const membership = pmUserIds.includes(auth.user.id)
+        ? { role: ProjectRole.PM, visibility: Visibility.ALL }
+        : null;
+      return toProjectListDto(created, membership, true);
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ApiException(

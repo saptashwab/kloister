@@ -74,7 +74,16 @@ async function rejection(promise: Promise<unknown>) {
 }
 
 const pm = { role: 'PM', visibility: 'ALL', allowedBucketIds: [] };
-const manage = { permission: ProjectPermission.MANAGE_PROJECT, allowArchived: false };
+const manage = {
+  permissions: [ProjectPermission.MANAGE_PROJECT],
+  allowArchived: false,
+  allowArchivedForPmAssignment: false,
+};
+const memberChange = {
+  permissions: [ProjectPermission.MANAGE_MEMBERS, ProjectPermission.ASSIGN_PMS],
+  allowArchived: false,
+  allowArchivedForPmAssignment: true,
+};
 
 describe('ProjectAccessGuard', () => {
   it('attaches the access when the role grants the permission', async () => {
@@ -121,5 +130,29 @@ describe('ProjectAccessGuard', () => {
     await expect(read.guard.canActivate(read.context)).resolves.toBe(true);
     const unarchive = setup({ ...manage, allowArchived: true }, [pm], 'USER', true);
     await expect(unarchive.guard.canActivate(unarchive.context)).resolves.toBe(true);
+  });
+
+  it('accepts any of several permissions: admins pass member routes via ASSIGN_PMS', async () => {
+    const admin = setup(memberChange, [], 'ADMIN');
+    await expect(admin.guard.canActivate(admin.context)).resolves.toBe(true);
+    const lead = setup(memberChange, [{ ...pm, role: 'LEAD' }]);
+    expect((await rejection(lead.guard.canActivate(lead.context))).status).toBe(403);
+  });
+
+  it('lets admins assign PMs on archived projects, but not PMs change members there', async () => {
+    const admin = setup(memberChange, [], 'ADMIN', true);
+    await expect(admin.guard.canActivate(admin.context)).resolves.toBe(true);
+    const pmCaller = setup(memberChange, [pm], 'USER', true);
+    expect((await rejection(pmCaller.guard.canActivate(pmCaller.context))).code).toBe(
+      ErrorCode.PROJECT_ARCHIVED,
+    );
+    // Admins who are PMs too may assign PMs while archived (the service then
+    // limits them to PM-role changes), but not edit the project.
+    const adminPm = setup(memberChange, [pm], 'ADMIN', true);
+    await expect(adminPm.guard.canActivate(adminPm.context)).resolves.toBe(true);
+    const adminPmSettings = setup(manage, [pm], 'ADMIN', true);
+    expect((await rejection(adminPmSettings.guard.canActivate(adminPmSettings.context))).code).toBe(
+      ErrorCode.PROJECT_ARCHIVED,
+    );
   });
 });

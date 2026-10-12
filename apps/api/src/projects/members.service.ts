@@ -7,6 +7,7 @@ import {
   type Page,
   type ProjectMemberDto,
   ProjectRole,
+  SystemRole,
   Visibility,
 } from '@kloister/shared';
 import { AuditService } from '../audit/audit.service.js';
@@ -17,7 +18,7 @@ import { isUniqueViolation, mapTransactionConflict } from '../common/prisma-erro
 import type { Prisma, ProjectMember } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MEMBER_USER_SELECT, toMemberDto } from './project.mapper.js';
-import { type ProjectAccess, projectArchived } from './project-access.service.js';
+import { type ProjectAccess, pmAssignmentOnly, projectArchived } from './project-access.service.js';
 import type { AddMemberDto, MemberCandidatesQueryDto, UpdateMemberDto } from './projects.dto.js';
 
 /** Most candidates returned by one search. */
@@ -52,7 +53,8 @@ export function normalizePlacement(placement: Placement): Placement {
 /**
  * Project membership: listing, adding, changing role and visibility, and
  * removing members (SPEC §3.2 "Manage members, roles, visibility", §8
- * `projects/:id/members`).
+ * `projects/:id/members`). System admins may also grant and take away the
+ * PM role in any project (SPEC §3.1).
  *
  * A project must always keep at least one active PM: removing or demoting
  * the last one is rejected with 409 `LAST_PM`. Changes run in serializable
@@ -95,8 +97,9 @@ export class MembersService {
   /**
    * Searches active users who are not yet members, to add them.
    *
-   * Permissions: PM only (`MANAGE_MEMBERS`, checked by the guard). This is
-   * the only user directory open to non-admins, and only to PMs.
+   * Permissions: PMs and system admins (`MANAGE_MEMBERS` or `ASSIGN_PMS`,
+   * checked by the guard). This is the only user directory open to
+   * non-admins, and only to PMs.
    *
    * @param access The caller's access.
    * @param query Search text.
@@ -130,7 +133,8 @@ export class MembersService {
   /**
    * Adds an active user to the project.
    *
-   * Permissions: PM only (`MANAGE_MEMBERS`, checked by the guard).
+   * Permissions: PMs (`MANAGE_MEMBERS`); system admins who are not PMs
+   * (`ASSIGN_PMS`) may only add users as PM (403 otherwise).
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -143,6 +147,8 @@ export class MembersService {
     dto: AddMemberDto,
   ): Promise<ProjectMemberDto> {
     const projectId = access.project.id;
+    const pmOnly = pmAssignmentOnly(access);
+    if (pmOnly && dto.role !== ProjectRole.PM) throw pmRoleOnly();
     const placement = normalizePlacement({
       role: dto.role,
       visibility: dto.visibility ?? Visibility.ALL,
@@ -150,7 +156,7 @@ export class MembersService {
     });
     try {
       return await this.serializable(async (tx) => {
-        await this.assertStillManager(tx, projectId, auth.user.id);
+        await this.assertMayChange(tx, projectId, auth.user.id, pmOnly);
         const user = await tx.user.findUnique({ where: { id: dto.userId } });
         if (user === null || !user.isActive) {
           throw new ApiException(
@@ -171,7 +177,7 @@ export class MembersService {
             entityType: 'ProjectMember',
             entityId: member.id,
             projectId,
-            meta: { userId: user.id, email: user.email, ...placement },
+            meta: { userId: user.id, email: user.email, ...placement, ...asAdmin(pmOnly) },
           },
           tx,
         );
@@ -192,8 +198,9 @@ export class MembersService {
   /**
    * Changes a member's role, visibility or bucket list.
    *
-   * Permissions: PM only (`MANAGE_MEMBERS`, checked by the guard); demoting
-   * the last active PM is rejected with 409 `LAST_PM`.
+   * Permissions: PMs (`MANAGE_MEMBERS`); system admins who are not PMs
+   * (`ASSIGN_PMS`) only to promote a member to PM or demote a PM (403
+   * otherwise). Demoting the last active PM is rejected with 409 `LAST_PM`.
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -208,14 +215,22 @@ export class MembersService {
     dto: UpdateMemberDto,
   ): Promise<ProjectMemberDto> {
     const projectId = access.project.id;
+    const pmOnly = pmAssignmentOnly(access);
+    // Admins change the PM role only, nothing else about a membership.
+    if (pmOnly && (dto.visibility !== undefined || dto.allowedBucketIds !== undefined)) {
+      throw pmRoleOnly();
+    }
     return this.serializable(async (tx) => {
-      await this.assertStillManager(tx, projectId, auth.user.id);
+      await this.assertMayChange(tx, projectId, auth.user.id, pmOnly);
       const current = await this.findMember(tx, projectId, userId);
       const next = normalizePlacement({
         role: dto.role ?? current.role,
         visibility: dto.visibility ?? current.visibility,
         allowedBucketIds: dto.allowedBucketIds ?? current.allowedBucketIds,
       });
+      if (pmOnly && current.role !== ProjectRole.PM && next.role !== ProjectRole.PM) {
+        throw pmRoleOnly();
+      }
       const changes: Record<string, { from: Prisma.InputJsonValue; to: Prisma.InputJsonValue }> =
         {};
       if (next.role !== current.role) changes['role'] = { from: current.role, to: next.role };
@@ -242,7 +257,7 @@ export class MembersService {
           entityType: 'ProjectMember',
           entityId: current.id,
           projectId,
-          meta: { userId, email: current.user.email, changes },
+          meta: { userId, email: current.user.email, changes, ...asAdmin(pmOnly) },
         },
         tx,
       );
@@ -254,8 +269,9 @@ export class MembersService {
    * Removes a member. PMs may remove themselves while another active PM
    * remains.
    *
-   * Permissions: PM only (`MANAGE_MEMBERS`, checked by the guard); removing
-   * the last active PM is rejected with 409 `LAST_PM`.
+   * Permissions: PMs (`MANAGE_MEMBERS`); system admins who are not PMs
+   * (`ASSIGN_PMS`) may only remove PMs (403 otherwise). Removing the last
+   * active PM is rejected with 409 `LAST_PM`.
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -264,9 +280,11 @@ export class MembersService {
    */
   async remove(auth: AuthContext, access: ProjectAccess, userId: string): Promise<void> {
     const projectId = access.project.id;
+    const pmOnly = pmAssignmentOnly(access);
     await this.serializable(async (tx) => {
-      await this.assertStillManager(tx, projectId, auth.user.id);
+      await this.assertMayChange(tx, projectId, auth.user.id, pmOnly);
       const current = await this.findMember(tx, projectId, userId);
+      if (pmOnly && current.role !== ProjectRole.PM) throw pmRoleOnly();
       if (current.role === ProjectRole.PM) {
         await this.assertAnotherActivePm(tx, projectId, userId);
       }
@@ -278,7 +296,7 @@ export class MembersService {
           entityType: 'ProjectMember',
           entityId: current.id,
           projectId,
-          meta: { userId, email: current.user.email, role: current.role },
+          meta: { userId, email: current.user.email, role: current.role, ...asAdmin(pmOnly) },
         },
         tx,
       );
@@ -301,19 +319,36 @@ export class MembersService {
   }
 
   /**
-   * Re-checks inside the transaction that the caller is still a PM and the
-   * project is not archived, so a concurrent demotion or archive cannot be
-   * bypassed: the changes conflict instead of both committing.
+   * Re-checks inside the transaction that the caller may still make the
+   * change, so a concurrent demotion or archive cannot be bypassed: the
+   * changes conflict instead of both committing.
+   *
+   * - PMs must still be PM and the project must not be archived.
+   * - Admins assigning PMs must still be active admins; archived projects are
+   *   allowed so a project without an active PM can always be recovered.
    *
    * @param tx Transaction client.
    * @param projectId Project id.
    * @param actorId The caller's user id.
+   * @param pmOnly True when the caller acts as an admin assigning PMs.
    */
-  private async assertStillManager(
+  private async assertMayChange(
     tx: Prisma.TransactionClient,
     projectId: string,
     actorId: string,
+    pmOnly: boolean,
   ): Promise<void> {
+    if (pmOnly) {
+      const admin = await tx.user.findUnique({ where: { id: actorId } });
+      if (admin?.systemRole !== SystemRole.ADMIN || !admin.isActive) {
+        throw new ApiException(
+          HttpStatus.FORBIDDEN,
+          ErrorCode.FORBIDDEN,
+          'Administrator access required',
+        );
+      }
+      return;
+    }
     const actor = await tx.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId: actorId } },
       include: { project: { select: { archivedAt: true } } },
@@ -376,6 +411,30 @@ export class MembersService {
       );
     }
   }
+}
+
+/**
+ * The 403 for admins (who are not PMs) attempting a change that does not
+ * involve the PM role.
+ *
+ * @returns The exception to throw.
+ */
+function pmRoleOnly(): ApiException {
+  return new ApiException(
+    HttpStatus.FORBIDDEN,
+    ErrorCode.FORBIDDEN,
+    'Administrators can only grant or remove the Project Manager role here',
+  );
+}
+
+/**
+ * Audit detail marking a change made through the admin PM-assignment right.
+ *
+ * @param pmOnly True when the caller acted as an admin assigning PMs.
+ * @returns `{ asAdmin: true }` or nothing.
+ */
+function asAdmin(pmOnly: boolean): { asAdmin?: true } {
+  return pmOnly ? { asAdmin: true } : {};
 }
 
 /**

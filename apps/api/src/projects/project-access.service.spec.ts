@@ -35,6 +35,8 @@ const SPEC_TABLE: [ProjectPermission, Cell, Cell, Cell, Cell][] = [
   [ProjectPermission.ANNOTATE_ITEMS, true, true, true, false],
   [ProjectPermission.MANAGE_BOARD, true, true, false, false],
   [ProjectPermission.MANAGE_MEMBERS, true, false, false, false],
+  // Part of "manage members, roles" for PMs; admins also get it (SPEC §3.1, tested below).
+  [ProjectPermission.ASSIGN_PMS, true, false, false, false],
   [ProjectPermission.MANAGE_PROJECT, true, false, false, false],
   [ProjectPermission.EXPORT_ADO, true, true, false, false],
 ];
@@ -192,12 +194,14 @@ describe('ProjectAccessService', () => {
       expect((await rejection(service.resolve(auth, 'not a key!', 'x'))).status).toBe(404);
     });
 
-    it('gives non-member admins read-only access and audits it (SPEC §3.1)', async () => {
+    it('gives non-member admins read-only access plus PM assignment, audited (SPEC §3.1)', async () => {
       const { service, audit } = setup([]);
       const access = await resolveAs(service, 'ADMIN');
       expect(access.role).toBeNull();
       expect(access.visibility).toBe('ALL');
-      expect([...access.permissions]).toEqual([ProjectPermission.VIEW_ITEMS]);
+      expect([...access.permissions].sort()).toEqual(
+        [ProjectPermission.ASSIGN_PMS, ProjectPermission.VIEW_ITEMS].sort(),
+      );
       expect(audit.records).toEqual([
         expect.objectContaining({
           action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS,
@@ -214,6 +218,10 @@ describe('ProjectAccessService', () => {
       expect(access.role).toBe('VIEWER');
       expect(access.visibility).toBe('OWN');
       expect(audit.records).toHaveLength(0);
+      // Their only extra right is assigning PMs.
+      expect([...access.permissions].sort()).toEqual(
+        [ProjectPermission.ASSIGN_PMS, ProjectPermission.VIEW_ITEMS].sort(),
+      );
     });
 
     it('forces ALL visibility for PM and Lead whatever is stored (SPEC §3.3)', async () => {

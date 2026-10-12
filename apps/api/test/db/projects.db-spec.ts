@@ -69,7 +69,7 @@ describe('projects and members (db)', () => {
       expect: Record<Caller, number>;
     };
     const base = () => `/api/v1/projects/${projectId}`;
-    // Ordered so the PM's run succeeds end to end (the newbie is added, then removed).
+    // Ordered so the PM's run succeeds end to end (the newbie is added, the viewer removed).
     const routes: Route[] = [
       {
         name: 'view project',
@@ -100,13 +100,14 @@ describe('projects and members (db)', () => {
         name: 'search member candidates',
         method: 'GET',
         url: () => `${base()}/member-candidates`,
-        expect: { pm: 200, lead: 403, member: 403, viewer: 403, outsider: 404, admin: 403 },
+        expect: { pm: 200, lead: 403, member: 403, viewer: 403, outsider: 404, admin: 200 },
       },
       {
         name: 'add member',
         method: 'POST',
         url: () => `${base()}/members`,
         body: () => ({ userId: ids.newbie, role: 'MEMBER' }),
+        // Admins may only add PMs (covered below).
         expect: { pm: 201, lead: 403, member: 403, viewer: 403, outsider: 404, admin: 403 },
       },
       {
@@ -119,7 +120,7 @@ describe('projects and members (db)', () => {
       {
         name: 'remove member',
         method: 'DELETE',
-        url: () => `${base()}/members/${ids.newbie}`,
+        url: () => `${base()}/members/${ids.viewer}`,
         expect: { pm: 204, lead: 403, member: 403, viewer: 403, outsider: 404, admin: 403 },
       },
       {
@@ -236,7 +237,7 @@ describe('projects and members (db)', () => {
     it('creates a project with its first PM and audits both', async () => {
       const res = await call(app, 'POST', '/api/v1/projects', {
         sid: await sid('admin'),
-        body: { key: 'abc', name: ' New ', description: 'About', pmUserId: ids.newbie },
+        body: { key: 'abc', name: ' New ', description: 'About', pmUserIds: [ids.newbie] },
       });
       expect(res.statusCode).toBe(201);
       const project = res.json() as ProjectDto;
@@ -265,7 +266,7 @@ describe('projects and members (db)', () => {
     it('is forbidden to non-admins, including PMs', async () => {
       const res = await call(app, 'POST', '/api/v1/projects', {
         sid: await sid('pm'),
-        body: { key: 'ABC', name: 'X', pmUserId: ids.pm },
+        body: { key: 'ABC', name: 'X', pmUserIds: [ids.pm] },
       });
       expect(res.statusCode).toBe(403);
       expect(await prisma.project.count()).toBe(1);
@@ -274,19 +275,166 @@ describe('projects and members (db)', () => {
     it('rejects duplicate keys, bad keys and inactive or unknown PMs', async () => {
       const admin = await sid('admin');
       const create = (body: object) => call(app, 'POST', '/api/v1/projects', { sid: admin, body });
-      expect(codeOf(await create({ key: 'klo', name: 'X', pmUserId: ids.pm }))).toBe(
+      expect(codeOf(await create({ key: 'klo', name: 'X', pmUserIds: [ids.pm] }))).toBe(
         ErrorCode.CONFLICT,
       );
       for (const key of ['K', 'TOOLONG', 'AB1', 'A B']) {
-        expect((await create({ key, name: 'X', pmUserId: ids.pm })).statusCode).toBe(400);
+        expect((await create({ key, name: 'X', pmUserIds: [ids.pm] })).statusCode).toBe(400);
       }
       await prisma.user.update({ where: { id: ids.newbie }, data: { isActive: false } });
-      expect((await create({ key: 'ABC', name: 'X', pmUserId: ids.newbie })).statusCode).toBe(400);
+      expect((await create({ key: 'ABC', name: 'X', pmUserIds: [ids.newbie] })).statusCode).toBe(
+        400,
+      );
+      for (const pmUserIds of [[], [ids.pm, ids.pm], ids.pm]) {
+        expect((await create({ key: 'ABC', name: 'X', pmUserIds })).statusCode).toBe(400);
+      }
       expect(
-        (await create({ key: 'ABC', name: 'X', pmUserId: '00000000-0000-4000-8000-000000000000' }))
-          .statusCode,
+        (
+          await create({
+            key: 'ABC',
+            name: 'X',
+            pmUserIds: [ids.pm, '00000000-0000-4000-8000-000000000000'],
+          })
+        ).statusCode,
       ).toBe(400);
       expect(await prisma.project.count()).toBe(1);
+    });
+  });
+
+  describe('admin PM assignment (SPEC §3.1)', () => {
+    const members = () => `/api/v1/projects/${projectId}/members`;
+
+    it('creates a project with several PMs', async () => {
+      const res = await call(app, 'POST', '/api/v1/projects', {
+        sid: await sid('admin'),
+        body: { key: 'TWO', name: 'Two', pmUserIds: [ids.newbie, ids.admin] },
+      });
+      expect(res.statusCode).toBe(201);
+      expect((res.json() as ProjectDto).myRole).toBe('PM');
+      const pms = await prisma.projectMember.findMany({
+        where: { project: { key: 'TWO' } },
+        orderBy: { userId: 'asc' },
+      });
+      expect(pms.map((m) => [m.userId, m.role]).sort()).toEqual(
+        [
+          [ids.admin, 'PM'],
+          [ids.newbie, 'PM'],
+        ].sort(),
+      );
+    });
+
+    it('adds, promotes, demotes and removes PMs, audited as admin', async () => {
+      const admin = await sid('admin');
+      const add = await call(app, 'POST', members(), {
+        sid: admin,
+        body: { userId: ids.newbie, role: 'PM' },
+      });
+      expect(add.statusCode).toBe(201);
+      const promote = await call(app, 'PATCH', `${members()}/${ids.lead}`, {
+        sid: admin,
+        body: { role: 'PM' },
+      });
+      expect((promote.json() as ProjectMemberDto).role).toBe('PM');
+      const demote = await call(app, 'PATCH', `${members()}/${ids.pm}`, {
+        sid: admin,
+        body: { role: 'MEMBER' },
+      });
+      expect(demote.statusCode).toBe(200);
+      expect(
+        (await call(app, 'DELETE', `${members()}/${ids.lead}`, { sid: admin })).statusCode,
+      ).toBe(204);
+      const audited = await prisma.auditLog.findMany({
+        where: { projectId, action: { in: ['MEMBER_ADDED', 'MEMBER_UPDATED', 'MEMBER_REMOVED'] } },
+      });
+      expect(audited).toHaveLength(4);
+      expect(audited.every((e) => (e.meta as { asAdmin?: boolean }).asAdmin === true)).toBe(true);
+      // The new PM manages the project.
+      const asNewPm = await call(app, 'PATCH', `/api/v1/projects/${projectId}`, {
+        sid: await sid('newbie'),
+        body: { name: 'Managed' },
+      });
+      expect(asNewPm.statusCode).toBe(200);
+    });
+
+    it('cannot change non-PM roles, and keeps one active PM', async () => {
+      const admin = await sid('admin');
+      for (const [method, url, body] of [
+        ['PATCH', `${members()}/${ids.member}`, { role: 'VIEWER' }],
+        ['PATCH', `${members()}/${ids.member}`, { visibility: 'OWN' }],
+        ['DELETE', `${members()}/${ids.member}`, undefined],
+        ['POST', members(), { userId: ids.newbie, role: 'LEAD' }],
+      ] as const) {
+        const res = await call(app, method, url, { sid: admin, ...(body ? { body } : {}) });
+        expect({ method, url, status: res.statusCode }).toEqual({ method, url, status: 403 });
+      }
+      const last = await call(app, 'PATCH', `${members()}/${ids.pm}`, {
+        sid: admin,
+        body: { role: 'LEAD' },
+      });
+      expect(codeOf(last)).toBe(ErrorCode.LAST_PM);
+      // Admins still cannot manage the project itself.
+      expect(
+        (await call(app, 'POST', `/api/v1/projects/${projectId}/archive`, { sid: admin }))
+          .statusCode,
+      ).toBe(403);
+    });
+
+    it('recovers an archived project whose only PM was deactivated', async () => {
+      await prisma.project.update({ where: { id: projectId }, data: { archivedAt: new Date() } });
+      await prisma.user.update({ where: { id: ids.pm }, data: { isActive: false } });
+      const admin = await sid('admin');
+      const add = await call(app, 'POST', members(), {
+        sid: admin,
+        body: { userId: ids.newbie, role: 'PM' },
+      });
+      expect(add.statusCode).toBe(201);
+      // The deactivated PM can now be removed; the new PM unarchives.
+      expect((await call(app, 'DELETE', `${members()}/${ids.pm}`, { sid: admin })).statusCode).toBe(
+        204,
+      );
+      // Nothing but the PM role: other changes are still refused while archived.
+      const other = await call(app, 'PATCH', `${members()}/${ids.member}`, {
+        sid: admin,
+        body: { role: 'VIEWER' },
+      });
+      expect(other.statusCode).toBe(403);
+      const rename = await call(app, 'PATCH', `/api/v1/projects/${projectId}`, {
+        sid: admin,
+        body: { name: 'X' },
+      });
+      expect(rename.statusCode).toBe(403);
+      const newPm = await sid('newbie');
+      const unarchive = await call(app, 'POST', `/api/v1/projects/${projectId}/unarchive`, {
+        sid: newPm,
+      });
+      expect(unarchive.statusCode).toBe(200);
+    });
+
+    it('cannot remove the last active PM either', async () => {
+      const res = await call(app, 'DELETE', `${members()}/${ids.pm}`, { sid: await sid('admin') });
+      expect(res.statusCode).toBe(409);
+      expect(codeOf(res)).toBe(ErrorCode.LAST_PM);
+    });
+
+    it('applies to admins who are members too, who otherwise keep their membership limits', async () => {
+      await prisma.projectMember.create({
+        data: { projectId, userId: ids.admin, role: 'VIEWER' },
+      });
+      const admin = await sid('admin');
+      const project = await call(app, 'GET', `/api/v1/projects/${projectId}`, { sid: admin });
+      expect((project.json() as ProjectDto).myPermissions.sort()).toEqual(
+        ['ASSIGN_PMS', 'VIEW_ITEMS'].sort(),
+      );
+      const promote = await call(app, 'PATCH', `${members()}/${ids.member}`, {
+        sid: admin,
+        body: { role: 'PM' },
+      });
+      expect(promote.statusCode).toBe(200);
+      const viewerChange = await call(app, 'PATCH', `${members()}/${ids.viewer}`, {
+        sid: admin,
+        body: { visibility: 'ALL' },
+      });
+      expect(viewerChange.statusCode).toBe(403);
     });
   });
 

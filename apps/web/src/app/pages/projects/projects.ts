@@ -9,6 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { RouterLink } from '@angular/router';
 import {
+  MAX_INITIAL_PMS,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_KEY_PATTERN,
   PROJECT_NAME_MAX,
@@ -28,7 +29,7 @@ import { required } from '../../core/validators';
  * Everyone sees their own projects. Admins also get the "All projects" /
  * "My projects" toggle, which only filters this list (opening a project they
  * are not a member of is audited by the API), and a form to create a project
- * with its first Project Manager (SPEC §3.1).
+ * with one or more Project Managers (SPEC §3.1).
  */
 @Component({
   selector: 'app-projects',
@@ -65,13 +66,13 @@ import { required } from '../../core/validators';
               <input matInput formControlName="description" />
             </mat-form-field>
             <mat-form-field>
-              <mat-label>Find Project Manager</mat-label>
+              <mat-label>Find Project Managers</mat-label>
               <input matInput #pmSearch (keyup.enter)="searchPm(pmSearch.value)" />
             </mat-form-field>
             <button mat-button type="button" (click)="searchPm(pmSearch.value)">Search</button>
             <mat-form-field>
-              <mat-label>Project Manager</mat-label>
-              <mat-select formControlName="pmUserId">
+              <mat-label>Project Managers</mat-label>
+              <mat-select formControlName="pmUserIds" multiple>
                 @for (user of pmOptions(); track user.id) {
                   <mat-option [value]="user.id"
                     >{{ user.displayName }} ({{ user.email }})</mat-option
@@ -170,7 +171,7 @@ export class ProjectsPage implements OnInit {
     key: ['', [required, Validators.pattern(/^[A-Za-z]{2,6}$/)]],
     name: ['', [required, Validators.maxLength(PROJECT_NAME_MAX)]],
     description: ['', [Validators.maxLength(PROJECT_DESCRIPTION_MAX)]],
-    pmUserId: ['', [required]],
+    pmUserIds: [[] as string[], [required, Validators.maxLength(MAX_INITIAL_PMS)]],
   });
 
   /**
@@ -218,7 +219,8 @@ export class ProjectsPage implements OnInit {
   }
 
   /**
-   * Finds active users to choose the Project Manager from.
+   * Finds active users to choose the Project Managers from. Users already
+   * chosen stay in the list so the selection survives a new search.
    *
    * @param q Search text.
    * @returns Resolves once loaded.
@@ -226,7 +228,10 @@ export class ProjectsPage implements OnInit {
   protected async searchPm(q: string): Promise<void> {
     await this.run(async () => {
       const page = await this.adminApi.listUsers(q.trim(), undefined);
-      this.pmOptions.set(page.items.filter((user) => user.isActive));
+      const chosen = new Set(this.createForm.controls.pmUserIds.value);
+      const kept = this.pmOptions().filter((user) => chosen.has(user.id));
+      const found = page.items.filter((user) => user.isActive && !chosen.has(user.id));
+      this.pmOptions.set([...kept, ...found]);
     });
   }
 

@@ -84,7 +84,7 @@ export class ProjectController {
 
   /**
    * Returns the project with the caller's role and permissions.
-   * Permissions: any member; admins read-only (audited).
+   * Permissions: any member; any admin (audited if not a member).
    *
    * @param access The caller's access.
    * @returns The project.

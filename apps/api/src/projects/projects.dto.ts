@@ -1,6 +1,7 @@
 import {
   type AddMemberRequest,
   type CreateProjectRequest,
+  MAX_INITIAL_PMS,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_KEY_PATTERN,
   PROJECT_NAME_MAX,
@@ -13,6 +14,8 @@ import {
 import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayMinSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsIn,
@@ -73,9 +76,13 @@ export class CreateProjectDto implements CreateProjectRequest {
   @MaxLength(PROJECT_DESCRIPTION_MAX)
   description?: string;
 
-  /** The first Project Manager. */
-  @IsUUID()
-  pmUserId: string;
+  /** The Project Managers: one or more distinct users. */
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_INITIAL_PMS)
+  @ArrayUnique()
+  @IsUUID('all', { each: true })
+  pmUserIds: string[];
 }
 
 /** The settings part of `PATCH /projects/:id`. */

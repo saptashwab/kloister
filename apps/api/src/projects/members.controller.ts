@@ -31,11 +31,19 @@ import type { ProjectAccess } from './project-access.service.js';
 import { AddMemberDto, MemberCandidatesQueryDto, UpdateMemberDto } from './projects.dto.js';
 
 /**
+ * Membership changes are open to PMs (`MANAGE_MEMBERS`) and, limited to the
+ * PM role, to system admins (`ASSIGN_PMS`, SPEC §3.1).
+ */
+const MEMBER_CHANGE = [ProjectPermission.MANAGE_MEMBERS, ProjectPermission.ASSIGN_PMS] as const;
+
+/**
  * Membership routes under `/api/v1/projects/:id/members` (SPEC §8), plus the
  * candidate search used to add members.
  *
  * Permissions: every route goes through {@link ProjectAccessGuard}. Any
- * member may list members; only PMs manage them (SPEC §3.2).
+ * member may list members; PMs manage them (SPEC §3.2); system admins may
+ * grant and take away the PM role in any project, archived ones included
+ * (SPEC §3.1).
  */
 @Controller('projects/:id')
 @UseGuards(ProjectAccessGuard)
@@ -48,7 +56,7 @@ export class MembersController {
   constructor(private readonly members: MembersService) {}
 
   /**
-   * Lists members. Permissions: any member; admins read-only (audited).
+   * Lists members. Permissions: any member; any admin (audited if not a member).
    *
    * @param access The caller's access.
    * @param query Pagination.
@@ -64,14 +72,14 @@ export class MembersController {
   }
 
   /**
-   * Searches active users who are not members yet. Permissions: PM only.
+   * Searches active users who are not members yet. Permissions: PMs and admins.
    *
    * @param access The caller's access.
    * @param query Search text.
    * @returns Up to 20 users.
    */
   @Get('member-candidates')
-  @RequireProjectPermission(ProjectPermission.MANAGE_MEMBERS)
+  @RequireProjectPermission(MEMBER_CHANGE, { allowArchivedForPmAssignment: true })
   candidates(
     @CurrentProject() access: ProjectAccess,
     @Query() query: MemberCandidatesQueryDto,
@@ -80,7 +88,7 @@ export class MembersController {
   }
 
   /**
-   * Adds a member. Permissions: PM only.
+   * Adds a member. Permissions: PMs; admins only with role PM.
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -88,7 +96,7 @@ export class MembersController {
    * @returns The new member (201).
    */
   @Post('members')
-  @RequireProjectPermission(ProjectPermission.MANAGE_MEMBERS)
+  @RequireProjectPermission(MEMBER_CHANGE, { allowArchivedForPmAssignment: true })
   add(
     @CurrentAuth() auth: AuthContext,
     @CurrentProject() access: ProjectAccess,
@@ -98,8 +106,8 @@ export class MembersController {
   }
 
   /**
-   * Changes a member's role or visibility. Permissions: PM only; the last
-   * active PM cannot be demoted.
+   * Changes a member's role or visibility. Permissions: PMs; admins only to
+   * promote to or demote from PM. The last active PM cannot be demoted.
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -108,7 +116,7 @@ export class MembersController {
    * @returns The updated member.
    */
   @Patch('members/:userId')
-  @RequireProjectPermission(ProjectPermission.MANAGE_MEMBERS)
+  @RequireProjectPermission(MEMBER_CHANGE, { allowArchivedForPmAssignment: true })
   update(
     @CurrentAuth() auth: AuthContext,
     @CurrentProject() access: ProjectAccess,
@@ -119,8 +127,8 @@ export class MembersController {
   }
 
   /**
-   * Removes a member. Permissions: PM only; the last active PM cannot be
-   * removed.
+   * Removes a member. Permissions: PMs; admins only PMs. The last active PM
+   * cannot be removed.
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -129,7 +137,7 @@ export class MembersController {
    */
   @Delete('members/:userId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequireProjectPermission(ProjectPermission.MANAGE_MEMBERS)
+  @RequireProjectPermission(MEMBER_CHANGE, { allowArchivedForPmAssignment: true })
   remove(
     @CurrentAuth() auth: AuthContext,
     @CurrentProject() access: ProjectAccess,

@@ -8,6 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { Router } from '@angular/router';
 import {
+  assignsPmsOnly,
   isScopedRole,
   type MemberCandidateDto,
   PROJECT_DESCRIPTION_MAX,
@@ -30,7 +31,8 @@ import { required } from '../../core/validators';
  * with their role and visibility.
  *
  * Every member can open it read-only; editing controls appear only when
- * `myPermissions` includes `MANAGE_PROJECT` or `MANAGE_MEMBERS` (PM). The API
+ * `myPermissions` includes `MANAGE_PROJECT` or `MANAGE_MEMBERS` (PM). Admins
+ * who are not PMs get controls to grant and remove the PM role only. The API
  * enforces the same rules and answers 404 to non-members.
  *
  * Bucket selection for the `BUCKETS` scope arrives with buckets (M3/M4);
@@ -102,7 +104,7 @@ import { required } from '../../core/validators';
       <mat-card>
         <mat-card-header><mat-card-title>Members</mat-card-title></mat-card-header>
         <mat-card-content>
-          @if (canManageMembers() && !project.archivedAt) {
+          @if (canAddMembers()) {
             <div class="row">
               <mat-form-field>
                 <mat-label>Find user</mat-label>
@@ -119,17 +121,33 @@ import { required } from '../../core/validators';
                   }
                 </mat-select>
               </mat-form-field>
-              <mat-form-field>
-                <mat-label>Role</mat-label>
-                <mat-select [value]="newRole()" (valueChange)="newRole.set($event)">
-                  @for (r of roles; track r) {
-                    <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-              <button mat-flat-button type="button" [disabled]="!newUserId()" (click)="addMember()">
-                Add
-              </button>
+              @if (pmOnly()) {
+                <button
+                  mat-flat-button
+                  type="button"
+                  [disabled]="!newUserId()"
+                  (click)="addMember()"
+                >
+                  Add as Project Manager
+                </button>
+              } @else {
+                <mat-form-field>
+                  <mat-label>Role</mat-label>
+                  <mat-select [value]="newRole()" (valueChange)="newRole.set($event)">
+                    @for (r of roles; track r) {
+                      <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+                <button
+                  mat-flat-button
+                  type="button"
+                  [disabled]="!newUserId()"
+                  (click)="addMember()"
+                >
+                  Add
+                </button>
+              }
             </div>
           }
 
@@ -191,7 +209,28 @@ import { required } from '../../core/validators';
                     <td>
                       {{ isScoped(m) ? visibilityLabels[m.visibility] : visibilityLabels.ALL }}
                     </td>
-                    <td></td>
+                    <td class="actions">
+                      @if (pmOnly()) {
+                        @if (m.role === projectRole.PM) {
+                          <button
+                            mat-button
+                            type="button"
+                            (click)="updateMember(m, { role: projectRole.MEMBER })"
+                          >
+                            Remove PM role
+                          </button>
+                          <button mat-button type="button" (click)="removeMember(m)">Remove</button>
+                        } @else {
+                          <button
+                            mat-button
+                            type="button"
+                            (click)="updateMember(m, { role: projectRole.PM })"
+                          >
+                            Make PM
+                          </button>
+                        }
+                      }
+                    </td>
                   }
                 </tr>
               }
@@ -213,8 +252,10 @@ export class ProjectSettingsPage implements OnInit {
   /** Project key from the route (`/p/:key/settings`). */
   readonly key = input.required<string>();
 
-  /** Role values and names for the template. */
+  /** Role values for the template. */
   protected readonly roles = Object.values(ProjectRole);
+  /** Role constants for the template. */
+  protected readonly projectRole = ProjectRole;
   /** Role names for the template. */
   protected readonly roleLabels = ROLE_LABELS;
   /** Visibility values for the template. */
@@ -245,6 +286,13 @@ export class ProjectSettingsPage implements OnInit {
   protected readonly canEditMembers = computed(
     () => this.canManageMembers() && !this.project()?.archivedAt,
   );
+  /**
+   * True for admins who are not PMs: they may only grant and remove the PM
+   * role (SPEC §3.1), archived projects included.
+   */
+  protected readonly pmOnly = computed(() => assignsPmsOnly(this.project()?.myPermissions ?? []));
+  /** True when the add-member controls are shown. */
+  protected readonly canAddMembers = computed(() => this.canEditMembers() || this.pmOnly());
 
   /** General settings form (PM only). */
   protected readonly generalForm = inject(NonNullableFormBuilder).group({
@@ -349,10 +397,13 @@ export class ProjectSettingsPage implements OnInit {
     const userId = this.newUserId();
     if (project === null || userId === '') return;
     await this.run(async () => {
-      const member = await this.api.addMember(project.id, { userId, role: this.newRole() });
+      const role = this.pmOnly() ? ProjectRole.PM : this.newRole();
+      const member = await this.api.addMember(project.id, { userId, role });
       this.members.update((members) => [...members, member]);
       this.candidates.update((list) => list.filter((c) => c.id !== userId));
       this.newUserId.set('');
+      // Adding yourself (an admin taking the PM role) changes what you may do.
+      if (userId === this.store.user()?.id) this.setProject(await this.api.get(project.id));
     });
   }
 

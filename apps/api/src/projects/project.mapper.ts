@@ -18,7 +18,7 @@ import { parseProjectSettings } from './project-settings.js';
  * @returns The DTO.
  */
 export function toProjectDto(access: ProjectAccess, project: Project = access.project): ProjectDto {
-  return projectDto(project, access.role, access.visibility);
+  return projectDto(project, access.role, access.visibility, access.isSystemAdmin);
 }
 
 /**
@@ -28,16 +28,18 @@ export function toProjectDto(access: ProjectAccess, project: Project = access.pr
  * @param project The project row.
  * @param membership The caller's membership, or null for an admin listing
  *   projects they are not a member of.
+ * @param isSystemAdmin Whether the caller is a system admin.
  * @returns The DTO.
  */
 export function toProjectListDto(
   project: Project,
   membership: Pick<ProjectMember, 'role' | 'visibility'> | null,
+  isSystemAdmin: boolean,
 ): ProjectDto {
   const role = membership?.role ?? null;
   const visibility =
     membership !== null && isScopedRole(role) ? membership.visibility : Visibility.ALL;
-  return projectDto(project, role, visibility);
+  return projectDto(project, role, visibility, isSystemAdmin);
 }
 
 /**
@@ -46,12 +48,14 @@ export function toProjectListDto(
  * @param project The project row.
  * @param role The caller's role, or null.
  * @param visibility The caller's effective visibility.
+ * @param isSystemAdmin Whether the caller is a system admin.
  * @returns The DTO.
  */
 function projectDto(
   project: Project,
   role: ProjectRole | null,
   visibility: Visibility,
+  isSystemAdmin: boolean,
 ): ProjectDto {
   const settings = parseProjectSettings(project.settings);
   return {
@@ -63,7 +67,7 @@ function projectDto(
     settings,
     myRole: role,
     myVisibility: visibility,
-    myPermissions: permissionsFor(role, settings),
+    myPermissions: permissionsFor(role, settings, isSystemAdmin),
     createdAt: project.createdAt.toISOString(),
   };
 }

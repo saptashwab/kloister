@@ -64,6 +64,15 @@ describe('ProjectSettingsPage', () => {
     expect(root.textContent).toContain('Find user');
   });
 
+  it('gives admins who are not PMs PM-role controls only, even when archived', async () => {
+    const { root } = await render(['VIEW_ITEMS', 'ASSIGN_PMS'], true);
+    expect(root.textContent).toContain('Add as Project Manager');
+    expect(root.textContent).toContain('Make PM');
+    expect(root.querySelector('form')).toBeNull();
+    // The member listed is a Viewer: it can be promoted, not removed.
+    expect(root.textContent).not.toContain('Remove');
+  });
+
   it('hides member editing on archived projects', async () => {
     const { root } = await render(['VIEW_ITEMS', 'MANAGE_PROJECT', 'MANAGE_MEMBERS'], true);
     expect(root.textContent).toContain('archived and read-only');
