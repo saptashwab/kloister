@@ -1,10 +1,15 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { App } from './app';
+import { SessionStore } from './core/session.store';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
   });
 
@@ -18,5 +23,27 @@ describe('App', () => {
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('h1')?.textContent).toContain('Kloister');
+  });
+
+  it('shows admin links only to admins', async () => {
+    const store = TestBed.inject(SessionStore);
+    const base = {
+      id: 'u1',
+      email: 'a@example.org',
+      displayName: 'A',
+      mustChangePassword: false,
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    const fixture = TestBed.createComponent(App);
+    store.set({ ...base, systemRole: 'USER' });
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.textContent).not.toContain('Audit log');
+
+    store.set({ ...base, systemRole: 'ADMIN' });
+    await fixture.whenStable();
+    expect(root.textContent).toContain('Audit log');
   });
 });

@@ -6,26 +6,40 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "build": "nest build -p tsconfig.build.json",
+    "generate": "prisma generate",
+    "build": "npm run generate && nest build -p tsconfig.build.json",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main.js",
-    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+    "create-admin": "node dist/cli/create-admin.js",
+    "migrate:deploy": "prisma migrate deploy",
+    "test": "npm run generate && cross-env NODE_OPTIONS=--experimental-vm-modules jest",
     "test:watch": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --watch",
-    "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage"
+    "test:cov": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --coverage",
+    "test:db": "npm run generate && cross-env NODE_OPTIONS=--experimental-vm-modules jest -c jest.db.config.js"
   },
   "dependencies": {
+    "@fastify/cookie": "^11.1.3",
     "@kloister/shared": "0.0.0",
     "@nestjs/common": "^12.1.3",
     "@nestjs/core": "^12.1.3",
     "@nestjs/platform-fastify": "^12.1.3",
+    "@prisma/adapter-pg": "~7.10.0",
+    "@prisma/client": "~7.10.0",
+    "argon2": "^0.45.1",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "fastify": "^5.12.5",
+    "pg": "^8.23.1",
+    "prisma": "~7.10.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.8",
     "@nestjs/schematics": "^12.0.0",
-    "@nestjs/testing": "^12.1.3"
+    "@nestjs/testing": "^12.1.3",
+    "@types/pg": "^8.23.1"
   }
 }

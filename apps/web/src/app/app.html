@@ -1,4 +1,29 @@
-<main class="shell">
+<mat-toolbar class="header">
   <h1>{{ title() }}</h1>
+  @if (store.user(); as user) {
+    @if (!user.mustChangePassword) {
+      <nav aria-label="Main">
+        <a
+          mat-button
+          routerLink="/"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: true }"
+          >Home</a
+        >
+        @if (store.isAdmin()) {
+          <a mat-button routerLink="/admin/users" routerLinkActive="active">Users</a>
+          <a mat-button routerLink="/admin/audit" routerLinkActive="active">Audit log</a>
+        }
+      </nav>
+    }
+    <span class="spacer"></span>
+    <span class="who">{{ user.displayName }}</span>
+    @if (!user.mustChangePassword) {
+      <a mat-button routerLink="/change-password">Change password</a>
+    }
+    <button mat-button type="button" (click)="logout()">Sign out</button>
+  }
+</mat-toolbar>
+<main class="shell">
   <router-outlet />
 </main>

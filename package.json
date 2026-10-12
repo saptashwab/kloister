@@ -16,10 +16,10 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "lint": "npm run build -w @kloister/shared && eslint .",
-    "lint:fix": "npm run build -w @kloister/shared && eslint . --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "lint": "npm run build -w @kloister/shared && npm run generate -w @kloister/api && eslint .",
+    "lint:fix": "npm run build -w @kloister/shared && npm run generate -w @kloister/api && eslint . --fix",
+    "format": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude",
+    "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude",
     "test": "npm run test --workspaces --if-present"
   },
   "devDependencies": {

@@ -15,5 +15,5 @@
     "strictPropertyInitialization": false,
     "types": ["jest", "node"]
   },
-  "include": ["src", "test"]
+  "include": ["src", "test", "prisma.config.ts"]
 }

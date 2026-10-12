@@ -1,0 +1,97 @@
+// Kloister database schema (SPEC §4).
+//
+// Tables are added milestone by milestone; M1 covers accounts, sessions,
+// the audit log and app settings. Every table has a uuid `id`, plus
+// `createdAt`/`updatedAt` unless SPEC §4 says otherwise.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// System-wide role (SPEC §3.1). Project roles live on ProjectMember (M2).
+enum SystemRole {
+  ADMIN
+  USER
+}
+
+/// A local account. Accounts are created by admins only; there is no self sign-up.
+model User {
+  id                 String     @id @default(uuid()) @db.Uuid
+  /// Stored lowercased so lookups are case-insensitive.
+  email              String     @unique
+  displayName        String
+  /// argon2id hash; never returned by the API.
+  passwordHash       String
+  systemRole         SystemRole @default(USER)
+  /// Set when an admin creates the account or resets its password.
+  mustChangePassword Boolean    @default(true)
+  isActive           Boolean    @default(true)
+  failedLoginCount   Int        @default(0)
+  lockedUntil        DateTime?
+  /// Per-user theme override (M6); empty means "use default".
+  themePrefs         Json       @default("{}")
+  lastLoginAt        DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  sessions  Session[]
+  auditLogs AuditLog[]
+}
+
+/// A server-side login session. The cookie carries a random token; only its
+/// SHA-256 hash is stored, so a database leak does not leak live sessions.
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  tokenHash  String   @unique
+  /// Absolute expiry, fixed at login.
+  expiresAt  DateTime
+  /// Drives the idle timeout.
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Append-only record of security-relevant and admin actions. It has only
+/// `createdAt` because entries are never updated.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  /// Null for actions with no signed-in actor (failed logins, CLI bootstrap).
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  /// Set for project-scoped actions (M2 onwards).
+  projectId  String?  @db.Uuid
+  meta       Json     @default("{}")
+  createdAt  DateTime @default(now())
+
+  /// SetNull keeps the history if an actor row is ever removed.
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt, id])
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([projectId])
+}
+
+/// Admin-editable settings, one JSON value per key (security, branding, …).
+model AppSetting {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  value     Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

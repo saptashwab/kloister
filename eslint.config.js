@@ -16,7 +16,13 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/node_modules/', '**/dist/', '**/coverage/', '**/.angular/'],
+    ignores: [
+      '**/node_modules/',
+      '**/dist/',
+      '**/coverage/',
+      '**/.angular/',
+      'apps/api/src/generated/',
+    ],
   },
 
   // Plain JS config files (eslint/jest configs) run in Node.

@@ -1,1 +1,91 @@
-/* Global styles. Theme tokens (CSS custom properties) are added in M6. */
+/*
+ * Global styles. A neutral Material 3 theme with system fonts only: no web
+ * fonts or icon fonts are loaded, because the server may have no internet
+ * access. Admin-controlled theme tokens replace the palette in M6.
+ */
+@use '@angular/material' as mat;
+
+html {
+  color-scheme: light dark;
+  @include mat.theme(
+    (
+      color: mat.$blue-palette,
+      typography: (
+        plain-family: 'system-ui, sans-serif',
+        brand-family: 'system-ui, sans-serif',
+      ),
+      density: 0,
+    )
+  );
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+}
+
+/* Shared layout helpers used by the pages. */
+.auth-card {
+  max-width: 420px;
+  margin: 48px auto;
+
+  form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.error {
+  color: var(--mat-sys-error);
+}
+
+.notice {
+  margin-bottom: 16px;
+}
+
+.secret {
+  font-family: ui-monospace, monospace;
+  font-size: 1.125rem;
+  user-select: all;
+}
+
+table.data {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+
+  th,
+  td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid var(--mat-sys-outline-variant);
+    vertical-align: top;
+  }
+
+  .actions {
+    white-space: nowrap;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+mat-card {
+  margin-bottom: 16px;
+}

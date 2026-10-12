@@ -1,5 +1,5 @@
 # Continuous integration: format check, lint, build and test every workspace
-# on each push to main and on every pull request.
+# on each push to main, on every pull request, and on manual runs.
 name: CI
 
 on:
@@ -13,6 +13,8 @@ on:
     paths-ignore:
       - '**.md'
       - 'docs/**'
+  # Manual runs from the Actions tab.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,6 +28,29 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    # Disposable Postgres for the database tests. Pulled from the Amazon ECR
+    # Public mirror of the official image to avoid Docker Hub pull rate limits.
+    services:
+      postgres:
+        image: public.ecr.aws/docker/library/postgres:18-alpine
+        env:
+          POSTGRES_USER: kloister
+          POSTGRES_PASSWORD: kloister
+          POSTGRES_DB: kloister_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kloister -d kloister_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://kloister:kloister@localhost:5432/kloister_test
+      # Keep the Prisma CLI from contacting its update-check service.
+      CHECKPOINT_DISABLE: '1'
+
     steps:
       - name: Check out
         uses: actions/checkout@v7
@@ -54,3 +79,15 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # Apply the committed migrations exactly as install.sh/upgrade.sh will.
+      - name: Apply database migrations
+        run: npm run migrate:deploy -w @kloister/api
+
+      # Fail if schema.prisma has changes with no matching migration.
+      - name: Check migrations match the schema
+        working-directory: apps/api
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code
+
+      - name: Database tests
+        run: npm run test:db -w @kloister/api

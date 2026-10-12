@@ -5,3 +5,7 @@
  * on, so the two sides of the wire cannot drift apart.
  */
 export * from './api.js';
+export * from './audit.js';
+export * from './auth.js';
+export * from './errors.js';
+export * from './pagination.js';
