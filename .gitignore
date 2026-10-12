@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out-tsc/
+*.tsbuildinfo
+
+# Angular CLI cache
+.angular/
+
+# Test output
+coverage/
+__screenshots__/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local environment files (never commit secrets)
+.env
+.env.*
+!.env.example
+*.env
+.pgpass
+
+# Database dumps (may contain user data)
+*.dump
+
+# Editors and OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+

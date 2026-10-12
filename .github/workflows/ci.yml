@@ -1,0 +1,56 @@
+# Continuous integration: format check, lint, build and test every workspace
+# on each push to main and on every pull request.
+name: CI
+
+on:
+  push:
+    branches: [main]
+    # Docs-only changes cannot break the build, so skip CI for them.
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+
+permissions:
+  contents: read
+
+# Cancel superseded runs for the same branch or PR.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      # The Node major is pinned in .nvmrc so CI, developers and the
+      # app-local runtime on the server stay on the same release line.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
+
+      # Build first: the API and web app consume @kloister/shared from its
+      # compiled output, and type-aware lint rules need those declarations.
+      - name: Build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test

@@ -1,0 +1,19 @@
+# Decisions
+
+Choices made where SPEC.md was silent or ambiguous. Newest last.
+
+| Date       | Milestone | Decision                                                                                                            | Why                                                                                                                                                                                                |
+| ---------- | --------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-10-13 | M0        | `npm run lint` builds `@kloister/shared` before running ESLint.                                                     | Type-aware lint rules resolve `@kloister/shared` through its compiled `dist/` declarations; without this, lint fails on a clean checkout when run before `build` (the order local verification runs them). |
+| 2026-10-13 | M0        | CI skips runs for `**.md` and `docs/**` changes.                                                                    | Keep CI usage minimal; docs cannot break the build.                                                                                                                                                   |
+| 2026-10-13 | M0        | `apps/api` sets `strictPropertyInitialization: false`; all other `strict` checks stay on.                           | Nest DTOs and injected properties are populated by class-validator/DI, not constructors; this is the standard Nest setting.                                                                        |
+| 2026-10-13 | M0        | Backend reads `BACKEND_HOST` (default `127.0.0.1`) alongside `BACKEND_PORT` (default `3000`).                       | Keeps the API off public interfaces behind httpd by default (SPEC §9.4 proxies to `127.0.0.1`); the host is configurable rather than hard-coded.                                                   |
+| 2026-10-13 | M0        | Native ESM throughout; Jest runs with `--experimental-vm-modules`. TypeScript 6.0, Node 24 (`.nvmrc`).              | Current majors at scaffold time. Node 24 is Active LTS now; revisit `.nvmrc` when Node 26 becomes Active LTS.                                                                                      |
+| 2026-10-13 | M0        | ESLint requires a described doc comment with `@param`/`@returns` on exported symbols, and has no auto-fixer for it. | SPEC §11 asks for purpose and parameters; a fixer would insert empty stubs.                                                                                                                        |
+| 2026-10-13 | M0        | Stock Angular favicon replaced with a neutral SVG placeholder.                                                      | SPEC §1: no third-party or employer branding; the logo is admin-set (M6).                                                                                                                          |
+
+## Follow-ups for later milestones
+
+- **M1**: configure Fastify `trustProxy` for the httpd proxy so per-IP login rate limiting and session IPs see real client addresses; mark `/health` explicitly public and keep its e2e test running behind the global auth guard.
+- **M6**: app name comes from admin settings; update `index.html` title and the web test that asserts the literal name.
+- **M7**: `@kloister/shared` is a runtime dependency of the API; the release `backend/` must bundle or vendor it, since `npm ci --omit=dev` cannot resolve a private workspace package. Set the production base href to `/__KLOISTER_BASE__/` (SPEC §9.2).

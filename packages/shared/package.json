@@ -1,0 +1,23 @@
+{
+  "name": "@kloister/shared",
+  "version": "0.0.0",
+  "description": "Types shared by the Kloister API and web app: DTOs, enums and permission names.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest"
+  }
+}

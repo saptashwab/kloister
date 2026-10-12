@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+.angular/
+package-lock.json
+# Hand-written specification documents keep their own formatting.
+SPEC.md
