@@ -1,5 +1,6 @@
 # Continuous integration: format check, lint, build and test every workspace
-# on each push to main, on every pull request, and on manual runs.
+# (unit, database and browser tests) on each push to main, on every pull
+# request, and on manual runs.
 name: CI
 
 on:
@@ -91,3 +92,35 @@ jobs:
 
       - name: Database tests
         run: npm run test:db -w @kloister/api
+
+      # Browser tests (Playwright) against the real API, on a separate empty
+      # database so the database tests above cannot leave data behind. The
+      # Playwright config starts the API and the Angular dev server itself.
+      - name: Create the browser-test database
+        env:
+          PGPASSWORD: kloister
+        run: psql -h localhost -U kloister -d kloister_test -c 'CREATE DATABASE kloister_e2e'
+
+      - name: Apply migrations to the browser-test database
+        env:
+          DATABASE_URL: postgresql://kloister:kloister@localhost:5432/kloister_e2e
+        run: npm run migrate:deploy -w @kloister/api
+
+      - name: Install the Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser tests
+        env:
+          DATABASE_URL: postgresql://kloister:kloister@localhost:5432/kloister_e2e
+        run: npm run test:e2e -w @kloister/web
+
+      # The HTML report holds a screenshot of every test and a trace of each
+      # failure; open the run's Summary page to download it.
+      - name: Upload the browser-test report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: apps/web/e2e/report/
+          retention-days: 14
+          if-no-files-found: ignore

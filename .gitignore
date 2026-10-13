@@ -14,6 +14,9 @@ out-tsc/
 # Test output
 coverage/
 __screenshots__/
+# Playwright browser-test report and results (uploaded by CI as an artifact)
+apps/web/e2e/report/
+apps/web/e2e/results/
 
 # Logs
 *.log
