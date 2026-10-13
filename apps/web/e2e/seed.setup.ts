@@ -142,7 +142,12 @@ setup('seed users, project and items', async () => {
     startDate: day(0),
     endDate: day(13),
   });
-  await call(pm, 'POST', `${project}/labels`, { name: 'backend', colour: '#3366cc' });
+  // Labels in curated palette colours (docs/DESIGN.md §4.1).
+  const label = async (name: string, colour: string) =>
+    (await call<{ id: string }>(pm, 'POST', `${project}/labels`, { name, colour })).id;
+  const backend = await label('backend', '#0090FF');
+  const frontend = await label('frontend', '#8E4EC6');
+  const customer = await label('customer', '#F76B15');
 
   // Items 1–6, in this order (see ITEMS in support.ts).
   const create = (body: object) => call<{ id: string }>(pm, 'POST', `${project}/items`, body);
@@ -160,17 +165,21 @@ setup('seed users, project and items', async () => {
     parentId: story.id,
     bucketId: bucket('To Do'),
     assigneeIds: [ids['member']],
+    labelIds: [frontend],
   });
   await create({
     type: 'TASK',
     title: 'Invoice PDF',
     parentId: story.id,
     bucketId: bucket('To Do'),
+    assigneeIds: [ids['pm']],
+    labelIds: [backend],
   });
   await create({
     type: 'BUG',
     title: 'Total rounds wrongly',
     bucketId: bucket('Backlog'),
     dueDate: day(-2),
+    labelIds: [backend, customer],
   });
 });

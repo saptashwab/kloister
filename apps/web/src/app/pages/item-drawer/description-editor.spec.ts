@@ -1,16 +1,22 @@
 import { TestBed } from '@angular/core/testing';
 import { settle } from '../../../testing/fixtures';
+import { Dialogs } from '../../ui/dialogs';
 import { DescriptionEditor } from './description-editor';
 
 /** The protected editor members the tests drive directly. */
 interface EditorInternals {
-  link(event: Event): void;
+  link(): Promise<void>;
   submit(): void;
 }
 
 describe('DescriptionEditor', () => {
+  const prompt = vi.fn<(...args: unknown[]) => Promise<string | null>>();
+
   async function render() {
-    await TestBed.configureTestingModule({ imports: [DescriptionEditor] }).compileComponents();
+    await TestBed.configureTestingModule({
+      imports: [DescriptionEditor],
+      providers: [{ provide: Dialogs, useValue: { prompt } }],
+    }).compileComponents();
     const fixture = TestBed.createComponent(DescriptionEditor);
     fixture.componentRef.setInput('html', '<p>Hello <script>alert(1)</script></p>');
     await settle(fixture);
@@ -30,17 +36,16 @@ describe('DescriptionEditor', () => {
     // jsdom has no execCommand; provide one to observe calls.
     const exec = vi.fn().mockReturnValue(true);
     Object.defineProperty(document, 'execCommand', { value: exec, configurable: true });
-    const ask = vi.spyOn(window, 'prompt');
-    const event = new MouseEvent('mousedown');
     for (const url of ['javascript:alert(1)', 'data:text/html,x', 'ftp://host']) {
-      ask.mockReturnValueOnce(url);
-      editor.link(event);
+      prompt.mockResolvedValueOnce(url);
+      await editor.link();
     }
+    prompt.mockResolvedValueOnce(null);
+    await editor.link();
     expect(exec).not.toHaveBeenCalled();
-    ask.mockReturnValueOnce('https://example.org');
-    editor.link(event);
+    prompt.mockResolvedValueOnce('https://example.org');
+    await editor.link();
     expect(exec).toHaveBeenCalledWith('createLink', false, 'https://example.org');
-    ask.mockRestore();
   });
 
   it('emits the edited HTML on save', async () => {

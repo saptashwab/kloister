@@ -152,21 +152,7 @@ export class ProjectAccessService {
     const settings = parseProjectSettings(row.settings);
     const member = members[0];
     const isSystemAdmin = auth.user.systemRole === SystemRole.ADMIN;
-    if (member !== undefined) {
-      const scoped = isScopedRole(member.role);
-      return {
-        project: row,
-        settings,
-        userId,
-        role: member.role,
-        isSystemAdmin,
-        visibility: scoped ? member.visibility : Visibility.ALL,
-        allowedBucketIds:
-          scoped && member.visibility === Visibility.BUCKETS ? member.allowedBucketIds : [],
-        teams: member.teamMemberships,
-        permissions: new Set(permissionsFor(member.role, settings, isSystemAdmin)),
-      };
-    }
+    if (member !== undefined) return memberAccess(row, member, userId, isSystemAdmin);
 
     if (!isSystemAdmin) throw projectNotFound();
     await this.audit.record({
@@ -188,6 +174,32 @@ export class ProjectAccessService {
       teams: [],
       permissions: new Set(permissionsFor(null, settings, true)),
     };
+  }
+
+  /**
+   * Resolves the caller's access to every project they are a member of and
+   * that is not archived, for lists that span projects (the "all their
+   * work" list, SPEC §6). Each access is built exactly as {@link resolve}
+   * builds a member's access, so the same scope rules apply per project.
+   *
+   * Permissions: membership only. Projects a system admin is not a member of
+   * are left out, so such a list never reads them (and writes no
+   * `ADMIN_CROSS_PROJECT_ACCESS` entries).
+   *
+   * @param auth The signed-in caller.
+   * @returns One access per project, ordered by project key.
+   */
+  async memberAccesses(auth: AuthContext): Promise<ProjectAccess[]> {
+    const userId = auth.user.id;
+    const isSystemAdmin = auth.user.systemRole === SystemRole.ADMIN;
+    const rows = await this.prisma.projectMember.findMany({
+      where: { userId, project: { archivedAt: null } },
+      include: { project: true, teamMemberships: { select: { teamId: true, role: true } } },
+      orderBy: { project: { key: 'asc' } },
+    });
+    return rows.map(({ project, ...member }) =>
+      memberAccess(project, member, userId, isSystemAdmin),
+    );
   }
 
   /**
@@ -459,6 +471,48 @@ export class ProjectAccessService {
   ): boolean {
     return this.has(access, any) || (this.has(access, own) && this.isOwn(access, item));
   }
+}
+
+/**
+ * Builds a project member's access from their membership row: the role's
+ * permissions, and the stored visibility scope for Members and Viewers (PMs
+ * and Leads always see everything, SPEC §3.3).
+ *
+ * @param project The project row.
+ * @param member The caller's membership with their team places.
+ * @param member.role Project role.
+ * @param member.visibility Stored visibility scope.
+ * @param member.allowedBucketIds Buckets for the `BUCKETS` scope.
+ * @param member.teamMemberships The caller's teams in the project.
+ * @param userId The caller's user id.
+ * @param isSystemAdmin Whether the caller is a system admin.
+ * @returns The access.
+ */
+function memberAccess(
+  project: Project,
+  member: {
+    role: ProjectRole;
+    visibility: Visibility;
+    allowedBucketIds: string[];
+    teamMemberships: TeamPlace[];
+  },
+  userId: string,
+  isSystemAdmin: boolean,
+): ProjectAccess {
+  const settings = parseProjectSettings(project.settings);
+  const scoped = isScopedRole(member.role);
+  return {
+    project,
+    settings,
+    userId,
+    role: member.role,
+    isSystemAdmin,
+    visibility: scoped ? member.visibility : Visibility.ALL,
+    allowedBucketIds:
+      scoped && member.visibility === Visibility.BUCKETS ? member.allowedBucketIds : [],
+    teams: member.teamMemberships,
+    permissions: new Set(permissionsFor(member.role, settings, isSystemAdmin)),
+  };
 }
 
 /**

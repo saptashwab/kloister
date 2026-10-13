@@ -1,92 +1,153 @@
-import { Component, computed, inject, input } from '@angular/core';
-import type { WorkItemDto } from '@kloister/shared';
-import { isOverdue } from '../../core/board-logic';
-import { TYPE_BADGES, TYPE_LABELS } from '../../core/labels';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
+import { ItemStatus, LabelStyle, type WorkItemDto } from '@kloister/shared';
+import { dueState, dueText } from '../../core/item-changes';
 import { ProjectContext } from '../../core/project-context';
+import { Avatar } from '../../ui/avatar';
+import { Icon } from '../../ui/icon';
+import { LabelPill } from '../../ui/label-pill';
+import { PriorityIcon, TypeIcon } from '../../ui/signals';
 
 /**
- * Initials for an avatar, e.g. "Ann Lee" → "AL".
+ * One board card (SPEC §6, DESIGN §8): cover bar (cover-bar label style),
+ * type, key, "Blocked", priority, title, labels, due date, checklist
+ * progress and assignee avatars with their hover cards.
  *
- * @param name Display name.
- * @returns One or two capital letters.
- */
-export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters = parts.length > 1 ? [parts[0], parts[parts.length - 1]] : [parts[0] ?? '?'];
-  return letters.map((p) => (p ?? '?').charAt(0).toUpperCase()).join('');
-}
-
-/**
- * One board card (SPEC §6): type badge, key, title, labels, assignee
- * avatars, due date (red when overdue) and checklist progress. Display only;
- * the board handles opening and dragging.
+ * The title is the card's link to the item drawer, so keyboard users reach
+ * it with Tab; the board opens the drawer on clicks elsewhere on the card.
  */
 @Component({
   selector: 'app-item-card',
-  host: { class: 'card' },
+  imports: [RouterLink, Avatar, Icon, LabelPill, PriorityIcon, TypeIcon],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { class: 'card', '[class.done]': 'done()' },
   styles: `
     :host {
-      display: block;
-      padding: 8px;
-      border-radius: 8px;
-      background: var(--mat-sys-surface-container-lowest);
-      border: 1px solid var(--mat-sys-outline-variant);
-      font-size: 0.875rem;
-    }
-    .top,
-    .meta {
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px 8px;
+      flex-direction: column;
+      overflow: hidden;
+      border: 1px solid var(--k-border);
+      border-radius: var(--k-radius-md);
+      background: var(--k-surface);
+      box-shadow: var(--k-rest);
+      cursor: pointer;
     }
-    .key {
-      color: var(--mat-sys-on-surface-variant);
+    :host(.done) .title {
+      color: var(--k-muted);
+    }
+    .cover {
+      height: 6px;
+    }
+    .body {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      padding: 12px;
+    }
+    .meta,
+    .foot {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 22px;
     }
     .title {
-      margin: 4px 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      font-weight: 500;
+      line-height: 1.35;
+      color: var(--k-text);
+      text-decoration: none;
       overflow-wrap: anywhere;
     }
-    .avatar {
-      display: inline-grid;
-      place-items: center;
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      background: var(--mat-sys-secondary-container);
-      color: var(--mat-sys-on-secondary-container);
-      font-size: 0.7rem;
+    .title:hover {
+      text-decoration: underline;
     }
-    .overdue {
-      color: var(--mat-sys-error);
-      font-weight: 600;
+    .labels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .check {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--k-small);
+      color: var(--k-muted);
+    }
+    .bar {
+      width: 34px;
+      height: 4px;
+      border-radius: 2px;
+      overflow: hidden;
+      background: var(--k-border);
+    }
+    .bar span {
+      display: block;
+      height: 4px;
+      background: var(--k-primary);
+    }
+    .bar span.full {
+      background: var(--k-success);
     }
   `,
   template: `
     @let i = item();
-    <div class="top">
-      <span class="badge" [attr.data-type]="i.type" [title]="typeLabels[i.type]">{{
-        badges[i.type]
-      }}</span>
-      <span class="key">{{ i.key }}</span>
-    </div>
-    <div class="title">{{ i.title }}</div>
-    <div class="meta">
-      @for (label of labels(); track label.id) {
-        <span class="label" [style.border-left-color]="label.colour">{{ label.name }}</span>
+    @if (cover(); as colour) {
+      <div class="cover" [style.background]="colour" aria-hidden="true"></div>
+    }
+    <div class="body">
+      <div class="meta">
+        <app-type-icon [type]="i.type" />
+        <span class="k-key">{{ i.key }}</span>
+        @if (i.status === blocked) {
+          <span class="k-pill warn">Blocked</span>
+        }
+        <span class="spacer"></span>
+        <app-priority-icon [priority]="i.priority" />
+      </div>
+      <a class="title" [routerLink]="['items', i.number]" queryParamsHandling="preserve">{{
+        i.title
+      }}</a>
+      @if (labels().length > 0) {
+        <div class="labels">
+          @for (label of labels(); track label.id) {
+            <app-label-pill [name]="label.name" [colour]="label.colour" [labelStyle]="style()" />
+          }
+        </div>
       }
-      @if (i.dueDate) {
-        <span [class.overdue]="overdue()" [title]="overdue() ? 'Overdue' : 'Due date'">
-          {{ overdue() ? 'Overdue ' : 'Due ' }}{{ i.dueDate }}
-        </span>
-      }
-      @if (i.checklist.total > 0) {
-        <span title="Checklist">☑ {{ i.checklist.done }}/{{ i.checklist.total }}</span>
-      }
-      @for (person of assignees(); track person.id) {
-        <span class="avatar" [title]="person.name" role="img" [attr.aria-label]="person.name">{{
-          person.initials
-        }}</span>
+      @if (due() || i.checklist.total > 0 || assignees().length > 0) {
+        <div class="foot">
+          @if (due(); as d) {
+            <span
+              class="k-pill"
+              [class.danger]="d.state === 'overdue'"
+              [class.warn]="d.state === 'soon'"
+            >
+              <app-icon name="calendar" [size]="12" [stroke]="2.4" />{{ d.text }}
+            </span>
+          }
+          @if (i.checklist.total > 0) {
+            <span class="check">
+              <app-icon name="checklist" [size]="13" /><span class="visually-hidden">Checklist</span
+              >{{ i.checklist.done }}/{{ i.checklist.total }}
+              <span class="bar" aria-hidden="true"
+                ><span
+                  [class.full]="i.checklist.done === i.checklist.total"
+                  [style.width.%]="checkPct()"
+                ></span
+              ></span>
+            </span>
+          }
+          <span class="spacer"></span>
+          <span class="k-avatars">
+            @for (person of assignees(); track person.id) {
+              <app-avatar [userId]="person.id" [name]="person.name" [email]="person.email" />
+            }
+          </span>
+        </div>
       }
     </div>
   `,
@@ -96,13 +157,16 @@ export class ItemCard {
 
   /** The item shown. */
   readonly item = input.required<WorkItemDto>();
-  /** Today as `YYYY-MM-DD`, for the overdue check. */
+  /** Today as `YYYY-MM-DD`, for due dates. */
   readonly today = input.required<string>();
 
-  /** Type badge letters. */
-  protected readonly badges = TYPE_BADGES;
-  /** Type names. */
-  protected readonly typeLabels = TYPE_LABELS;
+  /** Status that shows the "Blocked" pill. */
+  protected readonly blocked = ItemStatus.BLOCKED;
+
+  /** The project's label style. */
+  protected readonly style = computed(
+    () => this.ctx.project()?.settings.labelStyle ?? LabelStyle.SOLID,
+  );
 
   /** The item's labels that still exist. */
   protected readonly labels = computed(() => {
@@ -112,15 +176,32 @@ export class ItemCard {
       .filter((l) => l !== undefined);
   });
 
-  /** Assignees with display names and initials. */
+  /** Colour of the cover bar (cover-bar style with at least one label), or null. */
+  protected readonly cover = computed(() =>
+    this.style() === LabelStyle.COVER ? (this.labels()[0]?.colour ?? null) : null,
+  );
+
+  /** Assignees with names and emails. */
   protected readonly assignees = computed(() => {
     const byId = this.ctx.membersById();
     return this.item().assigneeIds.map((id) => {
-      const name = byId.get(id)?.displayName ?? 'Former member';
-      return { id, name, initials: initials(name) };
+      const member = byId.get(id);
+      return { id, name: member?.displayName ?? 'Former member', email: member?.email ?? '' };
     });
   });
 
-  /** True when the item is past due and not Done. */
-  protected readonly overdue = computed(() => isOverdue(this.item(), this.today()));
+  /** The due pill's text and urgency, or null. */
+  protected readonly due = computed(() => {
+    const state = dueState(this.item(), this.today());
+    return state === null ? null : { state, text: dueText(this.item(), this.today()) };
+  });
+
+  /** Checklist progress in percent. */
+  protected readonly checkPct = computed(() => {
+    const { done, total } = this.item().checklist;
+    return total === 0 ? 0 : Math.round((done / total) * 100);
+  });
+
+  /** True for Done items, which are dimmed. */
+  protected readonly done = computed(() => this.item().status === ItemStatus.DONE);
 }

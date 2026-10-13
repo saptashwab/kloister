@@ -723,6 +723,25 @@ export class ItemsService {
   }
 
   /**
+   * Restricts an item query to several projects at once, each with the
+   * caller's visibility there: the cross-project counterpart of
+   * {@link scoped}, for lists that span projects ("all their work").
+   *
+   * @param accesses The caller's access to each project.
+   * @param where Further conditions.
+   * @returns The combined condition; matches nothing for an empty list.
+   */
+  scopedAcross(
+    accesses: readonly ProjectAccess[],
+    where: Prisma.WorkItemWhereInput,
+  ): Prisma.WorkItemWhereInput {
+    const perProject = accesses.map((access) => ({
+      AND: [{ projectId: access.project.id }, this.access.itemScopeFilter(access)],
+    }));
+    return { AND: [{ OR: perProject }, where] };
+  }
+
+  /**
    * Writes an audit entry about an item; these entries are its activity
    * history.
    *

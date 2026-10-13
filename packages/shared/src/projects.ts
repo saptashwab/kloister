@@ -204,12 +204,32 @@ export interface ProjectSettings {
   membersCanAssignOthers: boolean;
   /** Status → bucket moves; only buckets of the project, empty by default. */
   statusToBucket: StatusToBucket;
+  /** How labels are drawn on cards and in the drawer (SPEC §4, §6; set by PMs). */
+  labelStyle: LabelStyle;
 }
+
+/**
+ * Label styles a PM can choose per project (SPEC §4, docs/DESIGN.md §4.2):
+ * full-colour pills, soft tinted pills, or tinted pills plus a colour bar
+ * across the top of the card.
+ */
+export const LabelStyle = {
+  /** Full-colour fill with automatically chosen text (the default). */
+  SOLID: 'SOLID',
+  /** Soft fill of the label colour with darker or lighter text. */
+  TINTED: 'TINTED',
+  /** Tinted pills plus a bar in the first label's colour on the card. */
+  COVER: 'COVER',
+} as const;
+
+/** One of the {@link LabelStyle} values. */
+export type LabelStyle = (typeof LabelStyle)[keyof typeof LabelStyle];
 
 /** Settings of a new project. */
 export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   membersCanAssignOthers: false,
   statusToBucket: {},
+  labelStyle: LabelStyle.SOLID,
 };
 
 /** A project as the API returns it, from the caller's point of view. */

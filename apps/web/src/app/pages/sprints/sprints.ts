@@ -15,6 +15,7 @@ import {
   SprintState,
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
+import { Dialogs } from '../../ui/dialogs';
 import { NONE } from '../../core/board-logic';
 import { ItemsApiService } from '../../core/items-api.service';
 import { SPRINT_STATE_LABELS } from '../../core/labels';
@@ -37,6 +38,7 @@ const KEEP = 'keep';
  */
 @Component({
   selector: 'app-sprints',
+  host: { class: 'k-page' },
   imports: [
     ReactiveFormsModule,
     RouterLink,
@@ -48,7 +50,7 @@ const KEEP = 'keep';
   ],
   template: `
     @if (error()) {
-      <p class="error" role="alert">{{ error() }}</p>
+      <p class="k-alert" role="alert">{{ error() }}</p>
     }
     @if (notice()) {
       <p role="status">{{ notice() }}</p>
@@ -152,7 +154,11 @@ const KEEP = 'keep';
           </tr>
         } @empty {
           <tr>
-            <td colspan="5">No sprints yet.</td>
+            <td colspan="5" class="muted">
+              No sprints yet. Plan a few weeks of work at a time{{
+                canManage() ? ' with the form above' : ''
+              }}.
+            </td>
           </tr>
         }
       </tbody>
@@ -163,6 +169,7 @@ export class SprintsPage implements OnInit {
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
   private readonly api = inject(ItemsApiService);
+  private readonly dialogs = inject(Dialogs);
 
   /** "Keep" close choice for the template. */
   protected readonly keep = KEEP;
@@ -339,7 +346,14 @@ export class SprintsPage implements OnInit {
    */
   protected async remove(sprint: SprintDto): Promise<void> {
     const project = this.ctx.project();
-    if (project === null || !confirm(`Delete ${sprint.name}? Its items leave the sprint.`)) return;
+    if (project === null) return;
+    const confirmed = await this.dialogs.confirm({
+      title: `Delete ${sprint.name}?`,
+      message: 'Its items leave the sprint and stay in the project.',
+      confirm: 'Delete',
+      danger: true,
+    });
+    if (!confirmed) return;
     await this.run(async () => {
       await this.api.deleteSprint(project.id, sprint.id);
       await this.ctx.refresh();

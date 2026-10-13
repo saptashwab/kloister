@@ -6,11 +6,14 @@ import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { SessionStore } from '../../core/session.store';
+import { Dialogs } from '../../ui/dialogs';
+import { ToastService } from '../../ui/toast.service';
 import { ItemDrawer } from './item-drawer';
 
 /** The protected drawer members the tests drive directly. */
 interface DrawerInternals {
   save(change: object): Promise<void>;
+  remove(): Promise<void>;
 }
 
 const epic: ItemRefDto = { id: 'i1', number: 1, key: 'KLO-1', type: 'EPIC', title: 'Hidden epic' };
@@ -61,6 +64,7 @@ describe('ItemDrawer', () => {
       update: vi.fn(),
       remove: vi.fn().mockResolvedValue(undefined),
     };
+    const dialogs = { confirm: vi.fn().mockResolvedValue(true) };
     await TestBed.configureTestingModule({
       imports: [ItemDrawer],
       providers: [
@@ -68,8 +72,12 @@ describe('ItemDrawer', () => {
         ProjectContext,
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
+        { provide: Dialogs, useValue: dialogs },
       ],
     }).compileComponents();
+    const toast = TestBed.inject(ToastService);
+    const show = vi.spyOn(toast, 'show').mockImplementation(() => undefined);
+    const showError = vi.spyOn(toast, 'error').mockImplementation(() => undefined);
     TestBed.inject(SessionStore).set({
       id: 'u1',
       email: 'ann@example.org',
@@ -87,7 +95,16 @@ describe('ItemDrawer', () => {
     fixture.componentRef.setInput('number', String(detail.number));
     await settle(fixture);
     const drawer = fixture.componentInstance as unknown as DrawerInternals;
-    return { fixture, root: fixture.nativeElement as HTMLElement, ctx, itemsApi, drawer };
+    return {
+      fixture,
+      root: fixture.nativeElement as HTMLElement,
+      ctx,
+      itemsApi,
+      drawer,
+      show,
+      showError,
+      dialogs,
+    };
   }
 
   it('shows hidden ancestors as plain titles and visible ones as links', async () => {
@@ -100,24 +117,44 @@ describe('ItemDrawer', () => {
     expect(crumbs.querySelector('a')?.textContent).toContain('Visible feature');
   });
 
-  it('disables every control when the item may not be edited', async () => {
-    const { root } = await render(makeItem(4, { title: 'Locked', can: readOnly }));
-    expect(root.querySelector('h3')?.textContent).toContain('Locked');
-    const selects = [...root.querySelectorAll('mat-select')];
-    expect(selects.length).toBeGreaterThan(0);
-    expect(selects.every((s) => s.getAttribute('aria-disabled') === 'true')).toBe(true);
-    expect(root.textContent).not.toContain('Delete item');
-    expect(root.textContent).not.toContain('Add a checklist line');
+  it('shows plain values and no editors when the item may not be edited', async () => {
+    const { root } = await render(
+      makeItem(4, { title: 'Locked', can: readOnly, assigneeIds: ['u2'] }),
+    );
+    expect(root.querySelector('h1')?.textContent).toContain('Locked');
+    expect(root.querySelector('[aria-label="Edit title"]')).toBeNull();
+    expect(root.querySelectorAll('mat-select').length).toBe(0);
+    expect(root.querySelectorAll('input[type="date"]').length).toBe(0);
+    expect(root.querySelector('dl.fields')?.textContent).toContain('Bob');
+    expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
+    expect(root.querySelector('input[aria-label="New checklist line"]')).toBeNull();
     expect(root.querySelector('app-description-editor')).toBeNull();
   });
 
-  it('shows editing controls and the activity history when the item is editable', async () => {
+  it('shows inline editors and the activity history when the item is editable', async () => {
     const { root, itemsApi } = await render(makeItem(4));
-    expect(root.querySelector('input[maxlength]')).not.toBeNull();
+    expect(root.querySelector('[aria-label="Edit title"]')).not.toBeNull();
+    for (const field of ['Status', 'Bucket', 'Assignees', 'Labels', 'Sprint', 'Priority']) {
+      expect(root.querySelector(`mat-select[aria-label="${field}"]`)).not.toBeNull();
+    }
     expect(root.querySelector('app-description-editor')).not.toBeNull();
-    expect(root.textContent).toContain('Delete item');
+    expect(root.querySelector('[aria-label="More actions"]')).not.toBeNull();
     expect(itemsApi.activity).toHaveBeenCalledWith('p1', 'i4', undefined);
     expect(root.textContent).toContain('Ann created this Task');
+  });
+
+  it('edits the title in place', async () => {
+    const item = makeItem(4, { title: 'Old title' });
+    const { root, itemsApi, fixture } = await render(item);
+    itemsApi.update.mockResolvedValue({ ...item, title: 'New title' });
+    root.querySelector<HTMLButtonElement>('[aria-label="Edit title"]')?.click();
+    await settle(fixture);
+    const input = root.querySelector<HTMLInputElement>('input[aria-label="Title"]')!;
+    input.value = 'New title';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await settle(fixture);
+    expect(itemsApi.update).toHaveBeenCalledWith('p1', 'i4', { title: 'New title' });
+    expect(root.querySelector('h1')?.textContent).toContain('New title');
   });
 
   it('shows the bucket the server chose after a status change', async () => {
@@ -132,21 +169,55 @@ describe('ItemDrawer', () => {
     expect(itemsApi.activity).toHaveBeenCalledTimes(2);
   });
 
+  it('offers Undo, which moves the card back and restores the status', async () => {
+    const item = makeItem(4);
+    const { drawer, itemsApi, ctx, show } = await render(item);
+    const changed = { ...item, status: 'DONE' as const, bucketId: 'b2' };
+    itemsApi.update.mockResolvedValueOnce(changed);
+    await drawer.save({ status: 'DONE' });
+    expect(show).toHaveBeenCalledWith('Status saved', expect.any(Function));
+
+    Object.assign(itemsApi, { move: vi.fn().mockResolvedValue({ ...changed, bucketId: 'b1' }) });
+    itemsApi.update.mockResolvedValueOnce(item);
+    await show.mock.calls[0]?.[1]?.();
+    expect((itemsApi as unknown as { move: unknown }).move).toHaveBeenCalledWith('p1', 'i4', {
+      bucketId: 'b1',
+      afterId: null,
+    });
+    expect(itemsApi.update).toHaveBeenLastCalledWith('p1', 'i4', { status: 'NOT_STARTED' });
+    expect(ctx.itemsById().get('i4')).toMatchObject({ status: 'NOT_STARTED', bucketId: 'b1' });
+  });
+
+  it('shows a refused change as an error toast and keeps the stored value', async () => {
+    const item = makeItem(4);
+    const { drawer, itemsApi, showError, root, fixture } = await render(item);
+    itemsApi.update.mockRejectedValue(new Error('Refused'));
+    await drawer.save({ priority: 1 });
+    await settle(fixture);
+    expect(showError).toHaveBeenCalled();
+    expect(root.querySelector('mat-select[aria-label="Priority"]')?.textContent).toContain('High');
+  });
+
   it('deletes items with children as a cascade and forgets the subtree', async () => {
     const parent = makeItem(4, { type: 'STORY', childCount: 1 });
     const child = makeItem(5, {
       parentId: 'i4',
       ancestors: [{ id: 'i4', number: 4, key: 'KLO-4', type: 'STORY', title: 'Item 4' }],
     });
-    const { root, itemsApi, ctx, fixture } = await render(parent, [child]);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const button = [...root.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('Delete item'),
+    const { itemsApi, ctx, drawer, dialogs } = await render(parent, [child]);
+    await drawer.remove();
+    expect(dialogs.confirm).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Delete KLO-4 and everything under it?', danger: true }),
     );
-    button?.click();
-    await settle(fixture);
     expect(itemsApi.remove).toHaveBeenCalledWith('p1', 'i4', true);
     expect(ctx.items()).toEqual([]);
+  });
+
+  it('deletes nothing when the confirmation is cancelled', async () => {
+    const { itemsApi, drawer, dialogs } = await render(makeItem(4));
+    dialogs.confirm.mockResolvedValue(false);
+    await drawer.remove();
+    expect(itemsApi.remove).not.toHaveBeenCalled();
   });
 
   it('hides delete when the item has children and the caller cannot cascade', async () => {
@@ -155,7 +226,7 @@ describe('ItemDrawer', () => {
       can: { edit: true, move: true, delete: true, deleteCascade: false, annotate: true },
     });
     const { root } = await render(parent);
-    expect(root.textContent).not.toContain('Delete item');
+    expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
   });
 
   it('lets callers without ASSIGN_OTHERS change only their own assignment', async () => {
@@ -177,8 +248,7 @@ describe('ItemDrawer', () => {
     const project = makeProject({ archivedAt: '2026-10-01T00:00:00.000Z' });
     const { root } = await render(makeItem(4), [], project);
     expect(root.querySelector('app-description-editor')).toBeNull();
-    expect(root.textContent).not.toContain('Delete item');
-    const selects = [...root.querySelectorAll('mat-select')];
-    expect(selects.every((s) => s.getAttribute('aria-disabled') === 'true')).toBe(true);
+    expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
+    expect(root.querySelectorAll('mat-select').length).toBe(0);
   });
 });

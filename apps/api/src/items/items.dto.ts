@@ -34,7 +34,7 @@ import {
   ValidateBy,
 } from 'class-validator';
 import { IsCalendarDate } from '../common/dates.js';
-import { Nullable, OmittableNotNull, trim } from '../common/dto-helpers.js';
+import { Nullable, OmittableNotNull, queryBoolean, trim } from '../common/dto-helpers.js';
 import { PageQueryDto } from '../common/pagination.js';
 import { LowercaseUuid } from '../common/uuid.js';
 
@@ -54,16 +54,6 @@ const IsUuidOrNone = (): PropertyDecorator =>
       defaultMessage: () => '$property must be a uuid or "none"',
     },
   });
-
-/**
- * Parses a `true`/`false` query string value.
- *
- * @param params class-transformer callback parameters.
- * @param params.value Raw value.
- * @returns A boolean, or the raw value for the validator to reject.
- */
-const queryBoolean = ({ value }: { value: unknown }): unknown =>
-  value === 'true' ? true : value === 'false' ? false : value;
 
 /** Query string of `GET /projects/:id/items`. Every filter narrows the caller's scope further. */
 export class ListItemsQueryDto extends PageQueryDto {

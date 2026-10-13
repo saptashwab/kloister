@@ -23,7 +23,7 @@ export function makeProject(overrides: Partial<ProjectDto> = {}): ProjectDto {
     name: 'Kanban',
     description: '',
     archivedAt: null,
-    settings: { membersCanAssignOthers: false, statusToBucket: {} },
+    settings: { membersCanAssignOthers: false, statusToBucket: {}, labelStyle: 'SOLID' },
     myRole: 'PM',
     myVisibility: 'ALL',
     myTeams: [],

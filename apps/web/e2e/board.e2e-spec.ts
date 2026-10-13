@@ -52,12 +52,12 @@ async function snap(page: Page, name: string): Promise<void> {
 
 test('a PM works the board and the item drawer', async ({ page }) => {
   await signIn(page, USERS.pm);
-  await page.getByRole('link', { name: PROJECT_KEY }).click();
+  await page.getByRole('link', { name: PROJECT_KEY, exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/p/${PROJECT_KEY}$`));
   for (const name of ['Backlog', 'To Do', 'In Progress', 'Done']) {
     await expect(column(page, name)).toBeVisible();
   }
-  await expect(column(page, 'Backlog')).toContainText('Overdue');
+  await expect(column(page, 'Backlog')).toContainText('days overdue');
   await snap(page, 'board');
 
   // Quick-add puts the card at the top of the column it was typed into.
@@ -71,13 +71,16 @@ test('a PM works the board and the item drawer', async ({ page }) => {
   await drag(page, card, column(page, 'In Progress'));
   const moved = column(page, 'In Progress').locator('.open', { hasText: 'Write release notes' });
   await expect(moved).toBeVisible();
+  // The move is confirmed by a toast with Undo (docs/DESIGN.md §11).
+  const toast = page.locator('.k-toast');
+  await expect(toast).toContainText('moved to In Progress');
+  await expect(toast.getByRole('button', { name: 'Undo' })).toBeVisible();
+  await snap(page, 'board with undo toast');
 
-  await moved.click();
+  await moved.getByRole('link', { name: 'Write release notes' }).click();
   await expect(page).toHaveURL(/\/items\/\d+$/);
   const drawer = page.locator('app-item-drawer');
-  await expect(
-    drawer.locator('mat-form-field', { hasText: 'Status' }).locator('mat-select'),
-  ).toContainText('In progress');
+  await expect(drawer.getByRole('combobox', { name: 'Status' })).toContainText('In progress');
 
   const line = drawer.getByLabel('New checklist line');
   await line.fill('Draft the notes');
@@ -88,7 +91,7 @@ test('a PM works the board and the item drawer', async ({ page }) => {
   await expect(drawer).toContainText('moved the card from To Do to In Progress');
   await snap(page, 'item drawer');
 
-  await drawer.getByRole('button', { name: 'Close' }).click();
+  await drawer.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/p/${PROJECT_KEY}$`));
   await expect(moved).toContainText('1/1');
 });
@@ -128,12 +131,13 @@ test('a Member limited to own items sees hidden ancestors as titles only', async
   await expect(page.locator('.columns')).not.toContainText('Invoice PDF');
   await expect(page.locator('.columns')).not.toContainText('Total rounds wrongly');
 
-  await page.locator('.open', { hasText: 'Invoice form' }).click();
+  await page.getByRole('link', { name: 'Invoice form' }).click();
   const crumbs = page.locator('nav.crumbs');
   await expect(crumbs).toContainText('Checkout');
   await expect(crumbs).toContainText('Pay by invoice');
   await expect(crumbs.locator('a')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Delete item' })).toHaveCount(0);
+  // Delete lives in the drawer's "More actions" menu, shown only to those who may delete.
+  await expect(page.getByRole('button', { name: 'More actions' })).toHaveCount(0);
   await snap(page, 'member drawer');
 
   // Items outside the scope are 404 even by direct link.
@@ -158,6 +162,6 @@ test('a Viewer gets a read-only board and drawer', async ({ page }) => {
   const drawer = page.locator('app-item-drawer');
   await expect(drawer.getByRole('heading', { name: 'Invoice PDF' })).toBeVisible();
   await expect(drawer.locator('mat-select[aria-disabled="false"]')).toHaveCount(0);
-  await expect(drawer.getByRole('button', { name: 'Delete item' })).toHaveCount(0);
+  await expect(drawer.getByRole('button', { name: 'More actions' })).toHaveCount(0);
   await snap(page, 'viewer drawer');
 });

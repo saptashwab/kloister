@@ -12,6 +12,7 @@ import {
   TeamRole,
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
+import { Dialogs } from '../../ui/dialogs';
 import { TEAM_ROLE_LABELS } from '../../core/labels';
 import { ProjectsApiService } from '../../core/projects-api.service';
 
@@ -143,6 +144,7 @@ import { ProjectsApiService } from '../../core/projects-api.service';
 })
 export class ProjectTeamsComponent {
   private readonly api = inject(ProjectsApiService);
+  private readonly dialogs = inject(Dialogs);
 
   /** Project id. */
   readonly projectId = input.required<string>();
@@ -220,7 +222,13 @@ export class ProjectTeamsComponent {
    * @returns Resolves once renamed.
    */
   protected async renameTeam(team: TeamDto): Promise<void> {
-    const name = prompt('New team name', team.name)?.trim();
+    const name = await this.dialogs.prompt({
+      title: `Rename ${team.name}`,
+      label: 'Team name',
+      value: team.name,
+      confirm: 'Rename',
+      maxLength: TEAM_NAME_MAX,
+    });
     if (!name || name === team.name) return;
     await this.run(async () =>
       this.replace(await this.api.updateTeam(this.projectId(), team.id, { name })),
@@ -234,7 +242,13 @@ export class ProjectTeamsComponent {
    * @returns Resolves once deleted.
    */
   protected async deleteTeam(team: TeamDto): Promise<void> {
-    if (!confirm(`Delete the team ${team.name}? Its members stay in the project.`)) return;
+    const confirmed = await this.dialogs.confirm({
+      title: `Delete the team ${team.name}?`,
+      message: 'Its members stay in the project and its items lose their team.',
+      confirm: 'Delete',
+      danger: true,
+    });
+    if (!confirmed) return;
     await this.run(async () => {
       await this.api.deleteTeam(this.projectId(), team.id);
       this.teams.update((teams) => teams.filter((t) => t.id !== team.id));

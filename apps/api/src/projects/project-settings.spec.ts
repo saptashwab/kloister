@@ -9,8 +9,15 @@ describe('project settings', () => {
       expect(parseProjectSettings(raw)).toEqual({
         membersCanAssignOthers: false,
         statusToBucket: {},
+        labelStyle: 'SOLID',
       });
     }
+  });
+
+  it('reads a known label style and defaults an unknown one', () => {
+    expect(parseProjectSettings({ labelStyle: 'COVER' }).labelStyle).toBe('COVER');
+    expect(parseProjectSettings({ labelStyle: 'tinted' }).labelStyle).toBe('SOLID');
+    expect(parseProjectSettings({ labelStyle: 3 }).labelStyle).toBe('SOLID');
   });
 
   it('keeps only well-formed statusToBucket entries', () => {

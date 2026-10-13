@@ -11,13 +11,15 @@ import {
 import { MatButtonModule } from '@angular/material/button';
 import { DomSanitizer } from '@angular/platform-browser';
 import { ITEM_DESCRIPTION_MAX } from '@kloister/shared';
+import { Dialogs } from '../../ui/dialogs';
 
 /** Link schemes the editor offers; the server allows the same (SPEC §5). */
 const SAFE_LINK = /^(https?:\/\/|mailto:)/i;
 
 /**
  * A small rich-text editor for item descriptions: bold, italic, lists and
- * links on a content-editable area.
+ * links on a content-editable area (DESIGN §10). Ctrl/Cmd+Enter saves and
+ * Esc throws the edits away.
  *
  * The HTML it produces is only a suggestion: the API sanitizes descriptions
  * against an allow-list before storing them (SPEC §5), and Angular sanitizes
@@ -27,29 +29,72 @@ const SAFE_LINK = /^(https?:\/\/|mailto:)/i;
   selector: 'app-description-editor',
   imports: [MatButtonModule],
   styles: `
+    :host {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2px;
+    }
+    .tools button {
+      min-height: 30px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: var(--k-radius-sm);
+      background: transparent;
+      color: var(--k-muted);
+      font: inherit;
+      font-size: var(--k-small);
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .tools button:hover {
+      background: var(--k-sunken);
+      color: var(--k-text);
+    }
     .area {
       min-height: 96px;
-      max-height: 320px;
+      max-height: 360px;
       overflow-y: auto;
-      padding: 8px;
-      border: 1px solid var(--mat-sys-outline);
-      border-radius: 4px;
+      padding: 12px 14px;
+      border: 1px solid var(--k-border);
+      border-radius: var(--k-radius-md);
+      line-height: 1.6;
     }
     .area:focus {
-      outline: 2px solid var(--mat-sys-primary);
+      border-color: var(--k-primary);
+    }
+    .hint {
+      font-size: var(--k-small);
+      color: var(--k-muted);
     }
   `,
   template: `
-    <div class="row" role="toolbar" aria-label="Formatting">
-      <button mat-button type="button" (mousedown)="format($event, 'bold')">Bold</button>
-      <button mat-button type="button" (mousedown)="format($event, 'italic')">Italic</button>
-      <button mat-button type="button" (mousedown)="format($event, 'insertUnorderedList')">
+    <div class="tools" role="toolbar" aria-label="Formatting">
+      <button type="button" (mousedown)="$event.preventDefault()" (click)="format('bold')">
+        Bold
+      </button>
+      <button type="button" (mousedown)="$event.preventDefault()" (click)="format('italic')">
+        Italic
+      </button>
+      <button
+        type="button"
+        (mousedown)="$event.preventDefault()"
+        (click)="format('insertUnorderedList')"
+      >
         Bullets
       </button>
-      <button mat-button type="button" (mousedown)="format($event, 'insertOrderedList')">
+      <button
+        type="button"
+        (mousedown)="$event.preventDefault()"
+        (click)="format('insertOrderedList')"
+      >
         Numbers
       </button>
-      <button mat-button type="button" (mousedown)="link($event)">Link</button>
+      <button type="button" (mousedown)="$event.preventDefault()" (click)="link()">Link</button>
     </div>
     <div
       #area
@@ -60,6 +105,9 @@ const SAFE_LINK = /^(https?:\/\/|mailto:)/i;
       aria-label="Description"
       [innerHTML]="html()"
       (input)="dirty.set(true)"
+      (keydown.control.enter)="submit()"
+      (keydown.meta.enter)="submit()"
+      (keydown.escape)="cancel($event)"
     ></div>
     @if (tooLong()) {
       <p class="error" role="alert">The description is too long.</p>
@@ -68,6 +116,7 @@ const SAFE_LINK = /^(https?:\/\/|mailto:)/i;
       <div class="row">
         <button mat-flat-button type="button" (click)="submit()">Save description</button>
         <button mat-button type="button" (click)="reset()">Cancel</button>
+        <span class="hint">Ctrl+Enter saves, Esc cancels</span>
       </div>
     }
   `,
@@ -84,17 +133,17 @@ export class DescriptionEditor {
   protected readonly tooLong = signal(false);
 
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly dialogs = inject(Dialogs);
   private readonly area = viewChild.required<ElementRef<HTMLDivElement>>('area');
 
   /**
-   * Applies a formatting command to the selection. Runs on mousedown so the
-   * editing area keeps its selection.
+   * Applies a formatting command to the selection. The buttons cancel their
+   * mousedown, so the editing area keeps its selection; keyboard users press
+   * them like any button.
    *
-   * @param event The mouse event.
    * @param command A `document.execCommand` name.
    */
-  protected format(event: Event, command: string): void {
-    event.preventDefault();
+  protected format(command: string): void {
     // execCommand is deprecated but is still the only built-in way to format
     // a content-editable selection without an editor library.
     document.execCommand(command);
@@ -104,14 +153,37 @@ export class DescriptionEditor {
   /**
    * Turns the selection into a link after asking for an http(s) or mailto URL.
    *
-   * @param event The mouse event.
+   * @returns Resolves once the link is added or the dialog cancelled.
    */
-  protected link(event: Event): void {
-    event.preventDefault();
-    const url = prompt('Link address (https://… or mailto:…)')?.trim() ?? '';
+  protected async link(): Promise<void> {
+    // The dialog takes focus, so the selection is kept and restored after it.
+    const selection = window.getSelection();
+    const range = selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const url =
+      (await this.dialogs.prompt({
+        title: 'Add a link',
+        label: 'Link address (https://… or mailto:…)',
+        confirm: 'Add link',
+      })) ?? '';
     if (!SAFE_LINK.test(url)) return;
+    this.area().nativeElement.focus();
+    if (range !== null) {
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
     document.execCommand('createLink', false, url);
     this.dirty.set(true);
+  }
+
+  /**
+   * Esc throws the edits away; without edits it lets the drawer close.
+   *
+   * @param event The key event.
+   */
+  protected cancel(event: Event): void {
+    if (!this.dirty()) return;
+    event.stopPropagation();
+    this.reset();
   }
 
   /**

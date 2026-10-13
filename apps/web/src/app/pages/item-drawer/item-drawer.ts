@@ -1,7 +1,16 @@
-import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  effect,
+  type ElementRef,
+  inject,
+  input,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 import { Router } from '@angular/router';
 import {
@@ -9,6 +18,8 @@ import {
   ItemStatus,
   ItemType,
   ITEM_TITLE_MAX,
+  LabelStyle,
+  type MoveItemRequest,
   PRIORITY_MAX,
   PRIORITY_MIN,
   requiresBucket,
@@ -18,26 +29,52 @@ import {
   type WorkItemDto,
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
-import { NONE } from '../../core/board-logic';
+import { isoDate, NONE } from '../../core/board-logic';
+import { dueState, dueText, revertMove, shortDate, undoFields } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
-import { PRIORITY_LABELS, STATUS_LABELS, TYPE_BADGES, TYPE_LABELS } from '../../core/labels';
+import { PRIORITY_LABELS, SPRINT_STATE_LABELS, TYPE_LABELS } from '../../core/labels';
 import { ProjectContext } from '../../core/project-context';
 import { SessionStore } from '../../core/session.store';
+import { Avatar, PERSON_FILTER, StaticAvatar } from '../../ui/avatar';
+import { Dialogs } from '../../ui/dialogs';
+import { Skeleton } from '../../ui/feedback';
+import { Icon } from '../../ui/icon';
+import { LabelPill } from '../../ui/label-pill';
+import { PriorityIcon, StatusPill, TypeIcon } from '../../ui/signals';
+import { ToastService } from '../../ui/toast.service';
 import { DescriptionEditor } from './description-editor';
 import { ItemActivity } from './item-activity';
 import { ItemChecklist } from './item-checklist';
 
+/** Display names of the fields, for toasts. */
+const FIELD_NAMES: Record<string, string> = {
+  type: 'Type',
+  title: 'Title',
+  description: 'Description',
+  parentId: 'Parent',
+  status: 'Status',
+  priority: 'Priority',
+  sprintId: 'Sprint',
+  teamId: 'Team',
+  startDate: 'Start date',
+  dueDate: 'Due date',
+  assigneeIds: 'Assignees',
+  labelIds: 'Labels',
+};
+
 /**
- * The item detail drawer (SPEC §6), deep-linkable at `/p/:key/items/:number`
- * and also opened beside the backlog.
+ * The item detail drawer (SPEC §6, DESIGN §10), deep-linkable at
+ * `/p/:key/items/:number` and also opened beside the backlog.
  *
- * Every field is shown; editing controls are enabled only where the item's
- * `can` capabilities allow (`edit` for fields, checklist and dependencies,
- * `move` for the bucket, `delete`/`deleteCascade` for deleting) and the
- * project is not archived. Assigning anyone but yourself also needs
- * `ASSIGN_OTHERS` or leading the item's team. The API checks every change
- * again; its answer (e.g. the bucket chosen by `statusToBucket`, or the
- * status set by a bucket's entry rule) replaces what is shown.
+ * Every value is edited in place: a click opens a select, date field or text
+ * field, the change is saved at once and a toast offers Undo (the reverse
+ * PATCH or move). Values the caller cannot change are plain text: editing
+ * needs the item's `can.edit` (fields, checklist, dependencies), `can.move`
+ * (bucket) or `can.delete`/`deleteCascade`, on an unarchived project.
+ * Assigning anyone but yourself also needs `ASSIGN_OTHERS` or leading the
+ * item's team. The API checks every change again; its answer (e.g. the
+ * bucket chosen by `statusToBucket`, or the status set by a bucket's entry
+ * rule) replaces what is shown.
  *
  * Ancestors outside the caller's scope are shown as read-only titles
  * (SPEC §3.3). Notes and attachments arrive in M5.
@@ -45,349 +82,520 @@ import { ItemChecklist } from './item-checklist';
 @Component({
   selector: 'app-item-drawer',
   imports: [
-    MatButtonModule,
-    MatFormFieldModule,
-    MatInputModule,
+    MatMenuModule,
     MatSelectModule,
+    Avatar,
     DescriptionEditor,
-    ItemChecklist,
+    Icon,
     ItemActivity,
+    ItemChecklist,
+    LabelPill,
+    PriorityIcon,
+    Skeleton,
+    StaticAvatar,
+    StatusPill,
+    TypeIcon,
   ],
+  // Avatars here show their hover card on click; they do not filter the
+  // board behind the drawer.
+  providers: [{ provide: PERSON_FILTER, useValue: null }],
   host: {
-    class: 'drawer',
-    role: 'complementary',
-    'aria-label': 'Item details',
-    '(keydown.escape)': 'close()',
+    '(keydown.escape)': 'onEscape($event)',
   },
-  styles: `
-    :host {
-      position: fixed;
-      top: 64px;
-      right: 0;
-      bottom: 0;
-      z-index: 10;
-      width: min(600px, 100vw);
-      box-sizing: border-box;
-      padding: 12px 16px;
-      overflow-y: auto;
-      background: var(--mat-sys-surface);
-      border-left: 1px solid var(--mat-sys-outline-variant);
-      box-shadow: var(--mat-sys-level3);
-    }
-    .head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .crumbs {
-      font-size: 0.85rem;
-      color: var(--mat-sys-on-surface-variant);
-    }
-    .full {
-      width: 100%;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
-      column-gap: 12px;
-    }
-    .refs {
-      margin: 0 0 8px;
-      padding-left: 20px;
-    }
-    section {
-      margin-top: 16px;
-    }
-  `,
   template: `
-    <div class="head">
-      @if (detail(); as d) {
-        <span class="badge" [attr.data-type]="d.type">{{ badges[d.type] }}</span>
-        <strong>{{ d.key }}</strong>
-      }
-      <span class="spacer"></span>
-      <button mat-button type="button" (click)="close()">Close</button>
-    </div>
-
-    @if (error()) {
-      <p class="error" role="alert">{{ error() }}</p>
-    }
-
-    <!-- Re-created after a refused change, so every control shows the stored value again. -->
-    @for (view of views(); track view.key) {
-      @let d = view.item;
-      @if (d.ancestors.length > 0) {
+    <div class="drawer-scrim" aria-hidden="true" (click)="close()"></div>
+    <div #panel class="d-panel" role="complementary" aria-label="Item details" tabindex="-1">
+      <div class="d-top">
         <nav class="crumbs" aria-label="Parents">
-          @for (a of d.ancestors; track a.id; let last = $last) {
-            @if (isVisible(a.id)) {
-              <a href="" (click)="openItem($event, a.number)">{{ a.key }} {{ a.title }}</a>
-            } @else {
-              <span title="Outside your view: shown as a title only"
-                >{{ a.key }} {{ a.title }}</span
-              >
-            }
-            @if (!last) {
-              ›
+          @if (detail(); as d) {
+            @for (a of d.ancestors; track a.id; let last = $last) {
+              @if (isVisible(a.id)) {
+                <a href="" (click)="openItem($event, a.number)"
+                  ><app-type-icon [type]="a.type" /><span class="k-key">{{ a.key }}</span
+                  >{{ a.title }}</a
+                >
+              } @else {
+                <span class="ref" title="Outside your view: shown as a title only"
+                  ><app-type-icon [type]="a.type" /><span class="k-key">{{ a.key }}</span
+                  >{{ a.title }}</span
+                >
+              }
+              @if (!last) {
+                <span aria-hidden="true">›</span>
+              }
             }
           }
         </nav>
-      }
-
-      @if (canEdit()) {
-        <mat-form-field class="full">
-          <mat-label>Title</mat-label>
-          <input
-            matInput
-            [value]="d.title"
-            [attr.maxlength]="titleMax"
-            (change)="saveTitle($any($event.target))"
-          />
-        </mat-form-field>
-      } @else {
-        <h3>{{ d.title }}</h3>
-      }
-
-      <div class="grid">
-        <mat-form-field>
-          <mat-label>Type</mat-label>
-          <mat-select
-            [value]="d.type"
-            [disabled]="!canEdit()"
-            (valueChange)="save({ type: $event })"
+        <span class="spacer"></span>
+        <button type="button" class="k-icon-btn" aria-label="Copy link" (click)="copyLink()">
+          <app-icon name="link" [size]="17" />
+        </button>
+        @if (canDelete()) {
+          <button
+            type="button"
+            class="k-icon-btn"
+            aria-label="More actions"
+            [matMenuTriggerFor]="more"
           >
-            @for (t of types; track t) {
-              <mat-option [value]="t">{{ typeLabels[t] }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Status</mat-label>
-          <mat-select
-            [value]="d.status"
-            [disabled]="!canEdit()"
-            (valueChange)="save({ status: $event })"
-          >
-            @for (s of statuses; track s) {
-              <mat-option [value]="s">{{ statusLabels[s] }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Bucket</mat-label>
-          <mat-select
-            [value]="d.bucketId ?? none"
-            [disabled]="!canMove()"
-            (valueChange)="moveTo($event)"
-          >
-            @if (!needsBucket()) {
-              <mat-option [value]="none">Off the board</mat-option>
-            }
-            @for (b of ctx.buckets(); track b.id) {
-              <mat-option [value]="b.id">{{ b.name }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Sprint</mat-label>
-          <mat-select
-            [value]="d.sprintId ?? none"
-            [disabled]="!canEdit()"
-            (valueChange)="save({ sprintId: orNull($event) })"
-          >
-            <mat-option [value]="none">No sprint</mat-option>
-            @for (s of ctx.sprints(); track s.id) {
-              @if (s.state !== closed || s.id === d.sprintId) {
-                <mat-option [value]="s.id" [disabled]="s.state === closed">{{ s.name }}</mat-option>
-              }
-            }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Priority</mat-label>
-          <mat-select
-            [value]="d.priority"
-            [disabled]="!canEdit()"
-            (valueChange)="save({ priority: $event })"
-          >
-            @for (p of priorities; track p) {
-              <mat-option [value]="p">{{ priorityLabels[p] }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-        @if (ctx.teams().length > 0 || d.teamId) {
-          <mat-form-field>
-            <mat-label>Team</mat-label>
-            <mat-select
-              [value]="d.teamId ?? none"
-              [disabled]="!canEdit()"
-              (valueChange)="save({ teamId: orNull($event) })"
-            >
-              <mat-option [value]="none">No team</mat-option>
-              @for (t of ctx.teams(); track t.id) {
-                <mat-option [value]="t.id" [disabled]="!ctx.canPickTeam(t.id)">{{
-                  t.name
-                }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
+            <app-icon name="more" [size]="17" [stroke]="3" />
+          </button>
+          <mat-menu #more="matMenu">
+            <button mat-menu-item type="button" (click)="remove()">
+              <app-icon name="trash" />&nbsp;Delete item
+            </button>
+          </mat-menu>
         }
-        <mat-form-field>
-          <mat-label>Start date</mat-label>
-          <input
-            matInput
-            type="date"
-            [value]="d.startDate ?? ''"
-            [disabled]="!canEdit()"
-            (change)="save({ startDate: $any($event.target).value || null })"
-          />
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>Due date</mat-label>
-          <input
-            matInput
-            type="date"
-            [value]="d.dueDate ?? ''"
-            [disabled]="!canEdit()"
-            (change)="save({ dueDate: $any($event.target).value || null })"
-          />
-        </mat-form-field>
+        <button type="button" class="k-icon-btn" aria-label="Close" (click)="close()">
+          <app-icon name="close" [size]="18" [stroke]="2.2" />
+        </button>
       </div>
 
-      <mat-form-field class="full">
-        <mat-label>Parent</mat-label>
-        <mat-select
-          [value]="d.parentId ?? none"
-          [disabled]="!canEdit() || d.type === epic"
-          (valueChange)="save({ parentId: orNull($event) })"
-        >
-          <mat-option [value]="none">No parent</mat-option>
-          @if (hiddenParent(); as p) {
-            <mat-option [value]="p.id" disabled>{{ p.key }} {{ p.title }}</mat-option>
-          }
-          @for (p of parentOptions(); track p.id) {
-            <mat-option [value]="p.id">{{ p.key }} {{ p.title }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field class="full">
-        <mat-label>Assignees</mat-label>
-        <mat-select
-          multiple
-          [value]="d.assigneeIds"
-          [disabled]="!canEdit()"
-          (valueChange)="save({ assigneeIds: $event })"
-        >
-          @for (m of assignable(); track m.userId) {
-            <mat-option [value]="m.userId" [disabled]="!canAssign(m.userId)">{{
-              m.displayName
-            }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field class="full">
-        <mat-label>Labels</mat-label>
-        <mat-select
-          multiple
-          [value]="d.labelIds"
-          [disabled]="!canEdit()"
-          (valueChange)="save({ labelIds: $event })"
-        >
-          @for (l of ctx.labels(); track l.id) {
-            <mat-option [value]="l.id">{{ l.name }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <section>
-        <h4>Description</h4>
-        @if (canEdit()) {
-          <app-description-editor [html]="d.description" (save)="save({ description: $event })" />
-        } @else if (d.description) {
-          <div [innerHTML]="d.description"></div>
-        } @else {
-          <p>No description.</p>
+      <div class="d-body">
+        @if (error()) {
+          <p class="k-alert" role="alert">{{ error() }}</p>
         }
-      </section>
 
-      <section>
-        <app-item-checklist
-          [projectId]="projectId()"
-          [itemId]="d.id"
-          [items]="d.checklistItems"
-          [canEdit]="canEdit()"
-          (changed)="reload()"
-        />
-      </section>
-
-      <section>
-        <h4>Blocked by</h4>
-        <ul class="refs">
-          @for (r of d.blockedBy; track r.id) {
-            <li>
-              <a href="" (click)="openItem($event, r.number)">{{ r.key }} {{ r.title }}</a>
+        <!-- Re-created after a refused change, so every control shows the stored value again. -->
+        @for (view of views(); track view.key) {
+          @let d = view.item;
+          <div class="d-head">
+            <div class="d-kind">
+              <app-type-icon [type]="d.type" [large]="true" />
+              <span class="k-key">{{ d.key }} · {{ typeLabels[d.type] }}</span>
+            </div>
+            <h1 class="d-title">
+              @if (editingTitle()) {
+                <input
+                  #titleInput
+                  class="title-input"
+                  aria-label="Title"
+                  [value]="d.title"
+                  [attr.maxlength]="titleMax"
+                  (keydown.enter)="saveTitle($any($event.target))"
+                  (keydown.escape)="cancelTitle($event)"
+                  (blur)="saveTitle($any($event.target))"
+                />
+              } @else if (canEdit()) {
+                <button
+                  type="button"
+                  class="title-btn"
+                  aria-label="Edit title"
+                  (click)="editTitle()"
+                >
+                  {{ d.title }}
+                </button>
+              } @else {
+                {{ d.title }}
+              }
+            </h1>
+            <div class="d-pills">
               @if (canEdit()) {
-                <button mat-button type="button" (click)="removeBlocker(r.id)">Remove</button>
+                <mat-select
+                  class="pill-select"
+                  aria-label="Status"
+                  panelWidth="200"
+                  [value]="d.status"
+                  (valueChange)="save({ status: $event })"
+                >
+                  <mat-select-trigger
+                    ><app-status-pill [status]="d.status" [large]="true"
+                  /></mat-select-trigger>
+                  @for (s of statuses; track s) {
+                    <mat-option [value]="s"><app-status-pill [status]="s" /></mat-option>
+                  }
+                </mat-select>
+              } @else {
+                <app-status-pill [status]="d.status" [large]="true" />
               }
-            </li>
-          } @empty {
-            <li>Nothing.</li>
-          }
-        </ul>
-        @if (canEdit()) {
-          <mat-form-field class="full">
-            <mat-label>Add a blocking item</mat-label>
-            <mat-select (valueChange)="addBlocker($event)">
-              @for (i of blockerOptions(); track i.id) {
-                <mat-option [value]="i.id">{{ i.key }} {{ i.title }}</mat-option>
+              @if (canMove()) {
+                <mat-select
+                  class="pill-select"
+                  aria-label="Bucket"
+                  panelWidth="220"
+                  [value]="d.bucketId ?? none"
+                  (valueChange)="moveTo($event)"
+                >
+                  <mat-select-trigger
+                    ><span class="bucket-pill"
+                      >{{ bucketName(d) }}<app-icon name="chevronDown" [size]="13" /></span
+                  ></mat-select-trigger>
+                  @if (!needsBucket()) {
+                    <mat-option [value]="none">Off the board</mat-option>
+                  }
+                  @for (b of ctx.buckets(); track b.id) {
+                    <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                  }
+                </mat-select>
+              } @else {
+                <span class="bucket-pill" aria-label="Bucket">{{ bucketName(d) }}</span>
               }
-            </mat-select>
-          </mat-form-field>
-        }
-        <h4>Blocks</h4>
-        <ul class="refs">
-          @for (r of d.blocks; track r.id) {
-            <li>
-              <a href="" (click)="openItem($event, r.number)">{{ r.key }} {{ r.title }}</a>
-            </li>
-          } @empty {
-            <li>Nothing.</li>
+            </div>
+          </div>
+
+          <dl class="fields">
+            <dt>Assignees</dt>
+            <dd>
+              @if (canEdit()) {
+                <mat-select
+                  class="k-inline"
+                  aria-label="Assignees"
+                  multiple
+                  panelWidth="260"
+                  [value]="d.assigneeIds"
+                  (selectionChange)="save({ assigneeIds: $event.value })"
+                  placeholder="Nobody"
+                >
+                  <mat-select-trigger>
+                    <span class="trigger">
+                      @for (p of assignees(); track p.id) {
+                        <span class="trigger"
+                          ><app-avatar-static [userId]="p.id" [name]="p.name" />{{ p.name }}</span
+                        >
+                      }
+                    </span>
+                  </mat-select-trigger>
+                  @for (m of assignable(); track m.userId) {
+                    <mat-option [value]="m.userId" [disabled]="!canAssign(m.userId)">{{
+                      m.displayName
+                    }}</mat-option>
+                  }
+                </mat-select>
+              } @else {
+                <div class="plain">
+                  @for (p of assignees(); track p.id) {
+                    <span class="trigger"
+                      ><app-avatar [userId]="p.id" [name]="p.name" [email]="p.email" />{{
+                        p.name
+                      }}</span
+                    >
+                  } @empty {
+                    <span class="muted">Nobody</span>
+                  }
+                </div>
+              }
+            </dd>
+
+            <dt>Labels</dt>
+            <dd>
+              @if (canEdit()) {
+                <mat-select
+                  class="k-inline"
+                  aria-label="Labels"
+                  multiple
+                  panelWidth="240"
+                  [value]="d.labelIds"
+                  (selectionChange)="save({ labelIds: $event.value })"
+                  placeholder="No labels"
+                >
+                  <mat-select-trigger>
+                    <span class="trigger">
+                      @for (l of itemLabels(); track l.id) {
+                        <app-label-pill
+                          [name]="l.name"
+                          [colour]="l.colour"
+                          [labelStyle]="labelStyle()"
+                          [large]="true"
+                        />
+                      }
+                    </span>
+                  </mat-select-trigger>
+                  @for (l of ctx.labels(); track l.id) {
+                    <mat-option [value]="l.id"
+                      ><app-label-pill
+                        [name]="l.name"
+                        [colour]="l.colour"
+                        [labelStyle]="labelStyle()"
+                    /></mat-option>
+                  }
+                </mat-select>
+              } @else {
+                <div class="plain">
+                  @for (l of itemLabels(); track l.id) {
+                    <app-label-pill
+                      [name]="l.name"
+                      [colour]="l.colour"
+                      [labelStyle]="labelStyle()"
+                      [large]="true"
+                    />
+                  } @empty {
+                    <span class="muted">No labels</span>
+                  }
+                </div>
+              }
+            </dd>
+
+            <dt>Sprint</dt>
+            <dd>
+              @if (canEdit()) {
+                <mat-select
+                  class="k-inline"
+                  aria-label="Sprint"
+                  panelWidth="260"
+                  [value]="d.sprintId ?? none"
+                  (valueChange)="save({ sprintId: orNull($event) })"
+                >
+                  <mat-option [value]="none">No sprint</mat-option>
+                  @for (s of ctx.sprints(); track s.id) {
+                    @if (s.state !== closed || s.id === d.sprintId) {
+                      <mat-option [value]="s.id" [disabled]="s.state === closed"
+                        >{{ s.name }} · {{ sprintStates[s.state] }}</mat-option
+                      >
+                    }
+                  }
+                </mat-select>
+              } @else {
+                <div class="plain">{{ sprintName(d) }}</div>
+              }
+            </dd>
+
+            <dt>Priority</dt>
+            <dd>
+              @if (canEdit()) {
+                <mat-select
+                  class="k-inline"
+                  aria-label="Priority"
+                  panelWidth="200"
+                  [value]="d.priority"
+                  (valueChange)="save({ priority: $event })"
+                >
+                  <mat-select-trigger
+                    ><span class="trigger"
+                      ><app-priority-icon [priority]="d.priority" />{{
+                        priorityLabels[d.priority]
+                      }}</span
+                    ></mat-select-trigger
+                  >
+                  @for (p of priorities; track p) {
+                    <mat-option [value]="p"
+                      ><span class="trigger"
+                        ><app-priority-icon [priority]="p" />{{ priorityLabels[p] }}</span
+                      ></mat-option
+                    >
+                  }
+                </mat-select>
+              } @else {
+                <div class="plain">
+                  <app-priority-icon [priority]="d.priority" />{{ priorityLabels[d.priority] }}
+                </div>
+              }
+            </dd>
+
+            <dt>Dates</dt>
+            <dd>
+              <div class="dates">
+                @if (canEdit()) {
+                  <input
+                    class="k-inline"
+                    type="date"
+                    aria-label="Start date"
+                    [value]="d.startDate ?? ''"
+                    (change)="save({ startDate: $any($event.target).value || null })"
+                  />
+                  <span class="muted" aria-hidden="true">→</span>
+                  <input
+                    class="k-inline"
+                    type="date"
+                    aria-label="Due date"
+                    [value]="d.dueDate ?? ''"
+                    (change)="save({ dueDate: $any($event.target).value || null })"
+                  />
+                } @else {
+                  <span class="plain">
+                    {{ d.startDate ? short(d.startDate) : 'No start' }} →
+                    {{ d.dueDate ? short(d.dueDate) : 'no due date' }}
+                  </span>
+                }
+                @if (due(); as due) {
+                  <span
+                    class="k-pill"
+                    [class.danger]="due.state === 'overdue'"
+                    [class.warn]="due.state === 'soon'"
+                    >{{ due.text }}</span
+                  >
+                }
+              </div>
+            </dd>
+
+            @if (ctx.teams().length > 0 || d.teamId) {
+              <dt>Team</dt>
+              <dd>
+                @if (canEdit()) {
+                  <mat-select
+                    class="k-inline"
+                    aria-label="Team"
+                    panelWidth="240"
+                    [value]="d.teamId ?? none"
+                    (valueChange)="save({ teamId: orNull($event) })"
+                  >
+                    <mat-option [value]="none">No team</mat-option>
+                    @for (t of ctx.teams(); track t.id) {
+                      <mat-option [value]="t.id" [disabled]="!ctx.canPickTeam(t.id)">{{
+                        t.name
+                      }}</mat-option>
+                    }
+                  </mat-select>
+                } @else {
+                  <div class="plain">{{ teamName(d) }}</div>
+                }
+              </dd>
+            }
+
+            <dt>Type</dt>
+            <dd>
+              @if (canEdit()) {
+                <mat-select
+                  class="k-inline"
+                  aria-label="Type"
+                  panelWidth="200"
+                  [value]="d.type"
+                  (valueChange)="save({ type: $event })"
+                >
+                  @for (t of types; track t) {
+                    <mat-option [value]="t">{{ typeLabels[t] }}</mat-option>
+                  }
+                </mat-select>
+              } @else {
+                <div class="plain">{{ typeLabels[d.type] }}</div>
+              }
+            </dd>
+
+            <dt>Parent</dt>
+            <dd>
+              @if (canEdit() && d.type !== epic) {
+                <mat-select
+                  class="k-inline"
+                  aria-label="Parent"
+                  panelWidth="320"
+                  [value]="d.parentId ?? none"
+                  (valueChange)="save({ parentId: orNull($event) })"
+                >
+                  <mat-option [value]="none">No parent</mat-option>
+                  @if (hiddenParent(); as p) {
+                    <mat-option [value]="p.id" disabled>{{ p.key }} {{ p.title }}</mat-option>
+                  }
+                  @for (p of parentOptions(); track p.id) {
+                    <mat-option [value]="p.id">{{ p.key }} {{ p.title }}</mat-option>
+                  }
+                </mat-select>
+              } @else {
+                <div class="plain">
+                  @if (d.ancestors.at(-1); as p) {
+                    {{ p.key }} {{ p.title }}
+                  } @else {
+                    <span class="muted">No parent</span>
+                  }
+                </div>
+              }
+            </dd>
+          </dl>
+
+          <section aria-labelledby="d-desc">
+            <h2 id="d-desc">Description</h2>
+            @if (canEdit()) {
+              <app-description-editor
+                [html]="d.description"
+                (save)="save({ description: $event })"
+              />
+            } @else if (d.description) {
+              <div class="description" [innerHTML]="d.description"></div>
+            } @else {
+              <p class="muted">No description.</p>
+            }
+          </section>
+
+          <section aria-label="Checklist">
+            <app-item-checklist
+              [projectId]="projectId()"
+              [itemId]="d.id"
+              [items]="d.checklistItems"
+              [canEdit]="canEdit()"
+              (changed)="reload()"
+            />
+          </section>
+
+          <section aria-labelledby="d-deps">
+            <h2 id="d-deps">Dependencies</h2>
+            <div class="refs">
+              @for (r of d.blockedBy; track r.id) {
+                <div class="ref-row blocked">
+                  <span class="k-pill warn" style="background: var(--k-surface)">Blocked by</span>
+                  <span class="k-key">{{ r.key }}</span>
+                  <a class="ref-title" href="" (click)="openItem($event, r.number)">{{
+                    r.title
+                  }}</a>
+                  @if (canEdit()) {
+                    <button
+                      type="button"
+                      class="k-icon-btn sm"
+                      [attr.aria-label]="'Remove blocker ' + r.key"
+                      (click)="removeBlocker(r.id)"
+                    >
+                      <app-icon name="close" />
+                    </button>
+                  }
+                </div>
+              }
+              @for (r of d.blocks; track r.id) {
+                <div class="ref-row">
+                  <span class="k-pill">Blocks</span>
+                  <span class="k-key">{{ r.key }}</span>
+                  <a class="ref-title" href="" (click)="openItem($event, r.number)">{{
+                    r.title
+                  }}</a>
+                </div>
+              }
+              @if (d.blockedBy.length === 0 && d.blocks.length === 0) {
+                <p class="muted">No dependencies.</p>
+              }
+            </div>
+            @if (canEdit()) {
+              <mat-select
+                class="k-inline add-ref"
+                aria-label="Add a blocking item"
+                placeholder="+ Add a blocking item"
+                panelWidth="360"
+                (valueChange)="addBlocker($event)"
+              >
+                @for (i of blockerOptions(); track i.id) {
+                  <mat-option [value]="i.id">{{ i.key }} {{ i.title }}</mat-option>
+                }
+              </mat-select>
+            }
+          </section>
+
+          <section aria-labelledby="d-children">
+            <h2 id="d-children">Children</h2>
+            <div class="refs">
+              @for (c of children(); track c.id) {
+                <div class="ref-row">
+                  <app-type-icon [type]="c.type" />
+                  <span class="k-key">{{ c.key }}</span>
+                  <a class="ref-title" href="" (click)="openItem($event, c.number)">{{
+                    c.title
+                  }}</a>
+                  <app-status-pill [status]="c.status" />
+                </div>
+              } @empty {
+                <p class="muted">No children.</p>
+              }
+            </div>
+            @if (childCursor()) {
+              <button type="button" class="k-action" (click)="moreChildren()">
+                Show more children
+              </button>
+            }
+          </section>
+
+          <section aria-label="Activity">
+            <app-item-activity [projectId]="projectId()" [itemId]="d.id" [version]="version()" />
+          </section>
+        } @empty {
+          @if (!error()) {
+            <app-skeleton label="Loading the item" [rows]="6" />
           }
-        </ul>
-      </section>
-
-      <section>
-        <h4>Children</h4>
-        <ul class="refs">
-          @for (c of children(); track c.id) {
-            <li>
-              <a href="" (click)="openItem($event, c.number)">{{ c.key }} {{ c.title }}</a>
-              · {{ statusLabels[c.status] }}
-            </li>
-          } @empty {
-            <li>None.</li>
-          }
-        </ul>
-        @if (childCursor()) {
-          <button mat-button type="button" (click)="moreChildren()">Show more children</button>
         }
-      </section>
-
-      <section>
-        <app-item-activity [projectId]="projectId()" [itemId]="d.id" [version]="version()" />
-      </section>
-
-      @if (canDelete()) {
-        <section>
-          <button mat-stroked-button type="button" (click)="remove()">Delete item</button>
-        </section>
-      }
-    } @empty {
-      @if (!error()) {
-        <p>Loading…</p>
-      }
-    }
+      </div>
+    </div>
   `,
 })
 export class ItemDrawer {
@@ -396,6 +604,9 @@ export class ItemDrawer {
   private readonly api = inject(ItemsApiService);
   private readonly router = inject(Router);
   private readonly session = inject(SessionStore);
+  private readonly toast = inject(ToastService);
+  private readonly dialogs = inject(Dialogs);
+  private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
 
   /** Item number from the route (`items/:number`). */
   readonly number = input.required<string>();
@@ -417,14 +628,14 @@ export class ItemDrawer {
   );
   /** Type names. */
   protected readonly typeLabels = TYPE_LABELS;
-  /** Type badges. */
-  protected readonly badges = TYPE_BADGES;
-  /** Status names. */
-  protected readonly statusLabels = STATUS_LABELS;
   /** Priority names. */
   protected readonly priorityLabels = PRIORITY_LABELS;
+  /** Sprint state names. */
+  protected readonly sprintStates = SPRINT_STATE_LABELS;
   /** Longest title accepted. */
   protected readonly titleMax = ITEM_TITLE_MAX;
+  /** Today, for the due pill. */
+  private readonly today = isoDate(new Date());
 
   /** The item, or null while loading or after an error. */
   protected readonly detail = signal<WorkItemDetailDto | null>(null);
@@ -434,12 +645,15 @@ export class ItemDrawer {
   protected readonly childCursor = signal<string | null>(null);
   /** Bumped after each change so the activity history reloads. */
   protected readonly version = signal(0);
-  /** Last error, if any. */
+  /** Last load error, if any. */
   protected readonly error = signal('');
+  /** True while the title is being edited. */
+  protected readonly editingTitle = signal(false);
   /** Counts item loads, so answers for an item no longer open are dropped. */
   private loadRun = 0;
   /** Bumped when a change is refused, to rebuild the controls. */
   private readonly resets = signal(0);
+  private readonly titleInput = viewChild<ElementRef<HTMLInputElement>>('titleInput');
 
   /** The item as a one-element list keyed by {@link resets}, for the template. */
   protected readonly views = computed(() => {
@@ -449,18 +663,22 @@ export class ItemDrawer {
 
   /** Project id. */
   protected readonly projectId = computed(() => this.ctx.project()?.id ?? '');
+  /** The project's label style. */
+  protected readonly labelStyle = computed(
+    () => this.ctx.project()?.settings.labelStyle ?? LabelStyle.SOLID,
+  );
 
-  /** Field, checklist and dependency controls are enabled. */
+  /** Fields, checklist and dependencies are editable. */
   protected readonly canEdit = computed(() => {
     const d = this.detail();
     return d !== null && this.ctx.canEdit(d);
   });
-  /** The bucket control is enabled. */
+  /** The bucket is editable. */
   protected readonly canMove = computed(() => {
     const d = this.detail();
     return d !== null && this.ctx.canMove(d);
   });
-  /** The delete button is shown. */
+  /** Deleting is offered. */
   protected readonly canDelete = computed(() => {
     const d = this.detail();
     // With children, only a cascade can succeed (SPEC §4.1).
@@ -472,6 +690,30 @@ export class ItemDrawer {
   protected readonly needsBucket = computed(() => {
     const d = this.detail();
     return d !== null && requiresBucket(d.type);
+  });
+
+  /** Assignees with names and emails. */
+  protected readonly assignees = computed(() => {
+    const byId = this.ctx.membersById();
+    return (this.detail()?.assigneeIds ?? []).map((id) => {
+      const m = byId.get(id);
+      return { id, name: m?.displayName ?? 'Former member', email: m?.email ?? '' };
+    });
+  });
+
+  /** The item's labels that still exist. */
+  protected readonly itemLabels = computed(() => {
+    const byId = this.ctx.labelsById();
+    return (this.detail()?.labelIds ?? []).map((id) => byId.get(id)).filter((l) => l !== undefined);
+  });
+
+  /** The due pill's text and urgency, or null. */
+  protected readonly due = computed(() => {
+    const d = this.detail();
+    const state = d === null ? null : dueState(d, this.today);
+    return d === null || state === null || state === 'later'
+      ? null
+      : { state, text: dueText(d, this.today) };
   });
 
   /** Visible items that may be this item's parent (SPEC §4.1), minus its own subtree. */
@@ -512,7 +754,8 @@ export class ItemDrawer {
   });
 
   /**
-   * Loads the item whenever the number in the URL (or the project) changes.
+   * Loads the item whenever the number in the URL (or the project) changes,
+   * and moves focus into the drawer when it opens.
    */
   constructor() {
     effect(() => {
@@ -521,6 +764,7 @@ export class ItemDrawer {
       if (projectId === '') return;
       untracked(() => void this.load(projectId, number));
     });
+    afterNextRender(() => this.panel().nativeElement.focus());
   }
 
   /**
@@ -556,25 +800,82 @@ export class ItemDrawer {
   }
 
   /**
-   * Saves a new title; an emptied title is put back.
+   * A short date for read-only values.
+   *
+   * @param date `YYYY-MM-DD`.
+   * @returns E.g. "Fri 17 Oct".
+   */
+  protected short(date: string): string {
+    return shortDate(date);
+  }
+
+  /**
+   * The item's bucket name.
+   *
+   * @param d The item.
+   * @returns The name, or "Off the board".
+   */
+  protected bucketName(d: WorkItemDto): string {
+    return d.bucketId === null
+      ? 'Off the board'
+      : (this.ctx.bucketsById().get(d.bucketId)?.name ?? 'Unknown bucket');
+  }
+
+  /**
+   * The item's sprint name with its dates and state.
+   *
+   * @param d The item.
+   * @returns The text.
+   */
+  protected sprintName(d: WorkItemDto): string {
+    const s = d.sprintId === null ? undefined : this.ctx.sprintsById().get(d.sprintId);
+    return s === undefined ? 'No sprint' : `${s.name} · ${SPRINT_STATE_LABELS[s.state]}`;
+  }
+
+  /**
+   * The item's team name.
+   *
+   * @param d The item.
+   * @returns The name, or "No team".
+   */
+  protected teamName(d: WorkItemDto): string {
+    return this.ctx.teams().find((t) => t.id === d.teamId)?.name ?? 'No team';
+  }
+
+  /** Starts editing the title and focuses the field. */
+  protected editTitle(): void {
+    this.editingTitle.set(true);
+    setTimeout(() => this.titleInput()?.nativeElement.select());
+  }
+
+  /**
+   * Esc in the title field puts the old title back without closing the drawer.
+   *
+   * @param event The key event.
+   */
+  protected cancelTitle(event: Event): void {
+    event.stopPropagation();
+    this.editingTitle.set(false);
+  }
+
+  /**
+   * Saves a new title; an emptied or unchanged title is left as it was.
    *
    * @param input The title field.
    * @returns Resolves once saved.
    */
   protected async saveTitle(input: HTMLInputElement): Promise<void> {
+    if (!this.editingTitle()) return;
+    this.editingTitle.set(false);
     const title = input.value.trim();
     const d = this.detail();
-    if (d === null) return;
-    if (title === '' || title === d.title) {
-      input.value = d.title;
-      return;
-    }
+    if (d === null || title === '' || title === d.title) return;
     await this.save({ title });
   }
 
   /**
-   * Saves field changes and shows the item the API returns, whose bucket
-   * may have moved through the project's `statusToBucket` map.
+   * Saves field changes, shows the item the API returns (whose bucket may
+   * have moved through the project's `statusToBucket` map) and offers Undo.
    *
    * @param change Fields to change.
    * @returns Resolves once saved.
@@ -582,7 +883,11 @@ export class ItemDrawer {
   protected async save(change: UpdateItemRequest): Promise<void> {
     const d = this.detail();
     if (d === null) return;
-    await this.apply(() => this.api.update(this.projectId(), d.id, change));
+    const names = Object.keys(change).map((k) => FIELD_NAMES[k] ?? k);
+    await this.apply(
+      () => this.api.update(this.projectId(), d.id, change),
+      `${names.join(', ')} saved`,
+    );
   }
 
   /**
@@ -595,7 +900,15 @@ export class ItemDrawer {
   protected async moveTo(value: string): Promise<void> {
     const d = this.detail();
     if (d === null) return;
-    await this.apply(() => this.api.move(this.projectId(), d.id, { bucketId: this.orNull(value) }));
+    const bucketId = this.orNull(value);
+    const name =
+      bucketId === null
+        ? 'off the board'
+        : `to ${this.ctx.bucketsById().get(bucketId)?.name ?? 'another bucket'}`;
+    await this.apply(
+      () => this.api.move(this.projectId(), d.id, { bucketId }),
+      `${d.key} moved ${name}`,
+    );
   }
 
   /**
@@ -634,6 +947,20 @@ export class ItemDrawer {
   }
 
   /**
+   * Copies the item's link to the clipboard.
+   *
+   * @returns Resolves once copied.
+   */
+  protected async copyLink(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      this.toast.show('Link copied');
+    } catch {
+      this.toast.error('The link could not be copied; copy it from the address bar.');
+    }
+  }
+
+  /**
    * Deletes the item after confirmation; items with children are deleted
    * with their subtree when the caller may cascade (PM, Lead).
    *
@@ -643,11 +970,15 @@ export class ItemDrawer {
     const d = this.detail();
     if (d === null) return;
     const cascade = d.childCount > 0 && d.can.deleteCascade;
-    const question = cascade
-      ? `Delete ${d.key} and everything under it?`
-      : `Delete ${d.key}? This cannot be undone.`;
-    if (!confirm(question)) return;
-    this.error.set('');
+    const confirmed = await this.dialogs.confirm({
+      title: cascade ? `Delete ${d.key} and everything under it?` : `Delete ${d.key}?`,
+      message: cascade
+        ? `"${d.title}" and everything under it are deleted. This cannot be undone.`
+        : `"${d.title}" is deleted. This cannot be undone.`,
+      confirm: 'Delete',
+      danger: true,
+    });
+    if (!confirmed) return;
     try {
       await this.api.remove(this.projectId(), d.id, cascade);
       const gone = this.ctx
@@ -655,9 +986,10 @@ export class ItemDrawer {
         .filter((i) => i.id === d.id || i.ancestors.some((a) => a.id === d.id))
         .map((i) => i.id);
       this.ctx.forget(gone);
+      this.toast.show(`${d.key} deleted`);
       this.close();
     } catch (error) {
-      this.error.set(errorMessage(error));
+      this.toast.error(error);
     }
   }
 
@@ -670,11 +1002,13 @@ export class ItemDrawer {
     const d = this.detail();
     const cursor = this.childCursor();
     if (d === null || cursor === null) return;
-    await this.guard(async () => {
+    try {
       const page = await this.api.children(this.projectId(), d.id, cursor);
       this.children.update((c) => [...c, ...page.items]);
       this.childCursor.set(page.nextCursor);
-    });
+    } catch (error) {
+      this.toast.error(error);
+    }
   }
 
   /**
@@ -686,6 +1020,18 @@ export class ItemDrawer {
   protected openItem(event: Event, number: number): void {
     event.preventDefault();
     void this.router.navigateByUrl(this.router.url.replace(/\/items\/[^/?#]+/, `/items/${number}`));
+  }
+
+  /**
+   * Esc closes the drawer, except when it comes from an open select panel or
+   * hover card (`aria-expanded="true"`), which closes itself instead.
+   *
+   * @param event The key event.
+   */
+  protected onEscape(event: Event): void {
+    const target = event.target as HTMLElement | null;
+    if (event.defaultPrevented || target?.closest('[aria-expanded="true"]')) return;
+    this.close();
   }
 
   /**
@@ -706,7 +1052,9 @@ export class ItemDrawer {
     const run = ++this.loadRun;
     this.detail.set(null);
     this.children.set([]);
-    await this.guard(async () => {
+    this.error.set('');
+    this.editingTitle.set(false);
+    try {
       const [detail, children] = await Promise.all([
         this.api.get(projectId, number),
         this.api.children(projectId, number),
@@ -716,44 +1064,63 @@ export class ItemDrawer {
       this.detail.set(detail);
       this.children.set(children.items);
       this.childCursor.set(children.nextCursor);
-    });
+    } catch (error) {
+      if (run === this.loadRun) this.error.set(errorMessage(error));
+    }
   }
 
   /**
-   * Runs a change, then shows and shares the item the API returned.
+   * Runs a change, then shows and shares the item the API returned. With a
+   * message, a toast confirms the change and offers Undo.
    *
    * @param change The request.
+   * @param message Toast text, if the change should be undoable.
    * @returns Resolves once done.
    */
-  private async apply(change: () => Promise<WorkItemDetailDto>): Promise<void> {
+  private async apply(change: () => Promise<WorkItemDetailDto>, message?: string): Promise<void> {
     const run = this.loadRun;
-    const ok = await this.guard(async () => {
+    const before = this.detail();
+    try {
       const updated = await change();
       this.ctx.upsert(updated);
       // Another item was opened meanwhile: keep showing that one.
       if (run !== this.loadRun) return;
       this.detail.set(updated);
       this.version.update((v) => v + 1);
-    });
-    // A refused change leaves the controls showing the rejected value; build
-    // them again from the stored item.
-    if (!ok) this.resets.update((n) => n + 1);
+      if (message !== undefined && before !== null) {
+        this.toast.show(message, () => this.undo(run, before, updated));
+      }
+    } catch (error) {
+      this.toast.error(error);
+      // A refused change leaves the controls showing the rejected value;
+      // build them again from the stored item.
+      this.resets.update((n) => n + 1);
+    }
   }
 
   /**
-   * Runs an action, showing any error instead of throwing.
+   * Reverses a change: moves the card back if its bucket changed, then puts
+   * back every field that differs.
    *
-   * @param action The work to do.
-   * @returns True if it succeeded.
+   * @param run The load the change belonged to.
+   * @param before The item before the change.
+   * @param after The item after the change.
+   * @returns Resolves once reverted.
    */
-  private async guard(action: () => Promise<void>): Promise<boolean> {
-    this.error.set('');
-    try {
-      await action();
-      return true;
-    } catch (error) {
-      this.error.set(errorMessage(error));
-      return false;
+  private async undo(
+    run: number,
+    before: WorkItemDetailDto,
+    after: WorkItemDetailDto,
+  ): Promise<void> {
+    let current = after;
+    const move: MoveItemRequest | null = revertMove(before, after, undefined);
+    if (move !== null) current = await this.api.move(this.projectId(), before.id, move);
+    const fields = undoFields(before, after, current);
+    if (fields !== null) current = await this.api.update(this.projectId(), before.id, fields);
+    this.ctx.upsert(current);
+    if (run === this.loadRun) {
+      this.detail.set(current);
+      this.version.update((v) => v + 1);
     }
   }
 }

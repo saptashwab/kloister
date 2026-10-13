@@ -75,8 +75,8 @@ describe('BacklogPage', () => {
     const { root } = await render([feature]);
     const rows = [...root.querySelectorAll('tbody tr')];
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.textContent).toContain('KLO-1 Secret');
-    expect(rows[1]?.textContent).toContain('KLO-2 Login');
+    expect(rows[0]?.textContent).toMatch(/KLO-1\s*Secret/);
+    expect(rows[1]?.textContent).toMatch(/KLO-2\s*Login/);
     expect(rows[0]?.querySelector('mat-checkbox')).toBeNull();
     expect(rows[0]?.querySelector('a')).toBeNull();
     expect(rows[1]?.querySelector('mat-checkbox')).not.toBeNull();

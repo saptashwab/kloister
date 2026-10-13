@@ -19,7 +19,10 @@ import {
 } from '../../core/board-logic';
 import { type BulkField, planBulk, runBulk } from '../../core/bulk';
 import { ItemsApiService } from '../../core/items-api.service';
-import { STATUS_LABELS, TYPE_BADGES, TYPE_LABELS } from '../../core/labels';
+import { TYPE_LABELS } from '../../core/labels';
+import { EmptyState, Skeleton } from '../../ui/feedback';
+import { Icon } from '../../ui/icon';
+import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ProjectContext } from '../../core/project-context';
 import { SessionStore } from '../../core/session.store';
 
@@ -43,36 +46,86 @@ import { SessionStore } from '../../core/session.store';
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    EmptyState,
+    Icon,
+    Skeleton,
+    StatusPill,
+    TypeIcon,
   ],
   styles: `
-    .filters {
-      margin-top: 12px;
+    :host {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px var(--k-gutter) 32px;
     }
     .filters mat-form-field {
       width: 170px;
     }
     .bulk {
-      padding: 8px;
-      border-radius: 8px;
-      background: var(--mat-sys-surface-container);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      padding: 8px 14px;
+      border: 1px solid var(--k-primary-line);
+      border-radius: var(--k-radius-md);
+      background: var(--k-primary-soft);
+      color: var(--k-primary-ink);
+    }
+    .bulk mat-form-field {
+      width: 170px;
+    }
+    .tree {
+      border: 1px solid var(--k-border);
+      border-radius: var(--k-radius-lg);
+      background: var(--k-surface);
     }
     table.data td {
-      padding: 2px 8px;
-      vertical-align: middle;
+      padding: 4px 10px;
+    }
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+    }
+    .item a {
+      color: var(--k-text);
+      text-decoration: none;
+    }
+    .item a:hover {
+      text-decoration: underline;
     }
     .toggle {
-      width: 28px;
-      min-width: 28px;
+      display: inline-grid;
+      place-items: center;
+      width: 24px;
+      height: 24px;
       padding: 0;
+      border: 0;
+      border-radius: var(--k-radius-sm);
+      background: transparent;
+      color: var(--k-muted);
+      cursor: pointer;
+    }
+    .toggle:hover {
+      background: var(--k-sunken);
+    }
+    .toggle.open app-icon {
+      transform: rotate(90deg);
+    }
+    .spacer-24 {
+      display: inline-block;
+      width: 24px;
     }
     .ghost {
-      color: var(--mat-sys-on-surface-variant);
+      color: var(--k-muted);
       font-style: italic;
     }
   `,
   template: `
     @if (error()) {
-      <p class="error" role="alert">{{ error() }}</p>
+      <p class="k-alert" role="alert">{{ error() }}</p>
     }
 
     <div class="row filters">
@@ -172,76 +225,91 @@ import { SessionStore } from '../../core/session.store';
     }
 
     @if (!ctx.loaded()) {
-      <p>Loading…</p>
+      <app-skeleton label="Loading the backlog" [rows]="8" />
+    } @else if (ctx.items().length === 0) {
+      <app-empty-state
+        title="The backlog is empty"
+        text="Items created on the board or with “New item” appear here as a tree of Epics, Features, Stories and Tasks."
+      />
     } @else {
-      <table class="data">
-        <thead>
-          <tr>
-            <th scope="col">
-              <mat-checkbox
-                aria-label="Select all shown"
-                [checked]="allShownSelected()"
-                (change)="selectAllShown($event.checked)"
-              />
-            </th>
-            <th scope="col">Item</th>
-            <th scope="col">Status</th>
-            <th scope="col">Sprint</th>
-            <th scope="col">Bucket</th>
-            <th scope="col">Assignees</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of rows(); track row.node.id) {
-            @let item = row.node.item;
+      <div class="tree k-table-scroll">
+        <table class="data">
+          <thead>
             <tr>
-              <td>
-                @if (item) {
-                  <mat-checkbox
-                    [aria-label]="'Select ' + item.key"
-                    [checked]="selected().has(item.id)"
-                    (change)="toggle(item.id, $event.checked)"
-                  />
-                }
-              </td>
-              <td [style.padding-left.px]="8 + row.depth * 24">
-                @if (row.node.children.length > 0) {
-                  <button
-                    mat-button
-                    class="toggle"
-                    type="button"
-                    [attr.aria-expanded]="!collapsed().has(row.node.id)"
-                    [attr.aria-label]="
-                      (collapsed().has(row.node.id) ? 'Expand ' : 'Collapse ') + row.node.ref.key
-                    "
-                    (click)="toggleCollapsed(row.node.id)"
-                  >
-                    {{ collapsed().has(row.node.id) ? '▸' : '▾' }}
-                  </button>
-                }
-                <span class="badge" [attr.data-type]="row.node.ref.type">{{
-                  badges[row.node.ref.type]
-                }}</span>
-                @if (item) {
-                  <a href="" (click)="open($event, item)">{{ item.key }} {{ item.title }}</a>
-                } @else {
-                  <span class="ghost" title="Outside your view: shown as a title only"
-                    >{{ row.node.ref.key }} {{ row.node.ref.title }}</span
-                  >
-                }
-              </td>
-              <td>{{ item ? statusLabels[item.status] : '' }}</td>
-              <td>{{ item ? sprintName(item) : '' }}</td>
-              <td>{{ item ? bucketName(item) : '' }}</td>
-              <td>{{ item ? assigneeNames(item) : '' }}</td>
+              <th scope="col">
+                <mat-checkbox
+                  aria-label="Select all shown"
+                  [checked]="allShownSelected()"
+                  (change)="selectAllShown($event.checked)"
+                />
+              </th>
+              <th scope="col">Item</th>
+              <th scope="col">Status</th>
+              <th scope="col">Sprint</th>
+              <th scope="col">Bucket</th>
+              <th scope="col">Assignees</th>
             </tr>
-          } @empty {
-            <tr>
-              <td colspan="6">No items.</td>
-            </tr>
-          }
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            @for (row of rows(); track row.node.id) {
+              @let item = row.node.item;
+              <tr>
+                <td>
+                  @if (item) {
+                    <mat-checkbox
+                      [aria-label]="'Select ' + item.key"
+                      [checked]="selected().has(item.id)"
+                      (change)="toggle(item.id, $event.checked)"
+                    />
+                  }
+                </td>
+                <td [style.padding-left.px]="10 + row.depth * 24">
+                  <span class="item">
+                    @if (row.node.children.length > 0) {
+                      <button
+                        class="toggle"
+                        type="button"
+                        [class.open]="!collapsed().has(row.node.id)"
+                        [attr.aria-expanded]="!collapsed().has(row.node.id)"
+                        [attr.aria-label]="
+                          (collapsed().has(row.node.id) ? 'Expand ' : 'Collapse ') +
+                          row.node.ref.key
+                        "
+                        (click)="toggleCollapsed(row.node.id)"
+                      >
+                        <app-icon name="chevronRight" [size]="14" [stroke]="2.4" />
+                      </button>
+                    } @else {
+                      <span class="spacer-24"></span>
+                    }
+                    <app-type-icon [type]="row.node.ref.type" />
+                    <span class="k-key">{{ row.node.ref.key }}</span>
+                    @if (item) {
+                      <a href="" (click)="open($event, item)">{{ item.title }}</a>
+                    } @else {
+                      <span class="ghost" title="Outside your view: shown as a title only">{{
+                        row.node.ref.title
+                      }}</span>
+                    }
+                  </span>
+                </td>
+                <td>
+                  @if (item) {
+                    <app-status-pill [status]="item.status" />
+                  }
+                </td>
+                <td>{{ item ? sprintName(item) : '' }}</td>
+                <td>{{ item ? bucketName(item) : '' }}</td>
+                <td>{{ item ? assigneeNames(item) : '' }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="6" class="muted">No items match the filters.</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     }
 
     <router-outlet />
@@ -263,10 +331,6 @@ export class BacklogPage implements OnInit {
   protected readonly types = Object.values(ItemType);
   /** Type names. */
   protected readonly typeLabels = TYPE_LABELS;
-  /** Type badges. */
-  protected readonly badges = TYPE_BADGES;
-  /** Status names. */
-  protected readonly statusLabels = STATUS_LABELS;
   private readonly today = isoDate(new Date());
 
   /** Current filters (the board's, minus label and due). */

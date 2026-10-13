@@ -9,6 +9,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { SystemRole, type UpdateUserRequest, type UserDto } from '@kloister/shared';
 import { AdminApiService } from '../../core/admin-api.service';
 import { errorMessage } from '../../core/api';
+import { Dialogs } from '../../ui/dialogs';
 import { required, email } from '../../core/validators';
 import { SessionStore } from '../../core/session.store';
 
@@ -27,6 +28,7 @@ interface IssuedPassword {
  */
 @Component({
   selector: 'app-admin-users',
+  host: { class: 'k-page' },
   imports: [
     DatePipe,
     ReactiveFormsModule,
@@ -37,7 +39,7 @@ interface IssuedPassword {
     MatSelectModule,
   ],
   template: `
-    <h2>Users</h2>
+    <header class="k-page-head"><h1>Users</h1></header>
 
     @if (issued(); as issued) {
       <mat-card class="notice" role="status">
@@ -143,6 +145,7 @@ interface IssuedPassword {
 })
 export class AdminUsersPage implements OnInit {
   private readonly api = inject(AdminApiService);
+  private readonly dialogs = inject(Dialogs);
   /** Used to hide self-service-only actions. */
   protected readonly store = inject(SessionStore);
 
@@ -242,7 +245,14 @@ export class AdminUsersPage implements OnInit {
    * @returns Resolves once done.
    */
   protected async resetPassword(user: UserDto): Promise<void> {
-    if (!confirm(`Reset the password for ${user.email}? They will be signed out everywhere.`)) {
+    const confirmed = await this.dialogs.confirm({
+      title: `Reset the password for ${user.email}?`,
+      message:
+        'They are signed out everywhere and must choose a new password at their next sign-in.',
+      confirm: 'Reset password',
+      danger: true,
+    });
+    if (!confirmed) {
       return;
     }
     await this.run(async () => {

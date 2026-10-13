@@ -20,7 +20,8 @@ export const PROJECT_KEY = 'KLO';
 /**
  * Item numbers of the seeded project, in creation order: an Epic, a Feature
  * and a Story under it, two Tasks under the Story (the first assigned to the
- * Member), and an overdue Bug without a parent.
+ * Member and labelled frontend, the second to the PM and labelled backend),
+ * and an overdue Bug without a parent, labelled backend and customer.
  */
 export const ITEMS = { epic: 1, feature: 2, story: 3, taskA: 4, taskB: 5, bug: 6 } as const;
 
@@ -36,7 +37,8 @@ export async function signIn(page: Page, email: string): Promise<void> {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(E2E_PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByRole('link', { name: PROJECT_KEY })).toBeVisible();
+  // The project list's key link (the sidebar link also names the project).
+  await expect(page.getByRole('link', { name: PROJECT_KEY, exact: true })).toBeVisible();
 }
 
 /**

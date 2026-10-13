@@ -1,0 +1,177 @@
+/*
+ * Design tokens (docs/DESIGN.md §2). Every colour, size and shadow the app
+ * uses is a `--k-*` custom property defined here; components refer to the
+ * tokens only. Admin and user theming (M6) overrides these properties, and
+ * Angular Material is mapped onto them in _material.scss, so changing the
+ * look means changing values here.
+ */
+
+/// Dark-mode colour values, shared by the system-preference rule and the
+/// explicit `data-theme="dark"` switch.
+@mixin dark-colours {
+  --k-ground: #0e1117;
+  --k-sidebar: #0b0e13;
+  --k-surface: #161b24;
+  --k-sunken: #121720;
+  --k-border: #252c38;
+  --k-border-strong: #3a4456;
+  --k-control-border: #6b7588;
+  --k-text: #e6e9ef;
+  --k-text-2: #c3cad6;
+  --k-muted: #9aa4b5;
+  --k-primary: #8b93ff;
+  --k-on-primary: #0e1117;
+  --k-primary-soft: #1d2040;
+  --k-primary-line: #4b52a8;
+  --k-primary-ink: #c7cbff;
+  --k-warn-soft: #3a2410;
+  --k-warn-ink: #fdba74;
+  --k-danger-soft: #3a1517;
+  --k-danger-ink: #fca5a5;
+  --k-danger: #f87171;
+  --k-on-danger: #0e1117;
+  --k-success-soft: #13291c;
+  --k-success-ink: #86efac;
+  --k-success: #4ade80;
+  --k-progress-soft: #17243f;
+  --k-progress-ink: #93c5fd;
+  --k-idle-soft: #252c38;
+  --k-idle-ink: #c3cad6;
+  --k-toast: #2a3140;
+  --k-scrim: rgba(5, 7, 10, 0.55);
+  --k-rest: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --k-float: 0 12px 28px rgba(0, 0, 0, 0.5);
+  --k-lift: 0 18px 36px rgba(0, 0, 0, 0.55);
+  --k-drawer-shadow: -24px 0 48px rgba(0, 0, 0, 0.45);
+
+  /* Item types (DESIGN §3.1): icon colour and tile. */
+  --k-type-epic: #a78bfa;
+  --k-type-epic-soft: #2a1f45;
+  --k-type-feature: #60a5fa;
+  --k-type-feature-soft: #17243f;
+  --k-type-story: #4ade80;
+  --k-type-story-soft: #13291c;
+  --k-type-task: #22d3ee;
+  --k-type-task-soft: #10262d;
+  --k-type-bug: #f87171;
+  --k-type-bug-soft: #341618;
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Colour, light mode (DESIGN §2.1). */
+  --k-ground: #f6f7f9;
+  --k-sidebar: #fbfbfc;
+  --k-surface: #ffffff;
+  --k-sunken: #edeff3;
+  --k-border: #e3e6ec;
+  --k-border-strong: #cbd2dc;
+  --k-control-border: #7e889a;
+  --k-text: #111827;
+  --k-text-2: #3f4756;
+  --k-muted: #5b6474;
+  --k-primary: #4f46e5;
+  --k-on-primary: #ffffff;
+  --k-primary-soft: #eef0ff;
+  --k-primary-line: #a5b4fc;
+  --k-primary-ink: #3730a3;
+  --k-accent: var(--k-primary);
+  --k-warn-soft: #fff1e6;
+  --k-warn-ink: #a14a08;
+  --k-danger-soft: #fdecec;
+  --k-danger-ink: #b91c1c;
+  --k-danger: #dc2626;
+  --k-on-danger: #ffffff;
+  --k-success-soft: #e6f6ec;
+  --k-success-ink: #166d3b;
+  --k-success: #16a34a;
+  --k-progress-soft: #e6eeff;
+  --k-progress-ink: #1d4ed8;
+  --k-idle-soft: #eef0f4;
+  --k-idle-ink: #3f4756;
+  --k-toast: #1f2430;
+  --k-toast-text: #f3f4f6;
+  --k-toast-action: #a5b4fc;
+  --k-scrim: rgba(17, 24, 39, 0.32);
+
+  /* Item types (DESIGN §3.1). */
+  --k-type-epic: #7c3aed;
+  --k-type-epic-soft: #f3eeff;
+  --k-type-feature: #2563eb;
+  --k-type-feature-soft: #eaf1ff;
+  --k-type-story: #15803d;
+  --k-type-story-soft: #e8f7ee;
+  --k-type-task: #0e7490;
+  --k-type-task-soft: #e7f6fa;
+  --k-type-bug: #dc2626;
+  --k-type-bug-soft: #fdecec;
+
+  /* Priority bars (DESIGN §3.3); the same in both modes. */
+  --k-priority-1: #dc2626;
+  --k-priority-2: #ea580c;
+  --k-priority-3: #2563eb;
+  --k-priority-4: #6b7280;
+
+  /* Type (DESIGN §2.2). The UI font is an admin setting from M6. */
+  --k-font: Figtree, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --k-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  --k-display: 1.75rem;
+  --k-h1: 1.375rem;
+  --k-title: 1.25rem;
+  --k-body: 0.875rem;
+  --k-body-sm: 0.8125rem;
+  --k-small: 0.75rem;
+  --k-mono: 0.75rem;
+
+  /* Spacing on a 4 px grid (DESIGN §2.3). */
+  --k-space-1: 4px;
+  --k-space-2: 8px;
+  --k-space-3: 12px;
+  --k-space-4: 16px;
+  --k-space-6: 24px;
+  --k-space-8: 32px;
+  --k-gutter: 24px;
+
+  /* Radii (DESIGN §2.4). */
+  --k-radius-sm: 6px;
+  --k-radius-control: 8px;
+  --k-radius-md: 10px;
+  --k-radius-popover: 12px;
+  --k-radius-lg: 14px;
+  --k-radius-full: 999px;
+
+  /* Elevation (DESIGN §2.5). */
+  --k-rest: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.08);
+  --k-float: 0 8px 24px rgba(16, 24, 40, 0.12);
+  --k-lift: 0 18px 36px rgba(16, 24, 40, 0.22);
+  --k-drawer-shadow: -24px 0 48px rgba(16, 24, 40, 0.18);
+
+  /* Motion (DESIGN §13); reduced-motion sets it to 0s. */
+  --k-motion: 160ms;
+
+  /* Layout. */
+  --k-sidebar-width: 232px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-colours;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-colours;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --k-motion: 0s;
+  }
+}
+
+@media (max-width: 599px) {
+  :root {
+    --k-gutter: 16px;
+  }
+}

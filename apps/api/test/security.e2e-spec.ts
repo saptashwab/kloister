@@ -36,6 +36,7 @@ describe('API security without a session (e2e)', () => {
     ['POST', `/api/v1/admin/users/${SOME_ID}/reset-password`],
     ['GET', '/api/v1/admin/audit'],
     ['GET', '/api/v1/projects'],
+    ['GET', `/api/v1/users/${SOME_ID}/work`],
     ['POST', '/api/v1/projects'],
     ['GET', `/api/v1/projects/${SOME_ID}`],
     ['GET', '/api/v1/projects/KLO'],

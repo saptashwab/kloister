@@ -269,6 +269,16 @@ export class ProjectsService {
               to: statusToBucket,
             };
           }
+          if (
+            settingsChange.labelStyle !== undefined &&
+            settingsChange.labelStyle !== settings.labelStyle
+          ) {
+            changedSettings.labelStyle = settingsChange.labelStyle;
+            changes['settings.labelStyle'] = {
+              from: settings.labelStyle,
+              to: settingsChange.labelStyle,
+            };
+          }
           if (Object.keys(changedSettings).length > 0) {
             data.settings = mergeProjectSettings(current.settings, changedSettings);
           }

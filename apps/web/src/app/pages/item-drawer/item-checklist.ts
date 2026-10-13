@@ -15,6 +15,7 @@ import {
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
 import { ItemsApiService } from '../../core/items-api.service';
+import { Icon } from '../../ui/icon';
 
 /**
  * An item's checklist (SPEC §6): add, reorder, tick, rename and delete lines.
@@ -26,8 +27,37 @@ import { ItemsApiService } from '../../core/items-api.service';
  */
 @Component({
   selector: 'app-item-checklist',
-  imports: [CdkDropList, CdkDrag, CdkDragHandle, MatButtonModule, MatCheckboxModule],
+  imports: [CdkDropList, CdkDrag, CdkDragHandle, MatButtonModule, MatCheckboxModule, Icon],
   styles: `
+    :host {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h2 {
+      font-size: var(--k-body-sm);
+      font-weight: 700;
+    }
+    .progress {
+      flex: 1;
+      height: 6px;
+      border-radius: 3px;
+      overflow: hidden;
+      background: var(--k-sunken);
+    }
+    .progress span {
+      display: block;
+      height: 6px;
+      background: var(--k-primary);
+    }
+    .progress span.full {
+      background: var(--k-success);
+    }
     ul {
       list-style: none;
       margin: 0;
@@ -37,31 +67,56 @@ import { ItemsApiService } from '../../core/items-api.service';
       display: flex;
       align-items: center;
       gap: 4px;
-      background: var(--mat-sys-surface);
+      min-height: 40px;
+      border-radius: var(--k-radius-control);
+      background: var(--k-surface);
+    }
+    li.done .text {
+      color: var(--k-muted);
+      text-decoration: line-through;
     }
     .text {
       flex: 1;
       min-width: 0;
-      border: none;
+      padding: 6px 4px;
+      border: 1px solid transparent;
+      border-radius: var(--k-radius-sm);
       background: transparent;
       color: inherit;
       font: inherit;
     }
+    input.text:focus {
+      border-color: var(--k-primary);
+      outline: none;
+    }
     .handle {
-      cursor: move;
-      padding: 0 4px;
+      display: inline-flex;
+      color: var(--k-border-strong);
+      cursor: grab;
     }
   `,
   template: `
-    <h4>Checklist {{ doneCount() }}/{{ lines().length }}</h4>
+    <div class="head">
+      <h2>
+        Checklist <span class="muted">{{ doneCount() }}/{{ lines().length }}</span>
+      </h2>
+      @if (lines().length > 0) {
+        <span class="progress" aria-hidden="true"
+          ><span
+            [class.full]="doneCount() === lines().length"
+            [style.width.%]="(doneCount() / lines().length) * 100"
+          ></span
+        ></span>
+      }
+    </div>
     @if (error()) {
       <p class="error" role="alert">{{ error() }}</p>
     }
     <ul cdkDropList [cdkDropListDisabled]="!canEdit()" (cdkDropListDropped)="reorder($event)">
       @for (line of lines(); track line.id) {
-        <li cdkDrag>
+        <li cdkDrag [class.done]="line.done">
           @if (canEdit()) {
-            <span class="handle" cdkDragHandle aria-hidden="true">⠿</span>
+            <span class="handle" cdkDragHandle aria-hidden="true"><app-icon name="grip" /></span>
           }
           <mat-checkbox
             [checked]="line.done"
@@ -77,7 +132,14 @@ import { ItemsApiService } from '../../core/items-api.service';
               [attr.aria-label]="'Checklist line ' + line.text"
               (change)="rename(line, $any($event.target))"
             />
-            <button mat-button type="button" (click)="remove(line)">Delete</button>
+            <button
+              type="button"
+              class="k-icon-btn sm"
+              [attr.aria-label]="'Delete ' + line.text"
+              (click)="remove(line)"
+            >
+              <app-icon name="trash" />
+            </button>
           } @else {
             <span class="text">{{ line.text }}</span>
           }
@@ -87,7 +149,7 @@ import { ItemsApiService } from '../../core/items-api.service';
     @if (canEdit()) {
       <input
         class="quick-add"
-        placeholder="+ Add a checklist line"
+        placeholder="+ Add a line"
         aria-label="New checklist line"
         [attr.maxlength]="textMax"
         (keyup.enter)="add($any($event.target))"

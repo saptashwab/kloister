@@ -20,6 +20,7 @@ import { AdminApiService } from '../../core/admin-api.service';
 import { errorMessage } from '../../core/api';
 import { ROLE_LABELS } from '../../core/labels';
 import { ProjectsApiService } from '../../core/projects-api.service';
+import { ProjectsNav } from '../../core/projects-nav';
 import { SessionStore } from '../../core/session.store';
 import { required } from '../../core/validators';
 
@@ -33,6 +34,7 @@ import { required } from '../../core/validators';
  */
 @Component({
   selector: 'app-projects',
+  host: { class: 'k-page' },
   imports: [
     ReactiveFormsModule,
     RouterLink,
@@ -45,7 +47,25 @@ import { required } from '../../core/validators';
     MatSelectModule,
   ],
   template: `
-    <h2>Projects</h2>
+    <header class="k-page-head">
+      <h1>Projects</h1>
+      <span class="spacer"></span>
+      @if (store.isAdmin()) {
+        <mat-button-toggle-group
+          class="k-segmented"
+          aria-label="Which projects"
+          hideSingleSelectionIndicator
+          [value]="scope()"
+          (change)="setScope($event.value)"
+        >
+          <mat-button-toggle value="mine">My projects</mat-button-toggle>
+          <mat-button-toggle value="all">All projects</mat-button-toggle>
+        </mat-button-toggle-group>
+      }
+      <mat-checkbox [checked]="includeArchived()" (change)="setIncludeArchived($event.checked)">
+        Show archived
+      </mat-checkbox>
+    </header>
 
     @if (store.isAdmin()) {
       <mat-card>
@@ -88,56 +108,44 @@ import { required } from '../../core/validators';
       </mat-card>
     }
 
-    <div class="row">
-      @if (store.isAdmin()) {
-        <mat-button-toggle-group
-          aria-label="Which projects"
-          [value]="scope()"
-          (change)="setScope($event.value)"
-        >
-          <mat-button-toggle value="mine">My projects</mat-button-toggle>
-          <mat-button-toggle value="all">All projects</mat-button-toggle>
-        </mat-button-toggle-group>
-      }
-      <mat-checkbox [checked]="includeArchived()" (change)="setIncludeArchived($event.checked)">
-        Show archived
-      </mat-checkbox>
-    </div>
-
     @if (error()) {
-      <p class="error" role="alert">{{ error() }}</p>
+      <p class="k-alert" role="alert">{{ error() }}</p>
     }
 
-    <table class="data">
-      <thead>
-        <tr>
-          <th scope="col">Key</th>
-          <th scope="col">Name</th>
-          <th scope="col">Your role</th>
-          <th scope="col">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (project of projects(); track project.id) {
+    <div class="k-panel k-table-scroll">
+      <table class="data">
+        <thead>
           <tr>
-            <td>
-              <a [routerLink]="['/p', project.key]">{{ project.key }}</a>
-            </td>
-            <td>{{ project.name }}</td>
-            <td>{{ project.myRole ? roleLabels[project.myRole] : 'Not a member' }}</td>
-            <td>{{ project.archivedAt ? 'Archived' : 'Active' }}</td>
+            <th scope="col">Key</th>
+            <th scope="col">Name</th>
+            <th scope="col">Your role</th>
+            <th scope="col">Status</th>
           </tr>
-        } @empty {
-          <tr>
-            <td colspan="4">
-              {{
-                scope() === 'all' ? 'No projects yet.' : 'You are not a member of any project yet.'
-              }}
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (project of projects(); track project.id) {
+            <tr>
+              <td>
+                <a class="k-key" [routerLink]="['/p', project.key]">{{ project.key }}</a>
+              </td>
+              <td>{{ project.name }}</td>
+              <td>{{ project.myRole ? roleLabels[project.myRole] : 'Not a member' }}</td>
+              <td>{{ project.archivedAt ? 'Archived' : 'Active' }}</td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="4">
+                {{
+                  scope() === 'all'
+                    ? 'No projects yet.'
+                    : 'You are not a member of any project yet.'
+                }}
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
     @if (nextCursor()) {
       <button mat-button type="button" (click)="loadMore()">Load more</button>
     }
@@ -145,6 +153,7 @@ import { required } from '../../core/validators';
 })
 export class ProjectsPage implements OnInit {
   private readonly api = inject(ProjectsApiService);
+  private readonly nav = inject(ProjectsNav);
   private readonly adminApi = inject(AdminApiService);
   /** Decides whether admin controls are shown. */
   protected readonly store = inject(SessionStore);
@@ -249,6 +258,7 @@ export class ProjectsPage implements OnInit {
       await this.api.create({ ...value, key });
       this.createForm.reset();
       await this.reload();
+      void this.nav.refresh();
     });
     this.busy.set(false);
   }

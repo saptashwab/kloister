@@ -3,6 +3,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 import {
   BOARD_NAME_MAX,
@@ -10,34 +11,136 @@ import {
   BucketRule,
   ItemStatus,
   type LabelDto,
+  LabelStyle,
   type ProjectDto,
   type StatusToBucket,
   type UpdateBucketRequest,
   type UpdateLabelRequest,
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
+import { Dialogs } from '../../ui/dialogs';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectsApiService } from '../../core/projects-api.service';
+import { LABEL_PALETTE } from '../../core/colour';
 import { BUCKET_RULE_LABELS, STATUS_LABELS } from '../../core/labels';
+import { EmptyState } from '../../ui/feedback';
+import { Icon } from '../../ui/icon';
+import { LabelPill } from '../../ui/label-pill';
 
 /** Select value for "no mapping" in the status → bucket map. */
 const NO_MOVE = '';
 
-/** Colour offered for a new label: neutral slate. */
-const DEFAULT_LABEL_COLOUR = '#64748b';
+/** Colour offered for a new label: indigo from the curated palette. */
+const DEFAULT_LABEL_COLOUR = '#3E63DD';
 
 /**
  * Board settings inside the project settings page (SPEC §6): buckets with
- * their entry rules (SPEC §4.2), labels, and the `statusToBucket` map.
+ * their entry rules (SPEC §4.2), labels with the curated palette or a custom
+ * colour (DESIGN §4), the project's label style, and the `statusToBucket`
+ * map.
  *
  * Everyone who can open the project sees them. Buckets and labels can be
- * changed with `MANAGE_BOARD` (PM, Lead); the map is a project setting and
- * needs `MANAGE_PROJECT` (PM). The parent passes both flags (false on
+ * changed with `MANAGE_BOARD` (PM, Lead); the map and the label style are
+ * project settings and need `MANAGE_PROJECT` (PM). The parent passes both flags (false on
  * archived projects); the API enforces the same rules.
  */
 @Component({
   selector: 'app-project-board-settings',
-  imports: [MatButtonModule, MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [
+    MatButtonModule,
+    MatCardModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatMenuModule,
+    MatSelectModule,
+    EmptyState,
+    Icon,
+    LabelPill,
+  ],
+  styles: `
+    .labels-card {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .style-options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .style-option {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px;
+      border: 1px solid var(--k-border);
+      border-radius: var(--k-radius-md);
+      cursor: pointer;
+    }
+    .style-option.on {
+      border-color: var(--k-primary);
+      background: var(--k-primary-soft);
+    }
+    .style-name {
+      font-weight: 600;
+    }
+    .style-text {
+      font-size: var(--k-small);
+      color: var(--k-muted);
+    }
+    .sample,
+    .palette-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .label-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 4px 0;
+    }
+    .label-list .quick-add {
+      max-width: 240px;
+      margin: 0;
+    }
+    .swatch {
+      flex: none;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 2px solid var(--k-surface);
+      border-radius: 50%;
+      box-shadow: 0 0 0 1px var(--k-border-strong);
+      cursor: pointer;
+    }
+    .swatch.on {
+      box-shadow: 0 0 0 2px var(--k-primary);
+    }
+    .swatch.small {
+      width: 16px;
+      height: 16px;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .custom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 16px;
+      font-size: var(--k-body-sm);
+    }
+    .custom-input {
+      width: 36px;
+      height: 28px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+  `,
   template: `
     @if (error()) {
       <p class="error" role="alert">{{ error() }}</p>
@@ -191,17 +294,49 @@ const DEFAULT_LABEL_COLOUR = '#64748b';
 
     <mat-card>
       <mat-card-header><mat-card-title>Labels</mat-card-title></mat-card-header>
-      <mat-card-content>
-        <ul class="labels">
-          @for (l of labels(); track l.id) {
-            <li class="row">
-              @if (canManageBoard()) {
+      <mat-card-content class="labels-card">
+        <div role="radiogroup" aria-labelledby="label-style-title" class="styles">
+          <div id="label-style-title" class="muted">
+            Label style for this project{{ canManageProject() ? '' : ' (set by PMs)' }}
+          </div>
+          <div class="style-options">
+            @for (option of styleOptions; track option.value) {
+              <label
+                class="style-option"
+                [class.on]="project().settings.labelStyle === option.value"
+              >
                 <input
-                  type="color"
-                  [value]="l.colour"
-                  [attr.aria-label]="'Colour of ' + l.name"
-                  (change)="updateLabel(l, { colour: $any($event.target).value })"
+                  type="radio"
+                  name="label-style"
+                  [value]="option.value"
+                  [checked]="project().settings.labelStyle === option.value"
+                  [disabled]="!canManageProject()"
+                  (change)="setLabelStyle(option.value)"
                 />
+                <span class="style-name">{{ option.name }}</span>
+                <span class="style-text">{{ option.text }}</span>
+                <span class="sample">
+                  @for (l of sampleLabels(); track l.name) {
+                    <app-label-pill [name]="l.name" [colour]="l.hex" [labelStyle]="option.value" />
+                  }
+                </span>
+              </label>
+            }
+          </div>
+        </div>
+
+        <ul class="plain label-list">
+          @for (l of labels(); track l.id) {
+            <li>
+              @if (canManageBoard()) {
+                <button
+                  type="button"
+                  class="swatch"
+                  [style.background]="l.colour"
+                  [matMenuTriggerFor]="palette"
+                  [matMenuTriggerData]="{ label: l }"
+                  [attr.aria-label]="'Colour of ' + l.name"
+                ></button>
                 <input
                   class="quick-add"
                   [value]="l.name"
@@ -209,35 +344,111 @@ const DEFAULT_LABEL_COLOUR = '#64748b';
                   [attr.aria-label]="'Name of label ' + l.name"
                   (change)="renameLabel(l, $any($event.target))"
                 />
-                <button mat-button type="button" (click)="deleteLabel(l)">Delete</button>
+                <app-label-pill
+                  [name]="l.name"
+                  [colour]="l.colour"
+                  [labelStyle]="project().settings.labelStyle"
+                />
+                <button
+                  type="button"
+                  class="k-icon-btn sm"
+                  [attr.aria-label]="'Delete label ' + l.name"
+                  (click)="deleteLabel(l)"
+                >
+                  <app-icon name="trash" />
+                </button>
               } @else {
-                <span class="label" [style.border-left-color]="l.colour">{{ l.name }}</span>
+                <app-label-pill
+                  [name]="l.name"
+                  [colour]="l.colour"
+                  [labelStyle]="project().settings.labelStyle"
+                />
               }
             </li>
           } @empty {
-            <li>No labels yet.</li>
+            <li>
+              <app-empty-state
+                title="No labels yet"
+                [text]="
+                  canManageBoard()
+                    ? 'Labels give cards a coloured tag, such as frontend or customer.'
+                    : ''
+                "
+              />
+            </li>
           }
         </ul>
-        @if (canManageBoard()) {
-          <div class="row">
-            <input
-              type="color"
-              #labelColour
-              [value]="defaultColour"
-              aria-label="New label colour"
-            />
-            <mat-form-field>
-              <mat-label>New label name</mat-label>
+
+        <mat-menu #palette="matMenu">
+          <ng-template matMenuContent let-label="label">
+            <div class="palette" role="group" [attr.aria-label]="'Colours for ' + label.name">
+              @for (c of paletteColours; track c.hex) {
+                <button
+                  type="button"
+                  mat-menu-item
+                  class="palette-item"
+                  [attr.aria-label]="c.name"
+                  (click)="updateLabel(label, { colour: c.hex })"
+                >
+                  <span class="swatch small" [style.background]="c.hex"></span>{{ c.name }}
+                </button>
+              }
+            </div>
+            <label class="custom">
+              Custom colour
               <input
-                matInput
-                #labelName
-                [attr.maxlength]="nameMax"
-                (keyup.enter)="createLabel(labelName, labelColour)"
+                type="color"
+                [value]="label.colour"
+                [attr.aria-label]="'Custom colour of ' + label.name"
+                (click)="$event.stopPropagation()"
+                (keydown)="$event.stopPropagation()"
+                (change)="updateLabel(label, { colour: $any($event.target).value })"
               />
-            </mat-form-field>
-            <button mat-button type="button" (click)="createLabel(labelName, labelColour)">
-              Add label
-            </button>
+            </label>
+          </ng-template>
+        </mat-menu>
+
+        @if (canManageBoard()) {
+          <div class="new-label">
+            <div class="palette-row" role="radiogroup" aria-label="New label colour">
+              @for (c of paletteColours; track c.hex) {
+                <button
+                  type="button"
+                  role="radio"
+                  class="swatch"
+                  [class.on]="newColour() === c.hex"
+                  [style.background]="c.hex"
+                  [attr.aria-checked]="newColour() === c.hex"
+                  [attr.aria-label]="c.name"
+                  (click)="newColour.set(c.hex)"
+                ></button>
+              }
+              <input
+                type="color"
+                class="custom-input"
+                aria-label="Custom colour for the new label"
+                [value]="newColour()"
+                (change)="newColour.set($any($event.target).value)"
+              />
+            </div>
+            <div class="row">
+              <mat-form-field>
+                <mat-label>New label name</mat-label>
+                <input
+                  matInput
+                  #labelName
+                  [attr.maxlength]="nameMax"
+                  (input)="newName.set(labelName.value)"
+                  (keyup.enter)="createLabel(labelName)"
+                />
+              </mat-form-field>
+              <app-label-pill
+                [name]="newName() || 'Preview'"
+                [colour]="newColour()"
+                [labelStyle]="project().settings.labelStyle"
+              />
+              <button mat-button type="button" (click)="createLabel(labelName)">Add label</button>
+            </div>
           </div>
         }
       </mat-card-content>
@@ -246,6 +457,7 @@ const DEFAULT_LABEL_COLOUR = '#64748b';
 })
 export class ProjectBoardSettings {
   private readonly api = inject(ItemsApiService);
+  private readonly dialogs = inject(Dialogs);
   private readonly projectsApi = inject(ProjectsApiService);
 
   /** The project. */
@@ -273,8 +485,18 @@ export class ProjectBoardSettings {
   protected readonly nameMax = BOARD_NAME_MAX;
   /** "Don't move" select value. */
   protected readonly noMove = NO_MOVE;
-  /** Colour of a new label. */
-  protected readonly defaultColour = DEFAULT_LABEL_COLOUR;
+  /** The curated label palette. */
+  protected readonly paletteColours = LABEL_PALETTE;
+  /** Name typed for the next new label, for its preview. */
+  protected readonly newName = signal('');
+  /** Colour of the next new label. */
+  protected readonly newColour = signal(DEFAULT_LABEL_COLOUR);
+  /** The three label styles (DESIGN §4.2). */
+  protected readonly styleOptions: { value: LabelStyle; name: string; text: string }[] = [
+    { value: LabelStyle.SOLID, name: 'Solid (default)', text: 'Full colour; the strongest cue.' },
+    { value: LabelStyle.TINTED, name: 'Tinted', text: 'Soft colour; calm with many labels.' },
+    { value: LabelStyle.COVER, name: 'Cover bar', text: 'Tinted, plus a colour bar on each card.' },
+  ];
 
   /** Labels. */
   protected readonly labels = signal<LabelDto[]>([]);
@@ -286,6 +508,19 @@ export class ProjectBoardSettings {
   protected readonly moveTarget = signal('');
   /** Last error, if any. */
   protected readonly error = signal('');
+
+  /** Labels shown in the style previews: the first three, or samples. */
+  protected readonly sampleLabels = computed(() => {
+    const own = this.labels()
+      .slice(0, 3)
+      .map((l) => ({ name: l.name, hex: l.colour }));
+    return own.length > 0
+      ? own
+      : [
+          { name: 'frontend', hex: '#8E4EC6' },
+          { name: 'customer', hex: '#F76B15' },
+        ];
+  });
 
   /** True when the edited map differs from the stored one. */
   protected readonly mapChanged = computed(
@@ -433,22 +668,38 @@ export class ProjectBoardSettings {
   }
 
   /**
-   * Adds a label.
+   * Saves the project's label style (PMs only; the API checks again).
+   *
+   * @param labelStyle The new style.
+   * @returns Resolves once saved.
+   */
+  protected async setLabelStyle(labelStyle: LabelStyle): Promise<void> {
+    if (labelStyle === this.project().settings.labelStyle) return;
+    await this.run(async () => {
+      const project = await this.projectsApi.update(this.project().id, {
+        settings: { labelStyle },
+      });
+      this.projectChange.emit(project);
+    });
+  }
+
+  /**
+   * Adds a label in the chosen colour.
    *
    * @param name The name field.
-   * @param colour The colour field.
    * @returns Resolves once created.
    */
-  protected async createLabel(name: HTMLInputElement, colour: HTMLInputElement): Promise<void> {
+  protected async createLabel(name: HTMLInputElement): Promise<void> {
     const text = name.value.trim();
     if (text === '') return;
     await this.run(async () => {
       const label = await this.api.createLabel(this.project().id, {
         name: text,
-        colour: colour.value,
+        colour: this.newColour(),
       });
       this.labels.update((list) => [...list, label]);
       name.value = '';
+      this.newName.set('');
     });
   }
 
@@ -489,7 +740,13 @@ export class ProjectBoardSettings {
    * @returns Resolves once deleted.
    */
   protected async deleteLabel(label: LabelDto): Promise<void> {
-    if (!confirm(`Delete the label ${label.name}? It is removed from every item.`)) return;
+    const confirmed = await this.dialogs.confirm({
+      title: `Delete the label ${label.name}?`,
+      message: 'It is removed from every item. This cannot be undone.',
+      confirm: 'Delete',
+      danger: true,
+    });
+    if (!confirmed) return;
     await this.run(async () => {
       await this.api.deleteLabel(this.project().id, label.id);
       this.labels.update((list) => list.filter((l) => l.id !== label.id));

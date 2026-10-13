@@ -281,7 +281,8 @@ columns show a dashed note ("No cards for Mia Member here").
   Dates (start → due, with a due-soon or overdue pill), Team, and Parent.
 - **Inline editing**: every value is a button that opens an in-place editor (picker, menu, date picker or text
   field). Changes save immediately, show at once and offer Undo in a toast; there are no Save buttons except for
-  the description and notes, which save on blur or Ctrl/Cmd+Enter and cancel on Esc. Values the caller cannot
+  the description and notes, which save with their Save button or Ctrl/Cmd+Enter and cancel on Esc (not on
+  blur, which would also save when Cancel is clicked). Values the caller cannot
   change are plain text, not disabled buttons (the API decides; SPEC §3.4).
 - **Sections**: Description (rich text; images can be pasted or dropped in, PNG, JPEG, GIF or WebP, shown inline
   at full drawer width, with a hint under the editor; M5 per SPEC §5 and §6), Checklist (progress count and bar,
@@ -358,3 +359,13 @@ The canvas is a mockup; where it and this document differ, this document holds:
   `#15803D` and `#B45309`), so their text reaches 4.5:1.
 - The canvas's compact density switch was a design lever, not a v1 feature.
 - The canvas names the app "Kloister" in the sidebar; the app shows the admin-set name and logo (SPEC §1, §6).
+
+Where the first implementation (M4.5) does not yet match this document, the difference is recorded here and in
+docs/DECISIONS.md:
+
+- Cards show "Blocked" for items whose status is Blocked, not from an open "blocked by" dependency (section 3.4):
+  list responses carry no dependencies.
+- The quick person filter reuses the board's Assignee chip ("Assignee: Mia Member") plus "Clear filters" instead
+  of a separate removable person chip (section 9).
+- The sidebar does not yet collapse to icons at tablet width, and the drawer does not yet trap focus (sections 7
+  and 13); both are part of the M6.5 polish pass.

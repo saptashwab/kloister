@@ -2,6 +2,7 @@ import {
   type AddMemberRequest,
   type CreateProjectRequest,
   ItemStatus,
+  LabelStyle,
   MAX_INITIAL_PMS,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_KEY_PATTERN,
@@ -134,6 +135,11 @@ export class ProjectSettingsChangeDto implements Partial<ProjectSettings> {
       : value,
   )
   statusToBucket?: StatusToBucket;
+
+  /** Label style for the whole project (SPEC §4, §6). */
+  @OmittableNotNull()
+  @IsIn(Object.values(LabelStyle))
+  labelStyle?: LabelStyle;
 }
 
 /** Body of `PATCH /projects/:id`. */

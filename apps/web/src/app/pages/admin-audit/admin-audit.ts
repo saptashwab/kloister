@@ -14,9 +14,10 @@ import { errorMessage } from '../../core/api';
  */
 @Component({
   selector: 'app-admin-audit',
+  host: { class: 'k-page' },
   imports: [DatePipe, JsonPipe, MatButtonModule, MatFormFieldModule, MatSelectModule],
   template: `
-    <h2>Audit log</h2>
+    <header class="k-page-head"><h1>Audit log</h1></header>
     <mat-form-field>
       <mat-label>Action</mat-label>
       <mat-select [value]="action()" (valueChange)="filter($event)">
@@ -31,34 +32,36 @@ import { errorMessage } from '../../core/api';
       <p class="error" role="alert">{{ error() }}</p>
     }
 
-    <table class="data">
-      <thead>
-        <tr>
-          <th scope="col">Time</th>
-          <th scope="col">Actor</th>
-          <th scope="col">Action</th>
-          <th scope="col">Entity</th>
-          <th scope="col">Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (entry of entries(); track entry.id) {
+    <div class="k-panel k-table-scroll">
+      <table class="data">
+        <thead>
           <tr>
-            <td>{{ entry.createdAt | date: 'medium' }}</td>
-            <td>{{ entry.actorEmail ?? '—' }}</td>
-            <td>{{ entry.action }}</td>
-            <td>{{ entry.entityType }} {{ entry.entityId ?? '' }}</td>
-            <td>
-              <code>{{ entry.meta | json }}</code>
-            </td>
+            <th scope="col">Time</th>
+            <th scope="col">Actor</th>
+            <th scope="col">Action</th>
+            <th scope="col">Entity</th>
+            <th scope="col">Details</th>
           </tr>
-        } @empty {
-          <tr>
-            <td colspan="5">No entries.</td>
-          </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (entry of entries(); track entry.id) {
+            <tr>
+              <td>{{ entry.createdAt | date: 'medium' }}</td>
+              <td>{{ entry.actorEmail ?? '—' }}</td>
+              <td>{{ entry.action }}</td>
+              <td>{{ entry.entityType }} {{ entry.entityId ?? '' }}</td>
+              <td>
+                <code>{{ entry.meta | json }}</code>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="muted">No entries match.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
     @if (nextCursor()) {
       <button mat-button type="button" (click)="loadMore()">Load more</button>
     }

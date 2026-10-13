@@ -6,15 +6,18 @@ import { ChecklistService } from './checklist.service.js';
 import { DependenciesService } from './dependencies.service.js';
 import { ItemsController } from './items.controller.js';
 import { ItemsService } from './items.service.js';
+import { WorkController } from './work.controller.js';
+import { WorkService } from './work.service.js';
 
 /**
  * Work items with their hierarchy, dependencies, team assignment, checklist
- * and bucket/status rules (SPEC §4, M3). Every rule goes through
+ * and bucket/status rules (SPEC §4, M3), plus a person's work across
+ * projects (SPEC §6). Every rule goes through
  * `ProjectAccessService` from `ProjectsModule`.
  */
 @Module({
   imports: [AuditModule, ProjectsModule],
-  controllers: [ItemsController, ChecklistController],
-  providers: [ItemsService, DependenciesService, ChecklistService],
+  controllers: [ItemsController, ChecklistController, WorkController],
+  providers: [ItemsService, DependenciesService, ChecklistService, WorkService],
 })
 export class ItemsModule {}

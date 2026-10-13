@@ -38,6 +38,12 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/admin-audit/admin-audit').then((m) => m.AdminAuditPage),
   },
   {
+    // "All their work" (SPEC §6); the sidebar's "My work" is the caller's own.
+    path: 'people/:userId',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/work/work').then((m) => m.WorkPage),
+  },
+  {
     // A project: the board by default, the item drawer at `items/:number`
     // (SPEC §6 deep link), plus backlog, sprints and settings. Child routes
     // inherit `:key` (see `paramsInheritanceStrategy` in app.config.ts).

@@ -1,156 +1,20 @@
 /*
- * Global styles. A neutral Material 3 theme with system fonts only: no web
- * fonts or icon fonts are loaded, because the server may have no internet
- * access. Admin-controlled theme tokens replace the palette in M6.
+ * Global styles. Everything visual comes from the design tokens in
+ * styles/_tokens.scss (docs/DESIGN.md); Angular Material is mapped onto them.
+ *
+ * Fonts are bundled with the app (SIL Open Font Licence) and served from it;
+ * nothing is loaded from another host, because the server may have no
+ * internet access. Each weight file covers several scripts with
+ * `unicode-range`, so browsers fetch only what a page needs.
  */
-@use '@angular/material' as mat;
-
-html {
-  color-scheme: light dark;
-  @include mat.theme(
-    (
-      color: mat.$blue-palette,
-      typography: (
-        plain-family: 'system-ui, sans-serif',
-        brand-family: 'system-ui, sans-serif',
-      ),
-      density: 0,
-    )
-  );
-}
-
-body {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  background: var(--mat-sys-surface);
-  color: var(--mat-sys-on-surface);
-}
-
-/* Shared layout helpers used by the pages. */
-.auth-card {
-  max-width: 420px;
-  margin: 48px auto;
-
-  form {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-}
-
-.row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.error {
-  color: var(--mat-sys-error);
-}
-
-.notice {
-  margin-bottom: 16px;
-}
-
-.secret {
-  font-family: ui-monospace, monospace;
-  font-size: 1.125rem;
-  user-select: all;
-}
-
-table.data {
-  width: 100%;
-  margin-top: 16px;
-  border-collapse: collapse;
-
-  th,
-  td {
-    padding: 8px;
-    text-align: left;
-    border-bottom: 1px solid var(--mat-sys-outline-variant);
-    vertical-align: top;
-  }
-
-  .actions {
-    white-space: nowrap;
-  }
-}
-
-.visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
-mat-card {
-  margin-bottom: 16px;
-}
-
-.spacer {
-  flex: 1;
-}
-
-/* Item type badge: a letter on a tinted square (no icon fonts). */
-.badge {
-  display: inline-grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: var(--mat-sys-surface-variant);
-  color: var(--mat-sys-on-surface-variant);
-
-  &[data-type='EPIC'] {
-    background: var(--mat-sys-tertiary-container);
-    color: var(--mat-sys-on-tertiary-container);
-  }
-
-  &[data-type='FEATURE'] {
-    background: var(--mat-sys-primary-container);
-    color: var(--mat-sys-on-primary-container);
-  }
-
-  &[data-type='STORY'] {
-    background: var(--mat-sys-secondary-container);
-    color: var(--mat-sys-on-secondary-container);
-  }
-
-  &[data-type='BUG'] {
-    background: var(--mat-sys-error-container);
-    color: var(--mat-sys-on-error-container);
-  }
-}
-
-/* Inline text field used for quick-add and in-place renames. */
-.quick-add {
-  box-sizing: border-box;
-  width: 100%;
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  border: 1px dashed var(--mat-sys-outline);
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-}
-
-/* Label chip; the label's colour is set as the left border colour. */
-.label {
-  padding: 0 6px;
-  border-left: 8px solid;
-  border-radius: 8px;
-  background: var(--mat-sys-surface-container);
-  font-size: 0.75rem;
-}
-
-ul.labels {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
+@use '@fontsource/figtree/400.css' as figtree-400;
+@use '@fontsource/figtree/500.css' as figtree-500;
+@use '@fontsource/figtree/600.css' as figtree-600;
+@use '@fontsource/figtree/700.css' as figtree-700;
+@use '@fontsource/jetbrains-mono/500.css' as mono-500;
+@use 'styles/tokens';
+@use 'styles/material';
+@use 'styles/base';
+@use 'styles/components';
+@use 'styles/shell';
+@use 'styles/drawer';

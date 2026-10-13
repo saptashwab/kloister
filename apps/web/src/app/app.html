@@ -1,29 +1,117 @@
-<mat-toolbar class="header">
-  <h1>{{ title() }}</h1>
-  @if (store.user(); as user) {
-    @if (!user.mustChangePassword) {
-      <nav aria-label="Main">
-        <a
-          mat-button
-          routerLink="/"
-          routerLinkActive="active"
-          [routerLinkActiveOptions]="{ exact: true }"
-          >Projects</a
+@if (user(); as me) {
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="shell" [class.nav-open]="navOpen()">
+    <nav class="sidebar" aria-label="Main">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"><app-icon name="board" [size]="16" /></span>
+        <h1>{{ title() }}</h1>
+        <button
+          #closeNavButton
+          type="button"
+          class="k-icon-btn sm close-nav"
+          aria-label="Close menu"
+          (click)="closeNav()"
         >
-        @if (store.isAdmin()) {
-          <a mat-button routerLink="/admin/users" routerLinkActive="active">Users</a>
-          <a mat-button routerLink="/admin/audit" routerLinkActive="active">Audit log</a>
+          <app-icon name="close" />
+        </button>
+      </div>
+
+      <a class="nav-link" [routerLink]="['/people', me.id]" routerLinkActive="active">
+        <app-icon name="work" [size]="18" />My work
+      </a>
+      <a
+        class="nav-link"
+        routerLink="/"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <app-icon name="folder" [size]="18" />All projects
+      </a>
+
+      <div class="nav-section" id="nav-projects">Projects</div>
+      <ul class="plain" aria-labelledby="nav-projects">
+        @for (p of nav.projects(); track p.id) {
+          <li>
+            <a
+              class="nav-link project"
+              [class.active]="currentKey() === p.key"
+              [attr.aria-current]="currentKey() === p.key ? 'page' : null"
+              [routerLink]="['/p', p.key]"
+            >
+              <span class="key">{{ p.key }}</span
+              ><span class="name">{{ p.name }}</span>
+            </a>
+          </li>
+        } @empty {
+          <li class="nav-empty">No projects yet</li>
         }
-      </nav>
+      </ul>
+
+      @if (store.isAdmin()) {
+        <div class="nav-section">Admin</div>
+        <a class="nav-link" routerLink="/admin/users" routerLinkActive="active">
+          <app-icon name="users" [size]="18" />Users
+        </a>
+        <a class="nav-link" routerLink="/admin/audit" routerLinkActive="active">
+          <app-icon name="audit" [size]="18" />Audit log
+        </a>
+      }
+
+      <span class="spacer"></span>
+      <button
+        type="button"
+        class="me"
+        [cdkMenuTriggerFor]="userMenu"
+        [cdkMenuPosition]="menuPosition"
+        aria-label="Account menu"
+      >
+        <app-avatar-static [userId]="me.id" [name]="me.displayName" [size]="30" />
+        <span class="who">
+          <span class="name">{{ me.displayName }}</span>
+          <span class="role">{{ store.isAdmin() ? 'Admin' : me.email }}</span>
+        </span>
+      </button>
+      <ng-template #userMenu>
+        <div class="k-popover k-menu" cdkMenu>
+          <a class="k-action" cdkMenuItem routerLink="/change-password">
+            <app-icon name="key" [size]="18" />Change password
+          </a>
+          <button class="k-action" cdkMenuItem type="button" (cdkMenuItemTriggered)="logout()">
+            <app-icon name="logout" [size]="18" />Sign out
+          </button>
+        </div>
+      </ng-template>
+    </nav>
+    <div class="scrim" aria-hidden="true" (click)="closeNav()"></div>
+
+    <div class="content">
+      <header class="topbar">
+        <button
+          #openNavButton
+          type="button"
+          class="k-icon-btn"
+          aria-label="Open menu"
+          [attr.aria-expanded]="navOpen()"
+          (click)="openNav()"
+        >
+          <app-icon name="menu" [size]="20" />
+        </button>
+        <span class="topbar-title">{{ title() }}</span>
+      </header>
+      <main id="main" tabindex="-1">
+        <router-outlet />
+      </main>
+    </div>
+  </div>
+} @else {
+  <main id="main" class="bare">
+    <h1 class="bare-title">{{ title() }}</h1>
+    @if (store.user(); as pending) {
+      <div class="bare-actions">
+        <span class="muted">{{ pending.displayName }}</span>
+        <button class="k-action" type="button" (click)="logout()">Sign out</button>
+      </div>
     }
-    <span class="spacer"></span>
-    <span class="who">{{ user.displayName }}</span>
-    @if (!user.mustChangePassword) {
-      <a mat-button routerLink="/change-password">Change password</a>
-    }
-    <button mat-button type="button" (click)="logout()">Sign out</button>
-  }
-</mat-toolbar>
-<main class="shell">
-  <router-outlet />
-</main>
+    <router-outlet />
+  </main>
+}

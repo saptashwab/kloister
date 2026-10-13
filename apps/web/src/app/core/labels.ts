@@ -39,18 +39,6 @@ export const TYPE_LABELS: Record<ItemType, string> = {
   BUG: 'Bug',
 };
 
-/**
- * Short type badges shown on cards and tree rows. Plain letters, because the
- * UI loads no icon fonts (the server may have no internet access).
- */
-export const TYPE_BADGES: Record<ItemType, string> = {
-  EPIC: 'E',
-  FEATURE: 'F',
-  STORY: 'S',
-  TASK: 'T',
-  BUG: 'B',
-};
-
 /** Display names of item statuses (SPEC §4.2). */
 export const STATUS_LABELS: Record<ItemStatus, string> = {
   NOT_STARTED: 'Not started',

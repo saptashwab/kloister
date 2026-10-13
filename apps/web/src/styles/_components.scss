@@ -1,0 +1,434 @@
+@use '@angular/material' as mat;
+
+/*
+ * Shared visual pieces that Angular Material has no component for: pills,
+ * labels, avatars, type tiles, chips, empty states and skeletons (DESIGN
+ * §3, §4, §9, §11). Kept global so component style budgets stay small.
+ */
+
+/* Pill: status, due dates, counts. */
+.k-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--k-radius-full);
+  font-size: var(--k-small);
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--k-sunken);
+  color: var(--k-muted);
+
+  &.lg {
+    height: 32px;
+    padding: 0 12px;
+    font-size: var(--k-body-sm);
+  }
+
+  &.warn {
+    background: var(--k-warn-soft);
+    color: var(--k-warn-ink);
+  }
+
+  &.danger {
+    background: var(--k-danger-soft);
+    color: var(--k-danger-ink);
+  }
+
+  &.success {
+    background: var(--k-success-soft);
+    color: var(--k-success-ink);
+  }
+
+  &.primary {
+    background: var(--k-primary-soft);
+    color: var(--k-primary-ink);
+  }
+
+  &[data-status='NOT_STARTED'] {
+    background: var(--k-idle-soft);
+    color: var(--k-idle-ink);
+  }
+
+  &[data-status='IN_PROGRESS'] {
+    background: var(--k-progress-soft);
+    color: var(--k-progress-ink);
+  }
+
+  &[data-status='BLOCKED'] {
+    background: var(--k-warn-soft);
+    color: var(--k-warn-ink);
+  }
+
+  &[data-status='DONE'] {
+    background: var(--k-success-soft);
+    color: var(--k-success-ink);
+  }
+}
+
+/*
+ * Label pill (DESIGN §4). The component sets --l-bg, --l-fg and --l-dot for
+ * light mode and --l-bg-dark / --l-fg-dark for tinted labels in dark mode.
+ */
+.k-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--k-radius-full);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--l-bg);
+  color: var(--l-fg);
+
+  &::before {
+    content: '';
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--l-dot);
+  }
+
+  &.lg {
+    height: 24px;
+    padding: 0 9px;
+    font-size: var(--k-small);
+  }
+}
+
+@mixin dark-labels {
+  .k-label[data-style='TINTED'],
+  .k-label[data-style='COVER'] {
+    background: var(--l-bg-dark);
+    color: var(--l-fg-dark);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-labels;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-labels;
+}
+
+/* Item type tile (DESIGN §3.1); the icon inside uses the type colour. */
+.k-type {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+
+  &.lg {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--k-radius-sm);
+  }
+
+  @each $type, $name in (EPIC: epic, FEATURE: feature, STORY: story, TASK: task, BUG: bug) {
+    &[data-type='#{$type}'] {
+      background: var(--k-type-#{$name}-soft);
+      color: var(--k-type-#{$name});
+    }
+  }
+}
+
+/* Item key such as KLO-42. */
+.k-key {
+  font-family: var(--k-font-mono);
+  font-size: var(--k-mono);
+  font-weight: 500;
+  color: var(--k-muted);
+  white-space: nowrap;
+}
+
+/* Avatar with initials (DESIGN §9); the component sets --a-bg and --a-fg. */
+.k-avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--a-size, 24px);
+  height: var(--a-size, 24px);
+  padding: 0;
+  border: 2px solid var(--a-ring, var(--k-surface));
+  border-radius: 50%;
+  background: var(--a-bg);
+  color: var(--a-fg);
+  font: inherit;
+  font-size: calc(var(--a-size, 24px) * 0.38);
+  font-weight: 700;
+  line-height: 1;
+  cursor: default;
+
+  &.active {
+    box-shadow: 0 0 0 2px var(--k-primary);
+  }
+
+  &.faded {
+    opacity: 0.45;
+  }
+}
+
+button.k-avatar {
+  cursor: pointer;
+}
+
+/* Overlapping avatar stack. */
+.k-avatars {
+  display: inline-flex;
+  padding-left: 6px;
+
+  > * {
+    margin-left: -6px;
+  }
+}
+
+/* Icon-only button. */
+.k-icon-btn {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-control);
+  background: transparent;
+  color: var(--k-muted);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--k-sunken);
+    color: var(--k-text);
+  }
+
+  &.sm {
+    width: 30px;
+    height: 30px;
+  }
+}
+
+/* Toolbar chip: filters and toggles (DESIGN §7). */
+.k-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px dashed var(--k-border-strong);
+  border-radius: var(--k-radius-full);
+  background: transparent;
+  color: var(--k-muted);
+  font: inherit;
+  font-size: var(--k-body-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--k-text);
+    border-color: var(--k-control-border);
+  }
+
+  &.on {
+    border: 1px solid var(--k-primary-line);
+    background: var(--k-primary-soft);
+    color: var(--k-primary-ink);
+  }
+}
+
+/* Empty state (DESIGN §11). */
+.k-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--k-space-6) var(--k-space-4);
+  border: 1px dashed var(--k-border-strong);
+  border-radius: var(--k-radius-md);
+  text-align: center;
+
+  .title {
+    font-size: var(--k-body-sm);
+    font-weight: 600;
+  }
+
+  .text {
+    max-width: 44ch;
+    font-size: var(--k-small);
+    color: var(--k-muted);
+  }
+
+  .action {
+    margin-top: var(--k-space-1);
+  }
+}
+
+/* Skeleton shapes (DESIGN §11). */
+.k-skel {
+  display: block;
+  border-radius: 4px;
+  background: var(--k-sunken);
+  animation: k-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes k-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Floating panel: hover cards and popovers (DESIGN §9). */
+.k-popover {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--k-border);
+  border-radius: var(--k-radius-popover);
+  background: var(--k-surface);
+  color: var(--k-text);
+  box-shadow: var(--k-float);
+}
+
+/* Menu-like action row inside a popover. */
+.k-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--k-radius-control);
+  background: transparent;
+  color: var(--k-text);
+  font: inherit;
+  font-size: var(--k-body-sm);
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover,
+  &[aria-pressed='true'] {
+    background: var(--k-primary-soft);
+    color: var(--k-primary-ink);
+  }
+}
+
+/* Segmented control on Material's button toggles. */
+.k-segmented.mat-button-toggle-group {
+  @include mat.button-toggle-overrides(
+    (
+      shape: 9px,
+      divider-color: transparent,
+      background-color: transparent,
+      text-color: var(--k-muted),
+      selected-state-background-color: var(--k-surface),
+      selected-state-text-color: var(--k-text),
+      height: 28px,
+      label-text-size: var(--k-small),
+      label-text-weight: 600,
+    )
+  );
+
+  padding: 3px;
+  border: 0;
+  background: var(--k-sunken);
+
+  .mat-button-toggle {
+    border-radius: 7px;
+  }
+
+  .mat-button-toggle-checked {
+    box-shadow: var(--k-rest);
+  }
+
+  .mat-button-toggle-appearance-standard .mat-button-toggle-label-content {
+    padding: 0 12px;
+  }
+}
+
+/* Icons inside Material buttons sit on the text's centre line. */
+.mat-mdc-button-base app-icon {
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* Toast panel class passed to the snack bar. */
+.k-toast .mat-mdc-snack-bar-label {
+  font-size: var(--k-body-sm);
+}
+
+/* Inline editor: a Material select or field that looks like plain text until used. */
+.k-inline {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: var(--k-radius-control);
+  font-size: var(--k-body-sm);
+
+  &.mat-mdc-select,
+  &[type='date'],
+  &[type='text'] {
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: var(--k-body-sm);
+  }
+
+  &.mat-mdc-select:hover,
+  &[type='date']:hover,
+  &[type='text']:hover {
+    background: var(--k-sunken);
+  }
+
+  &[type='date']:focus,
+  &[type='text']:focus {
+    border-color: var(--k-primary);
+    background: var(--k-surface);
+    outline: none;
+  }
+
+  .mat-mdc-select-arrow-wrapper {
+    opacity: 0;
+  }
+
+  &:hover .mat-mdc-select-arrow-wrapper,
+  &.mat-focused .mat-mdc-select-arrow-wrapper {
+    opacity: 1;
+  }
+}
+
+/* Destructive confirm button in dialogs. */
+.k-danger-btn.mat-mdc-unelevated-button:not(:disabled) {
+  background: var(--k-danger-ink);
+  color: var(--k-on-danger);
+}
+
+/* A small menu on the CDK menu (account menu and similar). */
+.k-menu {
+  gap: 2px;
+  min-width: 200px;
+  padding: 6px;
+
+  .k-action:focus-visible {
+    outline-offset: -2px;
+  }
+}

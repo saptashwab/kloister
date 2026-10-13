@@ -1,6 +1,7 @@
 import {
   DEFAULT_PROJECT_SETTINGS,
   ItemStatus,
+  LabelStyle,
   type ProjectSettings,
   type StatusToBucket,
 } from '@kloister/shared';
@@ -11,7 +12,8 @@ import type { Prisma } from '../generated/prisma/client.js';
  * Reads the known settings from a project's `settings` JSON, falling back to
  * the defaults for anything missing or malformed. A bad stored value can
  * therefore never grant a permission (e.g. `membersCanAssignOthers: "yes"`
- * reads as false), and a malformed `statusToBucket` entry is dropped.
+ * reads as false), a malformed `statusToBucket` entry is dropped and an
+ * unknown `labelStyle` reads as the default.
  *
  * @param raw The stored JSON value.
  * @returns Validated settings.
@@ -24,6 +26,9 @@ export function parseProjectSettings(raw: Prisma.JsonValue): ProjectSettings {
         ? value['membersCanAssignOthers']
         : DEFAULT_PROJECT_SETTINGS.membersCanAssignOthers,
     statusToBucket: parseStatusToBucket(value['statusToBucket']),
+    labelStyle: (Object.values(LabelStyle) as string[]).includes(value['labelStyle'] as string)
+      ? (value['labelStyle'] as LabelStyle)
+      : DEFAULT_PROJECT_SETTINGS.labelStyle,
   };
 }
 

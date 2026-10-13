@@ -15,12 +15,15 @@ import type { BoardColumn } from '../../core/board-logic';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
 import { ProjectsApiService } from '../../core/projects-api.service';
+import { ToastService } from '../../ui/toast.service';
 import { BoardPage } from './board';
 
 /** The protected board members the tests drive directly. */
 interface BoardInternals {
   columns(): BoardColumn[];
   drop(event: CdkDragDrop<BoardColumn, BoardColumn, WorkItemDto>): Promise<void>;
+  toggle(userId: string): void;
+  active(): string | null;
 }
 
 describe('BoardPage', () => {
@@ -35,7 +38,10 @@ describe('BoardPage', () => {
     );
     const projectsApi = {
       get: vi.fn().mockResolvedValue(project),
-      members: vi.fn().mockResolvedValue({ items: [makeMember('u1', 'Ann')], nextCursor: null }),
+      members: vi.fn().mockResolvedValue({
+        items: [makeMember('u1', 'Ann'), makeMember('u2', 'Bo Chen')],
+        nextCursor: null,
+      }),
       teams: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     };
     const itemsApi = {
@@ -57,12 +63,23 @@ describe('BoardPage', () => {
       ],
     }).compileComponents();
     const ctx = TestBed.inject(ProjectContext);
+    const toast = TestBed.inject(ToastService);
+    const show = vi.spyOn(toast, 'show').mockImplementation(() => undefined);
+    const showError = vi.spyOn(toast, 'error').mockImplementation(() => undefined);
     await ctx.open('KLO');
     const fixture = TestBed.createComponent(BoardPage);
     if (options.sprint !== undefined) fixture.componentRef.setInput('sprint', options.sprint);
     await settle(fixture);
     const board = fixture.componentInstance as unknown as BoardInternals;
-    return { fixture, root: fixture.nativeElement as HTMLElement, ctx, itemsApi, board };
+    return {
+      fixture,
+      root: fixture.nativeElement as HTMLElement,
+      ctx,
+      itemsApi,
+      board,
+      show,
+      showError,
+    };
   }
 
   /**
@@ -97,8 +114,9 @@ describe('BoardPage', () => {
     expect(columns.map((c) => c.getAttribute('aria-label'))).toEqual(['To Do', 'Done']);
     expect(columns[0]?.textContent).toContain('KLO-1');
     expect(columns[0]?.textContent).toContain('Write spec');
-    expect(columns[0]?.textContent).toContain('Overdue 2000-01-01');
-    expect(columns[0]?.querySelector('.avatar')?.textContent?.trim()).toBe('A');
+    expect(columns[0]?.textContent).toContain('days overdue');
+    expect(columns[0]?.querySelector('.k-avatar')?.textContent?.trim()).toBe('A');
+    expect(columns[0]?.querySelector('[aria-label="Priority 2 – High"]')).not.toBeNull();
     expect(columns[1]?.textContent).toContain('KLO-2');
   });
 
@@ -133,15 +151,61 @@ describe('BoardPage', () => {
 
   it('puts the card back and shows the refusal when the API says no', async () => {
     const moving = makeItem(2);
-    const { board, itemsApi, ctx, root, fixture } = await render([moving]);
-    itemsApi.move.mockRejectedValue(
-      new HttpErrorResponse({ status: 403, error: { code: 'FORBIDDEN', message: 'Not yours' } }),
-    );
+    const { board, itemsApi, ctx, showError } = await render([moving]);
+    const refusal = new HttpErrorResponse({
+      status: 403,
+      error: { code: 'FORBIDDEN', message: 'Not yours' },
+    });
+    itemsApi.move.mockRejectedValue(refusal);
     const [todo, done] = board.columns();
     await board.drop(dropEvent(moving, todo, done, 0));
     expect(ctx.itemsById().get('i2')?.bucketId).toBe('b1');
+    expect(showError).toHaveBeenCalledWith(refusal);
+  });
+
+  it('confirms a move with a toast whose Undo moves the card back and restores the status', async () => {
+    const above = makeItem(1, { position: 1 });
+    const moving = makeItem(2, { position: 2 });
+    const { board, itemsApi, ctx, show } = await render([above, moving]);
+    const moved = { ...moving, bucketId: 'b2', status: 'DONE' as const };
+    itemsApi.move.mockResolvedValueOnce(moved);
+    const [todo, done] = board.columns();
+    await board.drop(dropEvent(moving, todo, done, 0));
+    expect(show).toHaveBeenCalledWith(
+      'KLO-2 moved to Done · status set to Done',
+      expect.any(Function),
+    );
+
+    // Undo: back after KLO-1 in To Do, then the status the move changed.
+    itemsApi.move.mockResolvedValueOnce({ ...moved, bucketId: 'b1' });
+    itemsApi.update.mockResolvedValueOnce({ ...moving });
+    const undo = show.mock.calls[0]?.[1];
+    await undo?.();
+    expect(itemsApi.move).toHaveBeenLastCalledWith('p1', 'i2', { bucketId: 'b1', afterId: 'i1' });
+    expect(itemsApi.update).toHaveBeenCalledWith('p1', 'i2', { status: 'NOT_STARTED' });
+    expect(ctx.itemsById().get('i2')).toMatchObject({ bucketId: 'b1', status: 'NOT_STARTED' });
+  });
+
+  it('filters the board to one person from the quick person filter', async () => {
+    const { board, root, fixture } = await render([
+      makeItem(1, { assigneeIds: ['u1'] }),
+      makeItem(2, { assigneeIds: ['u2'] }),
+    ]);
+    const quick = root.querySelector('[aria-label="Filter by person"]');
+    expect(quick?.querySelectorAll('button.k-avatar').length).toBe(2);
+    board.toggle('u2');
     await settle(fixture);
-    expect(root.querySelector('[role=alert]')?.textContent).toContain('Not yours');
+    expect(board.active()).toBe('u2');
+    expect(root.querySelector('.columns')?.textContent).not.toContain('KLO-1');
+    expect(root.querySelector('.columns')?.textContent).toContain('KLO-2');
+    expect(quick?.querySelector('[aria-label="Bo Chen"]')?.getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(root.textContent).toContain('Assignee: Bo Chen');
+    board.toggle('u2');
+    await settle(fixture);
+    expect(board.active()).toBeNull();
+    expect(root.querySelector('.columns')?.textContent).toContain('KLO-1');
   });
 
   it('creates quick-add cards in the column they were typed into', async () => {

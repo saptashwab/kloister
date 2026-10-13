@@ -42,7 +42,7 @@ describe('ItemChecklist', () => {
 
   it('shows progress and no controls when read-only', async () => {
     const { root } = await render(false);
-    expect(root.querySelector('h4')?.textContent).toContain('Checklist 1/3');
+    expect(root.querySelector('h2')?.textContent).toContain('Checklist 1/3');
     expect(root.textContent).not.toContain('Delete');
     expect(root.querySelector('input.text, input.quick-add')).toBeNull();
   });
@@ -75,6 +75,6 @@ describe('ItemChecklist', () => {
     input.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
     await settle(fixture);
     expect(api.addChecklistLine).toHaveBeenCalledWith('p1', 'i1', { text: 'Line d' });
-    expect(root.querySelector('h4')?.textContent).toContain('Checklist 1/4');
+    expect(root.querySelector('h2')?.textContent).toContain('Checklist 1/4');
   });
 });

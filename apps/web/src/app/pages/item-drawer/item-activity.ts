@@ -6,6 +6,7 @@ import { describeActivity } from '../../core/activity';
 import { errorMessage } from '../../core/api';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
+import { StaticAvatar } from '../../ui/avatar';
 
 /** One entry ready for display. */
 interface ActivityRow {
@@ -13,6 +14,8 @@ interface ActivityRow {
   id: string;
   /** Who did it. */
   actor: string;
+  /** Their user id, for the avatar colour (the email when the account is gone). */
+  actorKey: string;
   /** ISO timestamp. */
   at: string;
   /** What happened. */
@@ -27,31 +30,52 @@ interface ActivityRow {
  */
 @Component({
   selector: 'app-item-activity',
-  imports: [DatePipe, MatButtonModule],
+  imports: [DatePipe, MatButtonModule, StaticAvatar],
   styles: `
+    :host {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    h2 {
+      font-size: var(--k-body-sm);
+      font-weight: 700;
+    }
     ol {
       margin: 0;
-      padding-left: 20px;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
     }
     li {
-      margin-bottom: 6px;
+      display: flex;
+      gap: 10px;
+      font-size: var(--k-body-sm);
+      line-height: 1.45;
     }
     .when {
-      color: var(--mat-sys-on-surface-variant);
-      font-size: 0.8rem;
+      color: var(--k-muted);
+      font-size: var(--k-small);
     }
   `,
   template: `
-    <h4>Activity</h4>
+    <h2>Activity</h2>
     @if (error()) {
-      <p class="error" role="alert">{{ error() }}</p>
+      <p class="k-alert" role="alert">{{ error() }}</p>
     }
     <ol>
       @for (row of rows(); track row.id) {
         <li>
-          <strong>{{ row.actor }}</strong> {{ row.lines.join('; ') }}
-          <div class="when">{{ row.at | date: 'medium' }}</div>
+          <app-avatar-static [userId]="row.actorKey" [name]="row.actor" />
+          <div>
+            <strong>{{ row.actor }}</strong> {{ row.lines.join('; ') }}
+            <div class="when">{{ row.at | date: 'medium' }}</div>
+          </div>
         </li>
+      } @empty {
+        <li class="muted">No activity yet.</li>
       }
     </ol>
     @if (cursor()) {
@@ -137,6 +161,7 @@ export class ItemActivity {
     return {
       id: entry.id,
       actor,
+      actorKey: entry.actorId ?? entry.actorEmail ?? 'someone',
       at: entry.createdAt,
       lines: describeActivity(entry, this.ctx.names),
     };

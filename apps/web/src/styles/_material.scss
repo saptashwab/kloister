@@ -1,0 +1,103 @@
+/*
+ * Angular Material on the design tokens. `mat.theme` sets up every
+ * component; its system colours, fonts and corner shapes are then pointed
+ * at the `--k-*` tokens, so Material controls and the app's own components
+ * always share one look, in light and dark, and theming (M6) only has to
+ * change the tokens.
+ */
+@use '@angular/material' as mat;
+
+html {
+  @include mat.theme(
+    (
+      color: mat.$violet-palette,
+      typography: (
+        plain-family: var(--k-font),
+        brand-family: var(--k-font),
+        bold-weight: 600,
+        medium-weight: 500,
+        regular-weight: 400,
+      ),
+      density: -1,
+    )
+  );
+
+  /* Colours. */
+  --mat-sys-primary: var(--k-primary);
+  --mat-sys-on-primary: var(--k-on-primary);
+  --mat-sys-primary-container: var(--k-primary-soft);
+  --mat-sys-on-primary-container: var(--k-primary-ink);
+  --mat-sys-inverse-primary: var(--k-toast-action);
+  --mat-sys-secondary: var(--k-primary);
+  --mat-sys-on-secondary: var(--k-on-primary);
+  --mat-sys-secondary-container: var(--k-primary-soft);
+  --mat-sys-on-secondary-container: var(--k-primary-ink);
+  --mat-sys-tertiary: var(--k-primary);
+  --mat-sys-on-tertiary: var(--k-on-primary);
+  --mat-sys-tertiary-container: var(--k-primary-soft);
+  --mat-sys-on-tertiary-container: var(--k-primary-ink);
+  --mat-sys-error: var(--k-danger-ink);
+  --mat-sys-on-error: #ffffff;
+  --mat-sys-error-container: var(--k-danger-soft);
+  --mat-sys-on-error-container: var(--k-danger-ink);
+  --mat-sys-background: var(--k-ground);
+  --mat-sys-on-background: var(--k-text);
+  --mat-sys-surface: var(--k-surface);
+  --mat-sys-surface-bright: var(--k-surface);
+  --mat-sys-surface-dim: var(--k-sunken);
+  --mat-sys-surface-container-lowest: var(--k-surface);
+  --mat-sys-surface-container-low: var(--k-surface);
+  --mat-sys-surface-container: var(--k-surface);
+  --mat-sys-surface-container-high: var(--k-surface);
+  --mat-sys-surface-container-highest: var(--k-sunken);
+  --mat-sys-surface-variant: var(--k-sunken);
+  --mat-sys-on-surface: var(--k-text);
+  --mat-sys-on-surface-variant: var(--k-muted);
+  --mat-sys-outline: var(--k-control-border);
+  --mat-sys-outline-variant: var(--k-border);
+  --mat-sys-inverse-surface: var(--k-toast);
+  --mat-sys-inverse-on-surface: var(--k-toast-text);
+  --mat-sys-scrim: var(--k-scrim);
+
+  /* Corner shapes. */
+  --mat-sys-corner-extra-small: var(--k-radius-sm);
+  --mat-sys-corner-small: var(--k-radius-control);
+  --mat-sys-corner-medium: var(--k-radius-md);
+  --mat-sys-corner-large: var(--k-radius-lg);
+  --mat-sys-corner-extra-large: var(--k-radius-lg);
+
+  /* Elevation used by menus, selects and dialogs. */
+  --mat-sys-level2: var(--k-float);
+  --mat-sys-level3: var(--k-float);
+
+  /* Component details Material's system tokens do not cover. */
+  @include mat.button-overrides(
+    (
+      filled-container-shape: var(--k-radius-control),
+      outlined-container-shape: var(--k-radius-control),
+      text-container-shape: var(--k-radius-control),
+      filled-label-text-weight: 600,
+      outlined-label-text-weight: 600,
+      text-label-text-weight: 600,
+    )
+  );
+  @include mat.dialog-overrides(
+    (
+      container-shape: var(--k-radius-lg),
+    )
+  );
+  @include mat.snack-bar-overrides(
+    (
+      container-color: var(--k-toast),
+      supporting-text-color: var(--k-toast-text),
+      button-color: var(--k-toast-action),
+      container-shape: var(--k-radius-md),
+    )
+  );
+  @include mat.card-overrides(
+    (
+      outlined-container-shape: var(--k-radius-md),
+      outlined-outline-color: var(--k-border),
+    )
+  );
+}

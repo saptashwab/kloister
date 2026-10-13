@@ -27,3 +27,13 @@ export const OmittableNotNull = (): PropertyDecorator =>
  */
 export const Nullable = (): PropertyDecorator =>
   ValidateIf((_object: unknown, value: unknown) => value !== undefined && value !== null);
+
+/**
+ * Parses a `true`/`false` query string value.
+ *
+ * @param params class-transformer callback parameters.
+ * @param params.value Raw value.
+ * @returns A boolean, or the raw value for the validator to reject.
+ */
+export const queryBoolean = ({ value }: { value: unknown }): unknown =>
+  value === 'true' ? true : value === 'false' ? false : value;

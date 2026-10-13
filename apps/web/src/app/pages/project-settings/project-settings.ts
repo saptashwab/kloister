@@ -22,10 +22,13 @@ import {
   Visibility,
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
+import { Dialogs } from '../../ui/dialogs';
 import { ROLE_LABELS, VISIBILITY_LABELS } from '../../core/labels';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
 import { ProjectsApiService } from '../../core/projects-api.service';
+import { ProjectsNav } from '../../core/projects-nav';
+import { Skeleton } from '../../ui/feedback';
 import { SessionStore } from '../../core/session.store';
 import { required } from '../../core/validators';
 import { ProjectBoardSettings } from './project-board-settings';
@@ -46,6 +49,7 @@ import { ProjectTeamsComponent } from './project-teams';
  */
 @Component({
   selector: 'app-project-settings',
+  host: { class: 'k-page' },
   imports: [
     ReactiveFormsModule,
     MatButtonModule,
@@ -56,14 +60,15 @@ import { ProjectTeamsComponent } from './project-teams';
     MatSelectModule,
     ProjectTeamsComponent,
     ProjectBoardSettings,
+    Skeleton,
   ],
   template: `
     @if (!project() && !error()) {
-      <p>Loading…</p>
+      <app-skeleton label="Loading the settings" />
     }
 
     @if (error()) {
-      <p class="error" role="alert">{{ error() }}</p>
+      <p class="k-alert" role="alert">{{ error() }}</p>
     }
 
     @if (project(); as project) {
@@ -278,6 +283,8 @@ import { ProjectTeamsComponent } from './project-teams';
 })
 export class ProjectSettingsPage implements OnInit {
   private readonly api = inject(ProjectsApiService);
+  private readonly nav = inject(ProjectsNav);
+  private readonly dialogs = inject(Dialogs);
   private readonly router = inject(Router);
   private readonly store = inject(SessionStore);
   private readonly itemsApi = inject(ItemsApiService);
@@ -438,7 +445,15 @@ export class ProjectSettingsPage implements OnInit {
    */
   protected async toggleArchived(project: ProjectDto): Promise<void> {
     const archive = project.archivedAt === null;
-    if (archive && !confirm(`Archive ${project.key}? It becomes read-only for everyone.`)) return;
+    if (
+      archive &&
+      !(await this.dialogs.confirm({
+        title: `Archive ${project.key}?`,
+        message: 'It becomes read-only for everyone until a PM unarchives it.',
+        confirm: 'Archive',
+      }))
+    )
+      return;
     await this.run(async () => {
       this.setProject(await this.api.setArchived(project.id, archive));
     });
@@ -518,7 +533,14 @@ export class ProjectSettingsPage implements OnInit {
    */
   protected async removeMember(member: ProjectMemberDto): Promise<void> {
     const project = this.project();
-    if (project === null || !confirm(`Remove ${member.displayName} from ${project.key}?`)) return;
+    if (project === null) return;
+    const confirmed = await this.dialogs.confirm({
+      title: `Remove ${member.displayName} from ${project.key}?`,
+      message: 'They lose access to the project, its teams and their assignments in it.',
+      confirm: 'Remove',
+      danger: true,
+    });
+    if (!confirmed) return;
     await this.run(async () => {
       await this.api.removeMember(project.id, member.userId);
       this.members.update((members) => members.filter((m) => m.id !== member.id));
@@ -553,6 +575,8 @@ export class ProjectSettingsPage implements OnInit {
   protected setProject(project: ProjectDto): void {
     this.project.set(project);
     this.ctx?.project.set(project);
+    // Name or archive state may have changed: refresh the sidebar's list.
+    void this.nav.refresh();
     // Keep the user's unsaved edits when the project is refreshed for
     // another reason (e.g. a bucket was deleted below).
     if (!this.generalForm.pristine) return;

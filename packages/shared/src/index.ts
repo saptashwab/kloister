@@ -11,3 +11,4 @@ export * from './errors.js';
 export * from './items.js';
 export * from './pagination.js';
 export * from './projects.js';
+export * from './work.js';
