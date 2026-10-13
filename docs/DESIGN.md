@@ -288,6 +288,12 @@ columns show a dashed note ("No cards for Mia Member here").
   drag handles, checkboxes, "Add a line"), Dependencies ("Blocked by" rows in warn colours), Children, Attachments
   (M5), and Activity with All / Notes / History filters and the note composer ("type @ to mention someone, paste or
   drop an image"; M5).
+- **Full-size image view** (M5): clicking or pressing Enter on an image in a description or note opens it at full
+  size in a modal viewer over `--k-scrim`, scaled to fit the window (never above its natural size), with the
+  image's alternative text as its name and a Close button. Esc, the Close button or a click on the backdrop closes
+  it and returns focus to the image. When the description or note holds several images, the left and right arrow
+  keys (and two arrow buttons) step through them. The viewer loads the same app-served image; it offers no
+  download or link to another host.
 
 ## 11. Feedback
 
