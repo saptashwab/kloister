@@ -8,12 +8,19 @@ import {
   type ProjectMemberDto,
 } from '@kloister/shared';
 import type { PrismaService } from '../../src/prisma/prisma.service.js';
-import { call, codeOf, login, resetDb, seedProject, seedUser, startApp } from './support.js';
+import {
+  call,
+  codeOf,
+  login,
+  resetDb,
+  seedBucket,
+  seedProject,
+  seedUser,
+  startApp,
+} from './support.js';
 
 // Project and membership endpoints against a real database, including the
 // HTTP permission matrix (SPEC §3.2 rows that M2 exposes, §3.4 404 rule).
-
-const BUCKET = '44444444-4444-4444-8444-444444444444';
 
 describe('projects and members (db)', () => {
   let app: NestFastifyApplication;
@@ -22,6 +29,8 @@ describe('projects and members (db)', () => {
   /** Ids of the seeded users, by name. */
   let ids: Record<'admin' | 'pm' | 'lead' | 'member' | 'viewer' | 'outsider' | 'newbie', string>;
   let projectId: string;
+  /** A bucket of the seeded project, for the BUCKETS scope. */
+  let bucketId: string;
 
   beforeAll(async () => {
     ({ app, prisma } = await startApp());
@@ -48,6 +57,7 @@ describe('projects and members (db)', () => {
         { userId: ids.viewer, role: 'VIEWER', visibility: 'OWN' },
       ])
     ).id;
+    bucketId = (await seedBucket(prisma, projectId, 'To Do')).id;
   });
 
   /**
@@ -114,7 +124,7 @@ describe('projects and members (db)', () => {
         name: 'change member role and visibility',
         method: 'PATCH',
         url: () => `${base()}/members/${ids.viewer}`,
-        body: () => ({ role: 'MEMBER', visibility: 'BUCKETS', allowedBucketIds: [BUCKET] }),
+        body: () => ({ role: 'MEMBER', visibility: 'BUCKETS', allowedBucketIds: [bucketId] }),
         expect: { pm: 200, lead: 403, member: 403, viewer: 403, outsider: 404, admin: 403 },
       },
       {
@@ -638,7 +648,7 @@ describe('projects and members (db)', () => {
       const pm = await sid('pm');
       const added = await call(app, 'POST', url(), {
         sid: pm,
-        body: { userId: ids.newbie, role: 'LEAD', visibility: 'OWN', allowedBucketIds: [BUCKET] },
+        body: { userId: ids.newbie, role: 'LEAD', visibility: 'OWN', allowedBucketIds: [bucketId] },
       });
       expect(added.statusCode).toBe(201);
       expect(added.json()).toMatchObject({ role: 'LEAD', visibility: 'ALL', allowedBucketIds: [] });
@@ -671,9 +681,9 @@ describe('projects and members (db)', () => {
       const pm = await sid('pm');
       const res = await call(app, 'PATCH', `${url()}/${ids.member}`, {
         sid: pm,
-        body: { visibility: 'BUCKETS', allowedBucketIds: [BUCKET] },
+        body: { visibility: 'BUCKETS', allowedBucketIds: [bucketId] },
       });
-      expect(res.json()).toMatchObject({ visibility: 'BUCKETS', allowedBucketIds: [BUCKET] });
+      expect(res.json()).toMatchObject({ visibility: 'BUCKETS', allowedBucketIds: [bucketId] });
       const missing = await call(app, 'PATCH', `${url()}/${ids.outsider}`, {
         sid: pm,
         body: { role: 'VIEWER' },

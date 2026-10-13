@@ -480,9 +480,14 @@ describe('work items (db)', () => {
       for (const caller of CALLERS) {
         it(`${row.name}: ${caller} → ${row.expect[caller]}`, async () => {
           await row.setup?.();
+          // Sign in first so the login's own audit row is part of the baseline.
+          sessions[caller] ??= await login(app, `${caller.toLowerCase()}@example.org`);
           const before = {
             checklist: await prisma.checklistItem.findMany({ orderBy: { id: 'asc' } }),
             dependencies: await prisma.workItemDependency.count(),
+            audit: await prisma.auditLog.count({
+              where: { action: { not: AuditAction.ADMIN_CROSS_PROJECT_ACCESS } },
+            }),
           };
           if (row.setting === true) {
             await prisma.project.update({
@@ -502,7 +507,7 @@ describe('work items (db)', () => {
               await prisma.auditLog.count({
                 where: { action: { not: AuditAction.ADMIN_CROSS_PROJECT_ACCESS } },
               }),
-            ).toBe(0);
+            ).toBe(before.audit);
             expect(await prisma.checklistItem.findMany({ orderBy: { id: 'asc' } })).toEqual(
               before.checklist,
             );
