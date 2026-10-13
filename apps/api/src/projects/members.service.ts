@@ -8,6 +8,7 @@ import {
   type ProjectMemberDto,
   ProjectRole,
   SystemRole,
+  TeamRole,
   Visibility,
 } from '@kloister/shared';
 import { AuditService } from '../audit/audit.service.js';
@@ -18,8 +19,9 @@ import { isUniqueViolation, mapTransactionConflict } from '../common/prisma-erro
 import type { Prisma, ProjectMember } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MEMBER_USER_SELECT, toMemberDto } from './project.mapper.js';
-import { type ProjectAccess, pmAssignmentOnly, projectArchived } from './project-access.service.js';
+import { type ProjectAccess, pmAssignmentOnly } from './project-access.service.js';
 import type { AddMemberDto, MemberCandidatesQueryDto, UpdateMemberDto } from './projects.dto.js';
+import { assertStillPm } from './transaction-checks.js';
 
 /** Most candidates returned by one search. */
 const CANDIDATE_LIMIT = 20;
@@ -245,6 +247,9 @@ export class MembersService {
       if (current.role === ProjectRole.PM && next.role !== ProjectRole.PM) {
         await this.assertAnotherActivePm(tx, projectId, userId);
       }
+      if (next.role === ProjectRole.VIEWER && current.role !== ProjectRole.VIEWER) {
+        await this.assertLeadsNoTeam(tx, projectId, userId);
+      }
       const member = await tx.projectMember.update({
         where: { id: current.id },
         data: next,
@@ -288,6 +293,8 @@ export class MembersService {
       if (current.role === ProjectRole.PM) {
         await this.assertAnotherActivePm(tx, projectId, userId);
       }
+      // Team memberships go with the project membership (database cascade).
+      const teamsLeft = await tx.teamMember.count({ where: { projectId, userId } });
       await tx.projectMember.delete({ where: { id: current.id } });
       await this.audit.record(
         {
@@ -296,7 +303,13 @@ export class MembersService {
           entityType: 'ProjectMember',
           entityId: current.id,
           projectId,
-          meta: { userId, email: current.user.email, role: current.role, ...asAdmin(pmOnly) },
+          meta: {
+            userId,
+            email: current.user.email,
+            role: current.role,
+            ...(teamsLeft > 0 ? { teamsLeft } : {}),
+            ...asAdmin(pmOnly),
+          },
         },
         tx,
       );
@@ -349,18 +362,7 @@ export class MembersService {
       }
       return;
     }
-    const actor = await tx.projectMember.findUnique({
-      where: { projectId_userId: { projectId, userId: actorId } },
-      include: { project: { select: { archivedAt: true } } },
-    });
-    if (actor?.role !== ProjectRole.PM) {
-      throw new ApiException(
-        HttpStatus.FORBIDDEN,
-        ErrorCode.FORBIDDEN,
-        'Your project role does not allow this',
-      );
-    }
-    if (actor.project.archivedAt !== null) throw projectArchived();
+    await assertStillPm(tx, projectId, actorId);
   }
 
   /**
@@ -384,6 +386,29 @@ export class MembersService {
       throw new ApiException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Member not found');
     }
     return member;
+  }
+
+  /**
+   * Throws 409 `CONFLICT` if the member leads a team: project Viewers cannot
+   * lead teams (SPEC §3.5), so the PM must change their team role first.
+   *
+   * @param tx Transaction client.
+   * @param projectId Project id.
+   * @param userId The member being made a Viewer.
+   */
+  private async assertLeadsNoTeam(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    userId: string,
+  ): Promise<void> {
+    const leads = await tx.teamMember.count({ where: { projectId, userId, role: TeamRole.LEAD } });
+    if (leads > 0) {
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        ErrorCode.CONFLICT,
+        'Viewers cannot lead a team; change their team roles first',
+      );
+    }
   }
 
   /**

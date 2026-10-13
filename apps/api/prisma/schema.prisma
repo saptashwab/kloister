@@ -110,6 +110,13 @@ enum Visibility {
   ALL
   BUCKETS
   OWN
+  TEAMS
+}
+
+/// Role inside an optional project team (SPEC §3.5).
+enum TeamRole {
+  LEAD
+  MEMBER
 }
 
 /// A project. Only system admins create projects (SPEC §3.1).
@@ -127,6 +134,7 @@ model Project {
   updatedAt   DateTime  @updatedAt
 
   members ProjectMember[]
+  teams   Team[]
 }
 
 /// A user's membership of a project. A project always keeps at least one
@@ -142,9 +150,46 @@ model ProjectMember {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamMemberships TeamMember[]
 
   @@unique([projectId, userId])
   @@index([userId])
+}
+
+/// An optional team inside a project (SPEC §3.5). Projects work without any.
+model Team {
+  id          String   @id @default(uuid()) @db.Uuid
+  projectId   String   @db.Uuid
+  name        String
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  members TeamMember[]
+
+  @@unique([projectId, name])
+  /// Target of TeamMember's composite key, which keeps team and membership in one project.
+  @@unique([id, projectId])
+}
+
+/// A project member's place in a team. The composite keys guarantee the user
+/// is a member of the team's own project; leaving the project removes the
+/// user from its teams.
+model TeamMember {
+  id        String   @id @default(uuid()) @db.Uuid
+  teamId    String   @db.Uuid
+  projectId String   @db.Uuid
+  userId    String   @db.Uuid
+  role      TeamRole
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  team          Team          @relation(fields: [teamId, projectId], references: [id, projectId], onDelete: Cascade)
+  projectMember ProjectMember @relation(fields: [projectId, userId], references: [projectId, userId], onDelete: Cascade)
+
+  @@unique([teamId, userId])
+  @@index([projectId, userId])
 }

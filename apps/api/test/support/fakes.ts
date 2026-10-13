@@ -37,6 +37,8 @@ export interface FakePrisma {
     delete: Fn;
     count: Fn;
   };
+  team: { findFirst: Fn; findMany: Fn; create: Fn; update: Fn; delete: Fn };
+  teamMember: { count: Fn; upsert: Fn; delete: Fn };
   $transaction: Fn;
 }
 
@@ -61,6 +63,8 @@ export function fakePrisma(): { fake: FakePrisma; prisma: PrismaService } {
       delete: fn(),
       count: fn(),
     },
+    team: { findFirst: fn(), findMany: fn(), create: fn(), update: fn(), delete: fn() },
+    teamMember: { count: fn(), upsert: fn(), delete: fn() },
     $transaction: fn(),
   };
   fake.$transaction.mockImplementation((callback: unknown) =>
@@ -68,6 +72,7 @@ export function fakePrisma(): { fake: FakePrisma; prisma: PrismaService } {
   );
   fake.session.deleteMany.mockResolvedValue({ count: 0 });
   fake.auditLog.create.mockResolvedValue({});
+  fake.teamMember.count.mockResolvedValue(0);
   return { fake, prisma: fake as unknown as PrismaService };
 }
 

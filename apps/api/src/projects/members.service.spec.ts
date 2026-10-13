@@ -168,6 +168,19 @@ describe('MembersService last-PM rule (SPEC §3.2)', () => {
     expect(fake.projectMember.update).not.toHaveBeenCalled();
   });
 
+  it('refuses making a team Lead a project Viewer (SPEC §3.5)', async () => {
+    const { service, fake } = setup('MEMBER', 1);
+    fake.teamMember.count.mockResolvedValue(1);
+    expect(await rejection(service.update(auth, access, TARGET_ID, { role: 'VIEWER' }))).toEqual({
+      status: 409,
+      code: ErrorCode.CONFLICT,
+    });
+    expect(fake.teamMember.count).toHaveBeenCalledWith({
+      where: { projectId: access.project.id, userId: TARGET_ID, role: 'LEAD' },
+    });
+    expect(fake.projectMember.update).not.toHaveBeenCalled();
+  });
+
   it('writes nothing for a no-op change', async () => {
     const { service, fake, audit } = setup('MEMBER', 1);
     await service.update(auth, access, TARGET_ID, { role: 'MEMBER', visibility: 'ALL' });

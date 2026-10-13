@@ -2,7 +2,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { CSRF_HEADER, CSRF_HEADER_VALUE, type SystemRole } from '@kloister/shared';
 import { createApp } from '../../src/app.factory.js';
 import { PasswordService } from '../../src/auth/password.service.js';
-import type { Project, User } from '../../src/generated/prisma/client.js';
+import type { Project, Team, User } from '../../src/generated/prisma/client.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 
 // Helpers for tests against a real, disposable Postgres (see jest.db.config.js).
@@ -36,7 +36,7 @@ export async function startApp(): Promise<{ app: NestFastifyApplication; prisma:
  */
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "Session", "AppSetting", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "AuditLog", "Session", "AppSetting", "TeamMember", "Team", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
   );
 }
 
@@ -108,6 +108,32 @@ export async function seedProject(
   });
 }
 
+/**
+ * Inserts a team with members directly. Members must already be project
+ * members (the database enforces it).
+ *
+ * @param prisma Database client.
+ * @param projectId Project id.
+ * @param name Team name.
+ * @param members Team memberships to create.
+ * @returns The created team.
+ */
+export async function seedTeam(
+  prisma: PrismaService,
+  projectId: string,
+  name: string,
+  members: { userId: string; role: 'LEAD' | 'MEMBER' }[] = [],
+): Promise<Team> {
+  return prisma.team.create({
+    data: {
+      projectId,
+      name,
+      // Prisma fills teamId and projectId from the parent team.
+      members: { create: members },
+    },
+  });
+}
+
 /** Minimal response view used by the helpers. */
 export interface Res {
   statusCode: number;
@@ -129,7 +155,7 @@ export interface Res {
  */
 export async function call(
   app: NestFastifyApplication,
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   url: string,
   options: { sid?: string; body?: object } = {},
 ): Promise<Res> {

@@ -23,10 +23,29 @@ export const Visibility = {
   BUCKETS: 'BUCKETS',
   /** Items assigned to or created by the user. */
   OWN: 'OWN',
+  /** Items of the teams the user belongs to (SPEC §3.5). */
+  TEAMS: 'TEAMS',
 } as const;
 
 /** One of the {@link Visibility} values. */
 export type Visibility = (typeof Visibility)[keyof typeof Visibility];
+
+/** Role inside an optional project team (SPEC §3.5). */
+export const TeamRole = {
+  /** Has Lead rights on the team's items. */
+  LEAD: 'LEAD',
+  /** Belongs to the team; rights come from the project role. */
+  MEMBER: 'MEMBER',
+} as const;
+
+/** One of the {@link TeamRole} values. */
+export type TeamRole = (typeof TeamRole)[keyof typeof TeamRole];
+
+/** Longest team name accepted. */
+export const TEAM_NAME_MAX = 100;
+
+/** Longest team description accepted. */
+export const TEAM_DESCRIPTION_MAX = 1000;
 
 /**
  * Permission names, one per row of the SPEC §3.2 table. Rows with a
@@ -198,6 +217,8 @@ export interface ProjectDto {
   myRole: ProjectRole | null;
   /** The caller's effective visibility scope. */
   myVisibility: Visibility;
+  /** The caller's teams in this project and their role in each. */
+  myTeams: { teamId: string; role: TeamRole }[];
   /** What the caller may do here; the UI uses this only to hide controls. */
   myPermissions: ProjectPermission[];
   /** ISO timestamp of creation. */
@@ -271,6 +292,56 @@ export interface UpdateMemberRequest {
   visibility?: Visibility;
   /** New bucket list for `BUCKETS` scope. */
   allowedBucketIds?: string[];
+}
+
+/** A team member as returned inside {@link TeamDto}. */
+export interface TeamMemberDto {
+  /** The member's user id. */
+  userId: string;
+  /** The member's email. */
+  email: string;
+  /** The member's display name. */
+  displayName: string;
+  /** False when the account is deactivated. */
+  isActive: boolean;
+  /** Role in this team. */
+  role: TeamRole;
+}
+
+/** A team as returned by `GET /projects/:id/teams`. */
+export interface TeamDto {
+  /** Team id (uuid). */
+  id: string;
+  /** Name, unique within the project. */
+  name: string;
+  /** Plain-text description; may be empty. */
+  description: string;
+  /** Members ordered by name. */
+  members: TeamMemberDto[];
+  /** ISO timestamp of creation. */
+  createdAt: string;
+}
+
+/** Body of `POST /projects/:id/teams` (PM only). */
+export interface CreateTeamRequest {
+  /** Name, unique within the project. */
+  name: string;
+  /** Optional description. */
+  description?: string;
+}
+
+/** Body of `PATCH /projects/:id/teams/:teamId` (PM only). */
+export interface UpdateTeamRequest {
+  /** New name. */
+  name?: string;
+  /** New description. */
+  description?: string;
+}
+
+/** Body of `PUT /projects/:id/teams/:teamId/members/:userId` (PM only). */
+export interface SetTeamMemberRequest {
+  /** Role in the team. Project Viewers may only be `MEMBER`. */
+  role: TeamRole;
 }
 
 /** A user that can be added to a project, from `GET /projects/:id/member-candidates`. */

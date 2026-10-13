@@ -79,7 +79,16 @@ export class ProjectsService {
     };
     const rows = await this.prisma.project.findMany({
       where,
-      include: { members: { where: { userId }, select: { role: true, visibility: true } } },
+      include: {
+        members: {
+          where: { userId },
+          select: {
+            role: true,
+            visibility: true,
+            teamMemberships: { select: { teamId: true, role: true } },
+          },
+        },
+      },
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
       ...pageArgs(query),
     });

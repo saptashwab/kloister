@@ -27,6 +27,7 @@ describe('ProjectSettingsPage', () => {
       settings: { membersCanAssignOthers: false },
       myRole: null,
       myVisibility: 'ALL',
+      myTeams: [],
       myPermissions: permissions,
       createdAt: '2026-01-01T00:00:00.000Z',
     };
@@ -35,6 +36,7 @@ describe('ProjectSettingsPage', () => {
       members: vi
         .fn<(id: string) => Promise<Page<ProjectMemberDto>>>()
         .mockResolvedValue({ items: [member], nextCursor: null }),
+      teams: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     };
     await TestBed.configureTestingModule({
       imports: [ProjectSettingsPage],
@@ -49,7 +51,7 @@ describe('ProjectSettingsPage', () => {
   it('shows a read-only view to members without management rights', async () => {
     const { root, api } = await render(['VIEW_ITEMS']);
     expect(api.get).toHaveBeenCalledWith('KLO');
-    expect(api.members).toHaveBeenCalledWith('p1');
+    expect(api.members).toHaveBeenCalledWith('p1', undefined);
     expect(root.textContent).toContain('Ann');
     expect(root.textContent).toContain('Viewer');
     expect(root.textContent).toContain('Own items');

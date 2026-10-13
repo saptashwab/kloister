@@ -25,10 +25,11 @@ import { ROLE_LABELS, VISIBILITY_LABELS } from '../../core/labels';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { SessionStore } from '../../core/session.store';
 import { required } from '../../core/validators';
+import { ProjectTeamsComponent } from './project-teams';
 
 /**
- * Project settings (SPEC §6): general settings and archiving, and members
- * with their role and visibility.
+ * Project settings (SPEC §6): general settings and archiving, members with
+ * their role and visibility, and optional teams.
  *
  * Every member can open it read-only; editing controls appear only when
  * `myPermissions` includes `MANAGE_PROJECT` or `MANAGE_MEMBERS` (PM). Admins
@@ -48,6 +49,7 @@ import { required } from '../../core/validators';
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    ProjectTeamsComponent,
   ],
   template: `
     @if (project(); as project) {
@@ -191,6 +193,9 @@ import { required } from '../../core/validators';
                           <mat-option [value]="visibility.OWN">{{
                             visibilityLabels.OWN
                           }}</mat-option>
+                          <mat-option [value]="visibility.TEAMS">{{
+                            visibilityLabels.TEAMS
+                          }}</mat-option>
                           @if (m.visibility === visibility.BUCKETS) {
                             <mat-option [value]="visibility.BUCKETS" disabled>{{
                               visibilityLabels.BUCKETS
@@ -236,11 +241,14 @@ import { required } from '../../core/validators';
               }
             </tbody>
           </table>
-          @if (membersCursor()) {
-            <button mat-button type="button" (click)="loadMoreMembers()">Load more</button>
-          }
         </mat-card-content>
       </mat-card>
+
+      <app-project-teams
+        [projectId]="project.id"
+        [members]="members()"
+        [canEdit]="canEditMembers()"
+      />
     }
   `,
 })
@@ -267,8 +275,6 @@ export class ProjectSettingsPage implements OnInit {
   protected readonly project = signal<ProjectDto | null>(null);
   /** Loaded members. */
   protected readonly members = signal<ProjectMemberDto[]>([]);
-  /** Cursor for the next page of members, or null. */
-  protected readonly membersCursor = signal<string | null>(null);
   /** Users found by the add-member search. */
   protected readonly candidates = signal<MemberCandidateDto[]>([]);
   /** User chosen to add. */
@@ -357,22 +363,6 @@ export class ProjectSettingsPage implements OnInit {
   }
 
   /**
-   * Appends the next page of members.
-   *
-   * @returns Resolves once loaded.
-   */
-  protected async loadMoreMembers(): Promise<void> {
-    const project = this.project();
-    const cursor = this.membersCursor();
-    if (project === null || cursor === null) return;
-    await this.run(async () => {
-      const page = await this.api.members(project.id, cursor);
-      this.members.update((members) => [...members, ...page.items]);
-      this.membersCursor.set(page.nextCursor);
-    });
-  }
-
-  /**
    * Searches users who can be added.
    *
    * @param q Search text.
@@ -456,15 +446,21 @@ export class ProjectSettingsPage implements OnInit {
   }
 
   /**
-   * Replaces the member list with its first page.
+   * Replaces the member list with every member, following pagination: the
+   * teams section needs all of them to choose from.
    *
    * @param projectId Project id.
    * @returns Resolves once loaded.
    */
   private async loadMembers(projectId: string): Promise<void> {
-    const page = await this.api.members(projectId);
-    this.members.set(page.items);
-    this.membersCursor.set(page.nextCursor);
+    const all: ProjectMemberDto[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.api.members(projectId, cursor);
+      all.push(...page.items);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor !== undefined);
+    this.members.set(all);
   }
 
   /**

@@ -8,9 +8,10 @@ import {
   PROJECT_KEY_PATTERN,
   type ProjectPermission,
   ProjectPermission as P,
-  type ProjectRole,
+  ProjectRole,
   type ProjectSettings,
   SystemRole,
+  TeamRole,
   Visibility,
 } from '@kloister/shared';
 import { isUUID } from 'class-validator';
@@ -20,6 +21,14 @@ import { ApiException } from '../common/api-exception.js';
 import type { Project } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { parseProjectSettings } from './project-settings.js';
+
+/** The caller's place in one team of the project. */
+export interface TeamPlace {
+  /** Team id. */
+  teamId: string;
+  /** The caller's role in that team. */
+  role: TeamRole;
+}
 
 /**
  * The caller's resolved access to one project. Built once per request by
@@ -45,6 +54,8 @@ export interface ProjectAccess {
   visibility: Visibility;
   /** Visible buckets when {@link visibility} is `BUCKETS`; empty otherwise. */
   allowedBucketIds: readonly string[];
+  /** The caller's teams in this project (SPEC §3.5); empty for non-members. */
+  teams: readonly TeamPlace[];
   /** Granted permissions (SPEC §3.2, plus `ASSIGN_PMS` for admins, SPEC §3.1). */
   permissions: ReadonlySet<ProjectPermission>;
 }
@@ -61,19 +72,28 @@ export interface ItemFacts {
   assigneeIds: readonly string[];
   /** Bucket id; null for Epics and Features outside the board. */
   bucketId: string | null;
+  /** Team id; null for items outside any team. */
+  teamId: string | null;
   /** True when the item has child items. */
   hasChildren: boolean;
 }
 
+/** One visibility-scope condition on work items. */
+export type ItemScopeCondition =
+  | { bucketId: { in: string[] } }
+  | { OR: [{ createdById: string }, { assignees: { some: { userId: string } } }] }
+  | { teamId: { in: string[] } };
+
 /**
  * Prisma-compatible `where` fragment restricting work items to the caller's
- * visibility scope (SPEC §3.3). Combine it with `AND` into every item query.
- * M3 narrows this to `Prisma.WorkItemWhereInput` once the table exists.
+ * visibility scope (SPEC §3.3), widened by the items of teams they lead
+ * (SPEC §3.5). Combine it with `AND` into every item query. M3 narrows this
+ * to `Prisma.WorkItemWhereInput` once the table exists.
  */
 export type ItemScopeFilter =
   | Record<string, never>
-  | { bucketId: { in: string[] } }
-  | { OR: [{ createdById: string }, { assignees: { some: { userId: string } } }] };
+  | ItemScopeCondition
+  | { OR: [ItemScopeCondition, { teamId: { in: string[] } }] };
 
 /** Where a project reference from the URL points. */
 type ProjectLookup = { id: string } | { key: string };
@@ -81,14 +101,15 @@ type ProjectLookup = { id: string } | { key: string };
 /**
  * The single place where project authorization is decided (SPEC §3.4).
  *
- * - {@link resolve} loads the caller's membership. Non-members get 404 so
- *   project existence is not revealed; system admins who are not members get
- *   read-only access plus PM assignment, and every such request is audited
- *   (SPEC §3.1).
+ * - {@link resolve} loads the caller's membership and teams. Non-members get
+ *   404 so project existence is not revealed; system admins who are not
+ *   members get read-only access plus PM assignment, and every such request
+ *   is audited (SPEC §3.1).
  * - {@link has} answers the role table in SPEC §3.2.
- * - The item checks combine the role table with the visibility scope and
- *   "own" conditions, and {@link itemScopeFilter} builds the scope into
- *   queries. Items outside the scope must be answered with 404, not 403.
+ * - The item checks combine the role table with the visibility scope, the
+ *   "own" conditions and team leadership (SPEC §3.5), and
+ *   {@link itemScopeFilter} builds the same visibility into queries. Items
+ *   outside it must be answered with 404, not 403.
  *
  * Admins who are members are bound by their membership like anyone else,
  * except that every admin may assign PMs (`ASSIGN_PMS`).
@@ -125,7 +146,12 @@ export class ProjectAccessService {
     const userId = auth.user.id;
     const project = await this.prisma.project.findUnique({
       where: lookup,
-      include: { members: { where: { userId } } },
+      include: {
+        members: {
+          where: { userId },
+          include: { teamMemberships: { select: { teamId: true, role: true } } },
+        },
+      },
     });
     if (project === null) throw projectNotFound();
 
@@ -144,6 +170,7 @@ export class ProjectAccessService {
         visibility: scoped ? member.visibility : Visibility.ALL,
         allowedBucketIds:
           scoped && member.visibility === Visibility.BUCKETS ? member.allowedBucketIds : [],
+        teams: member.teamMemberships,
         permissions: new Set(permissionsFor(member.role, settings, isSystemAdmin)),
       };
     }
@@ -165,13 +192,15 @@ export class ProjectAccessService {
       isSystemAdmin,
       visibility: Visibility.ALL,
       allowedBucketIds: [],
+      teams: [],
       permissions: new Set(permissionsFor(null, settings, true)),
     };
   }
 
   /**
    * Reports whether the caller's role grants a permission (SPEC §3.2).
-   * Conditional rows (own items, no children) need the item checks below.
+   * Conditional rows (own items, no children, team items) need the item
+   * checks below.
    *
    * @param access The caller's access.
    * @param permission The permission.
@@ -207,28 +236,23 @@ export class ProjectAccessService {
   }
 
   /**
-   * Builds the visibility filter for work item queries (SPEC §3.3).
+   * Builds the visibility filter for work item queries (SPEC §3.3), widened
+   * by the items of teams the caller leads (SPEC §3.5).
    *
    * @param access The caller's access.
-   * @returns An empty filter for `ALL`, a bucket filter for `BUCKETS`, or an
-   *   assigned-or-created filter for `OWN`.
+   * @returns An empty filter for `ALL`; otherwise the scope's condition,
+   *   OR-ed with the led teams' items when there are any.
    */
   itemScopeFilter(access: ProjectAccess): ItemScopeFilter {
-    switch (access.visibility) {
-      case Visibility.ALL:
-        return {};
-      case Visibility.BUCKETS:
-        return { bucketId: { in: [...access.allowedBucketIds] } };
-      case Visibility.OWN:
-        return {
-          OR: [{ createdById: access.userId }, { assignees: { some: { userId: access.userId } } }],
-        };
-    }
+    const condition = this.scopeCondition(access);
+    if (condition === null) return {};
+    const led = ledTeamIds(access);
+    return led.length === 0 ? condition : { OR: [condition, { teamId: { in: led } }] };
   }
 
   /**
-   * Reports whether an item is inside the caller's visibility scope. Items
-   * outside it must be answered with 404 (SPEC §3.4).
+   * Reports whether an item is visible to the caller: inside their scope, or
+   * in a team they lead. Items outside must be answered with 404 (SPEC §3.4).
    *
    * @param access The caller's access.
    * @param item The item.
@@ -236,14 +260,7 @@ export class ProjectAccessService {
    */
   canViewItem(access: ProjectAccess, item: ItemFacts): boolean {
     if (!this.has(access, P.VIEW_ITEMS)) return false;
-    switch (access.visibility) {
-      case Visibility.ALL:
-        return true;
-      case Visibility.BUCKETS:
-        return item.bucketId !== null && access.allowedBucketIds.includes(item.bucketId);
-      case Visibility.OWN:
-        return this.isOwn(access, item);
-    }
+    return this.inScope(access, item) || leadsItemTeam(access, item);
   }
 
   /**
@@ -251,15 +268,15 @@ export class ProjectAccessService {
    * only (SPEC §3.3), i.e. whether the caller's scope is restricted.
    *
    * @param access The caller's access.
-   * @returns True under `BUCKETS` and `OWN` scope.
+   * @returns True under `BUCKETS`, `OWN` and `TEAMS` scope.
    */
   ancestorsAreTitleOnly(access: ProjectAccess): boolean {
     return access.visibility !== Visibility.ALL;
   }
 
   /**
-   * Edit rule: any visible item with `EDIT_ANY_ITEM`, or own items with
-   * `EDIT_OWN_ITEMS`.
+   * Edit rule: any visible item with `EDIT_ANY_ITEM`, own items with
+   * `EDIT_OWN_ITEMS`, or items of a team the caller leads.
    *
    * @param access The caller's access.
    * @param item The item.
@@ -268,13 +285,14 @@ export class ProjectAccessService {
   canEditItem(access: ProjectAccess, item: ItemFacts): boolean {
     return (
       this.canViewItem(access, item) &&
-      this.anyOrOwn(access, item, P.EDIT_ANY_ITEM, P.EDIT_OWN_ITEMS)
+      (this.anyOrOwn(access, item, P.EDIT_ANY_ITEM, P.EDIT_OWN_ITEMS) ||
+        leadsItemTeam(access, item))
     );
   }
 
   /**
-   * Move rule: any visible card with `MOVE_ANY_ITEM`, or own/assigned cards
-   * with `MOVE_OWN_ITEMS`.
+   * Move rule: any visible card with `MOVE_ANY_ITEM`, own/assigned cards
+   * with `MOVE_OWN_ITEMS`, or cards of a team the caller leads.
    *
    * @param access The caller's access.
    * @param item The item.
@@ -283,15 +301,18 @@ export class ProjectAccessService {
   canMoveItem(access: ProjectAccess, item: ItemFacts): boolean {
     return (
       this.canViewItem(access, item) &&
-      this.anyOrOwn(access, item, P.MOVE_ANY_ITEM, P.MOVE_OWN_ITEMS)
+      (this.anyOrOwn(access, item, P.MOVE_ANY_ITEM, P.MOVE_OWN_ITEMS) ||
+        leadsItemTeam(access, item))
     );
   }
 
   /**
-   * Delete rule: PM and Lead may delete any visible item, with or without
-   * cascade; Members only items they created that have no children, and
-   * never with cascade (SPEC §3.2, §4.1). Rejecting a non-cascade delete of
-   * an item with children is a separate validation rule (M3).
+   * Delete rule (SPEC §3.2, §3.5, §4.1): project PMs and Leads may delete any
+   * visible item, with or without cascade; team Leads may delete their
+   * team's items without cascade (a subtree may span other teams); Members
+   * only items they created that have no children, never with cascade.
+   * Rejecting a non-cascade delete of an item with children is a separate
+   * validation rule (M3).
    *
    * @param access The caller's access.
    * @param item The item.
@@ -301,9 +322,10 @@ export class ProjectAccessService {
   canDeleteItem(access: ProjectAccess, item: ItemFacts, cascade: boolean): boolean {
     if (!this.canViewItem(access, item)) return false;
     if (this.has(access, P.DELETE_ANY_ITEM)) return true;
+    if (cascade) return false;
+    if (leadsItemTeam(access, item)) return true;
     return (
       this.has(access, P.DELETE_OWN_ITEMS) &&
-      !cascade &&
       !item.hasChildren &&
       item.createdById === access.userId
     );
@@ -323,15 +345,66 @@ export class ProjectAccessService {
   /**
    * Assignment rule: assigning only yourself needs no extra permission;
    * assigning anyone else needs `ASSIGN_OTHERS` (Members get it only when
-   * the project setting is on). The caller must separately be allowed to
-   * create or edit the item.
+   * the project setting is on), or leading the item's team. The caller must
+   * separately be allowed to create or edit the item.
    *
    * @param access The caller's access.
    * @param assigneeIds Users the caller is adding as assignees.
+   * @param item The item's team, when the item has or gets one.
+   * @param item.teamId Team id, or null.
    * @returns True if the assignment is allowed.
    */
-  canAssign(access: ProjectAccess, assigneeIds: readonly string[]): boolean {
-    return assigneeIds.every((id) => id === access.userId) || this.has(access, P.ASSIGN_OTHERS);
+  canAssign(
+    access: ProjectAccess,
+    assigneeIds: readonly string[],
+    item: { teamId: string | null } = { teamId: null },
+  ): boolean {
+    return (
+      assigneeIds.every((id) => id === access.userId) ||
+      this.has(access, P.ASSIGN_OTHERS) ||
+      leadsItemTeam(access, item)
+    );
+  }
+
+  /**
+   * The condition of the caller's visibility scope, or null for `ALL`.
+   *
+   * @param access The caller's access.
+   * @returns The condition.
+   */
+  private scopeCondition(access: ProjectAccess): ItemScopeCondition | null {
+    switch (access.visibility) {
+      case Visibility.ALL:
+        return null;
+      case Visibility.BUCKETS:
+        return { bucketId: { in: [...access.allowedBucketIds] } };
+      case Visibility.OWN:
+        return {
+          OR: [{ createdById: access.userId }, { assignees: { some: { userId: access.userId } } }],
+        };
+      case Visibility.TEAMS:
+        return { teamId: { in: access.teams.map((t) => t.teamId) } };
+    }
+  }
+
+  /**
+   * Reports whether an item is inside the caller's visibility scope.
+   *
+   * @param access The caller's access.
+   * @param item The item.
+   * @returns True if the scope covers the item.
+   */
+  private inScope(access: ProjectAccess, item: ItemFacts): boolean {
+    switch (access.visibility) {
+      case Visibility.ALL:
+        return true;
+      case Visibility.BUCKETS:
+        return item.bucketId !== null && access.allowedBucketIds.includes(item.bucketId);
+      case Visibility.OWN:
+        return this.isOwn(access, item);
+      case Visibility.TEAMS:
+        return item.teamId !== null && access.teams.some((t) => t.teamId === item.teamId);
+    }
   }
 
   /**
@@ -362,6 +435,31 @@ export class ProjectAccessService {
   ): boolean {
     return this.has(access, any) || (this.has(access, own) && this.isOwn(access, item));
   }
+}
+
+/**
+ * Ids of the teams whose items the caller has Lead rights on (SPEC §3.5).
+ * Viewers never do, even if a stored row says otherwise, and non-members
+ * have no teams.
+ *
+ * @param access The caller's access.
+ * @returns Team ids.
+ */
+export function ledTeamIds(access: ProjectAccess): string[] {
+  if (access.role === null || access.role === ProjectRole.VIEWER) return [];
+  return access.teams.filter((t) => t.role === TeamRole.LEAD).map((t) => t.teamId);
+}
+
+/**
+ * Reports whether the caller leads the item's team.
+ *
+ * @param access The caller's access.
+ * @param item The item's team.
+ * @param item.teamId Team id, or null.
+ * @returns True if the item has a team the caller leads.
+ */
+function leadsItemTeam(access: ProjectAccess, item: { teamId: string | null }): boolean {
+  return item.teamId !== null && ledTeamIds(access).includes(item.teamId);
 }
 
 /**

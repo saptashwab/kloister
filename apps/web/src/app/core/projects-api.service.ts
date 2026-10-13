@@ -3,12 +3,16 @@ import { inject, Injectable } from '@angular/core';
 import type {
   AddMemberRequest,
   CreateProjectRequest,
+  CreateTeamRequest,
   MemberCandidateDto,
   Page,
   ProjectDto,
   ProjectMemberDto,
+  SetTeamMemberRequest,
+  TeamDto,
   UpdateMemberRequest,
   UpdateProjectRequest,
+  UpdateTeamRequest,
 } from '@kloister/shared';
 import { firstValueFrom } from 'rxjs';
 import { apiUrl } from './api';
@@ -157,5 +161,87 @@ export class ProjectsApiService {
    */
   removeMember(id: string, userId: string): Promise<void> {
     return firstValueFrom(this.http.delete<void>(apiUrl(`projects/${id}/members/${userId}`)));
+  }
+
+  /**
+   * Lists the project's teams with their members.
+   *
+   * @param id Project id.
+   * @param cursor Cursor from the previous page.
+   * @returns One page of teams.
+   */
+  teams(id: string, cursor?: string): Promise<Page<TeamDto>> {
+    const params = cursor ? new HttpParams().set('cursor', cursor) : new HttpParams();
+    return firstValueFrom(this.http.get<Page<TeamDto>>(apiUrl(`projects/${id}/teams`), { params }));
+  }
+
+  /**
+   * Creates a team (PM only).
+   *
+   * @param id Project id.
+   * @param request Name and description.
+   * @returns The new team.
+   */
+  createTeam(id: string, request: CreateTeamRequest): Promise<TeamDto> {
+    return firstValueFrom(this.http.post<TeamDto>(apiUrl(`projects/${id}/teams`), request));
+  }
+
+  /**
+   * Renames a team (PM only).
+   *
+   * @param id Project id.
+   * @param teamId Team id.
+   * @param request Fields to change.
+   * @returns The updated team.
+   */
+  updateTeam(id: string, teamId: string, request: UpdateTeamRequest): Promise<TeamDto> {
+    return firstValueFrom(
+      this.http.patch<TeamDto>(apiUrl(`projects/${id}/teams/${teamId}`), request),
+    );
+  }
+
+  /**
+   * Deletes a team (PM only).
+   *
+   * @param id Project id.
+   * @param teamId Team id.
+   * @returns Resolves once deleted.
+   */
+  deleteTeam(id: string, teamId: string): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(apiUrl(`projects/${id}/teams/${teamId}`)));
+  }
+
+  /**
+   * Adds a project member to a team or changes their team role (PM only).
+   *
+   * @param id Project id.
+   * @param teamId Team id.
+   * @param userId User id.
+   * @param request Team role.
+   * @returns The updated team.
+   */
+  setTeamMember(
+    id: string,
+    teamId: string,
+    userId: string,
+    request: SetTeamMemberRequest,
+  ): Promise<TeamDto> {
+    return firstValueFrom(
+      this.http.put<TeamDto>(apiUrl(`projects/${id}/teams/${teamId}/members/${userId}`), request),
+    );
+  }
+
+  /**
+   * Removes a user from a team (PM only).
+   *
+   * @param id Project id.
+   * @param teamId Team id.
+   * @param userId User id.
+   * @returns The updated team.
+   */
+  removeTeamMember(id: string, teamId: string, userId: string): Promise<TeamDto> {
+    return firstValueFrom(
+      this.http.delete<TeamDto>(apiUrl(`projects/${id}/teams/${teamId}/members/${userId}`)),
+    );
   }
 }

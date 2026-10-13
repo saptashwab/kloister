@@ -16,6 +16,7 @@ applied after installation through admin theme settings.
 - Local accounts (email + password), created by admins
 - System roles: Admin, User
 - Per-project roles: Project Manager, Lead, Member, Viewer, plus a per-member visibility scope
+- Optional teams inside a project, with team Leads and Members
 - Work items: Epic → Feature → User Story → Task, plus Bug; any level optional
 - Kanban board with buckets, status, labels, assignees, due dates, checklists, notes, attachments
 - Sprints, backlog/hierarchy view
@@ -93,8 +94,9 @@ A project must always have at least one PM; removing or demoting the last PM is 
 - `ALL`: every item in the project
 - `BUCKETS`: items in the buckets the PM selected
 - `OWN`: items assigned to or created by the user
+- `TEAMS`: items of the teams the user belongs to (3.5)
 
-With `BUCKETS` and `OWN`, the ancestors (Story/Feature/Epic) of visible items are shown
+With `BUCKETS`, `OWN` and `TEAMS`, the ancestors (Story/Feature/Epic) of visible items are shown
 **as read-only titles only**, so users keep context.
 
 ### 3.4 Enforcement rules
@@ -102,7 +104,19 @@ With `BUCKETS` and `OWN`, the ancestors (Story/Feature/Epic) of visible items ar
   `ProjectAccessService` that builds the visibility filter into every query.
   The frontend only hides controls.
 - Items outside a user's scope return **404**, not 403, so their existence is not revealed.
-- Every permission row in 3.2 and every scope in 3.3 must have a backend test.
+- Every permission row in 3.2, every scope in 3.3 and every team rule in 3.5 must have a backend test.
+
+### 3.5 Teams (optional)
+Teams let a PM plan a project in more detail; a project works fully without any.
+- PMs create, rename and delete teams and manage their members. Nobody else does, including team Leads.
+- Every team member must be a member of the project; leaving the project removes the user from its teams.
+  A user may belong to several teams in a project, with a role per team: `LEAD` or `MEMBER`.
+  A team may have several Leads, and a user may lead one team and be a member of another.
+- A project Viewer may be a team Member but not a team Lead.
+- A work item belongs to at most one team (optional). Parent/child links and dependencies may cross teams.
+- The project role is the baseline. A team Lead additionally has the Lead rights of 3.2 (view, edit, move,
+  assign, delete) on the items of the teams they lead, whatever their visibility scope. Cascading deletes
+  stay with project PMs and Leads.
 
 ---
 
@@ -115,15 +129,18 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Session**: userId, tokenHash, expiresAt, lastSeenAt, userAgent, ip
 - **Project**: key (2–6 uppercase chars, unique, used in item numbers like `KLO-42`), name, description,
   archivedAt, settings (json: membersCanAssignOthers, statusToBucket rules, ado settings)
-- **ProjectMember**: projectId, userId, role (`PM|LEAD|MEMBER|VIEWER`), visibility (`ALL|BUCKETS|OWN`),
+- **ProjectMember**: projectId, userId, role (`PM|LEAD|MEMBER|VIEWER`), visibility (`ALL|BUCKETS|OWN|TEAMS`),
   allowedBucketIds (uuid[]); unique (projectId, userId)
 - **Bucket**: projectId, name, position, onEnterMode (`NONE|SET|SET_IF_NOT_STARTED`), onEnterStatus (nullable)
 - **Sprint**: projectId, name, startDate, endDate, state (`PLANNED|ACTIVE|CLOSED`), adoIterationPath (nullable)
 - **WorkItem**: projectId, number (per-project sequence), type (`EPIC|FEATURE|STORY|TASK|BUG`), parentId,
   title, description (sanitized HTML), status (`NOT_STARTED|IN_PROGRESS|BLOCKED|DONE`), priority (1–4),
-  bucketId (required for STORY/TASK/BUG; optional for EPIC/FEATURE), sprintId, startDate, dueDate,
-  position (fractional index for ordering), createdById, completedAt
+  bucketId (required for STORY/TASK/BUG; optional for EPIC/FEATURE), sprintId, teamId (nullable), startDate,
+  dueDate, position (fractional index for ordering), createdById, completedAt
 - **WorkItemAssignee**: workItemId, userId (many-to-many)
+- **WorkItemDependency**: blockedItemId, blockingItemId (same project, may cross teams; no cycles)
+- **Team**: projectId, name (unique per project), description
+- **TeamMember**: teamId, userId, role (`LEAD|MEMBER`); unique (teamId, userId); the user must be a project member
 - **Label**: projectId, name, colour; **WorkItemLabel**: join table
 - **ChecklistItem**: workItemId, text, done, position
 - **Note**: workItemId, authorId, body (sanitized HTML), editedAt
@@ -189,7 +206,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Backlog / hierarchy view**: tree of Epic → Feature → Story → Task with expand/collapse,
   multi-select (also used to choose what to export), bulk set sprint/bucket/assignee
 - **Sprints**: create and edit, set active, sprint board (the board filtered to one sprint), close sprint with an option to move unfinished items
-- **Project settings** (PM): general, members (role and visibility per member), buckets (with rules),
+- **Project settings** (PM): general, members (role and visibility per member), teams (optional), buckets (with rules),
   labels, statusToBucket map, ADO export settings
 - **Notifications**: bell with unread count, polled every 60s. Notification types:
   assigned to you, mentioned, due tomorrow, overdue, status change on items you created.
@@ -271,7 +288,7 @@ and the export preview lists this as a warning.
 - An OpenAPI doc is generated at build time into `docs/` (not served in production).
 
 Main groups: `auth`, `me`, `admin/users`, `admin/settings`, `admin/audit`, `admin/backups`,
-`projects`, `projects/:id/members`, `buckets`, `labels`, `sprints`, `items` (+ `/move`, `/checklist`,
+`projects`, `projects/:id/members`, `projects/:id/teams`, `buckets`, `labels`, `sprints`, `items` (+ `/move`, `/checklist`,
 `/notes`, `/attachments`, `/children`), `notifications`, `projects/:id/export/ado` (+ `/preview`).
 
 ---
@@ -362,8 +379,8 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 |---|---|
 | M0 | Repo scaffold, workspaces, lint/format, CI |
 | M1 | Auth, users, sessions, admin bootstrap command, audit log |
-| M2 | Projects, members, roles, visibility enforcement plus the full permission test matrix |
-| M3 | Work items, hierarchy, buckets and rules, labels, checklists, sprints (API) |
+| M2 | Projects, members, roles, optional teams, visibility enforcement plus the full permission test matrix |
+| M3 | Work items, hierarchy, dependencies, team assignment, buckets and rules, labels, checklists, sprints (API) |
 | M4 | Board, item drawer, backlog tree, sprint views (UI) |
 | M5 | Notes, mentions, attachments, notifications |
 | M6 | Theming and branding, admin settings, backups, log retention, disk usage |

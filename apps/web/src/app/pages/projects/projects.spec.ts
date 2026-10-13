@@ -15,6 +15,7 @@ const project: ProjectDto = {
   settings: { membersCanAssignOthers: false },
   myRole: 'LEAD',
   myVisibility: 'ALL',
+  myTeams: [],
   myPermissions: ['VIEW_ITEMS'],
   createdAt: '2026-01-01T00:00:00.000Z',
 };

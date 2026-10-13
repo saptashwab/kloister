@@ -7,7 +7,7 @@ import {
   Visibility,
 } from '@kloister/shared';
 import type { Project, ProjectMember, User } from '../generated/prisma/client.js';
-import type { ProjectAccess } from './project-access.service.js';
+import type { ProjectAccess, TeamPlace } from './project-access.service.js';
 import { parseProjectSettings } from './project-settings.js';
 
 /**
@@ -18,7 +18,7 @@ import { parseProjectSettings } from './project-settings.js';
  * @returns The DTO.
  */
 export function toProjectDto(access: ProjectAccess, project: Project = access.project): ProjectDto {
-  return projectDto(project, access.role, access.visibility, access.isSystemAdmin);
+  return projectDto(project, access.role, access.visibility, access.isSystemAdmin, access.teams);
 }
 
 /**
@@ -26,20 +26,21 @@ export function toProjectDto(access: ProjectAccess, project: Project = access.pr
  * the project list does without resolving full access per project.
  *
  * @param project The project row.
- * @param membership The caller's membership, or null for an admin listing
- *   projects they are not a member of.
+ * @param membership The caller's membership with their teams, or null for an
+ *   admin listing projects they are not a member of.
  * @param isSystemAdmin Whether the caller is a system admin.
  * @returns The DTO.
  */
 export function toProjectListDto(
   project: Project,
-  membership: Pick<ProjectMember, 'role' | 'visibility'> | null,
+  membership:
+    (Pick<ProjectMember, 'role' | 'visibility'> & { teamMemberships?: TeamPlace[] }) | null,
   isSystemAdmin: boolean,
 ): ProjectDto {
   const role = membership?.role ?? null;
   const visibility =
     membership !== null && isScopedRole(role) ? membership.visibility : Visibility.ALL;
-  return projectDto(project, role, visibility, isSystemAdmin);
+  return projectDto(project, role, visibility, isSystemAdmin, membership?.teamMemberships ?? []);
 }
 
 /**
@@ -49,6 +50,7 @@ export function toProjectListDto(
  * @param role The caller's role, or null.
  * @param visibility The caller's effective visibility.
  * @param isSystemAdmin Whether the caller is a system admin.
+ * @param teams The caller's teams in the project.
  * @returns The DTO.
  */
 function projectDto(
@@ -56,6 +58,7 @@ function projectDto(
   role: ProjectRole | null,
   visibility: Visibility,
   isSystemAdmin: boolean,
+  teams: readonly TeamPlace[],
 ): ProjectDto {
   const settings = parseProjectSettings(project.settings);
   return {
@@ -67,6 +70,7 @@ function projectDto(
     settings,
     myRole: role,
     myVisibility: visibility,
+    myTeams: teams.map((t) => ({ teamId: t.teamId, role: t.role })),
     myPermissions: permissionsFor(role, settings, isSystemAdmin),
     createdAt: project.createdAt.toISOString(),
   };

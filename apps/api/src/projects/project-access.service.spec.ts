@@ -47,10 +47,24 @@ const SPEC_TABLE: [ProjectPermission, Cell, Cell, Cell, Cell][] = [
  * @param role Project role.
  * @param visibility Stored visibility.
  * @param allowedBucketIds Stored bucket list.
+ * @param teamMemberships The caller's teams.
  * @returns The row.
  */
-function member(role: ProjectRole, visibility = 'ALL', allowedBucketIds: string[] = []) {
-  return { id: 'm1', projectId: PROJECT_ID, userId: ME, role, visibility, allowedBucketIds };
+function member(
+  role: ProjectRole,
+  visibility = 'ALL',
+  allowedBucketIds: string[] = [],
+  teamMemberships: { teamId: string; role: 'LEAD' | 'MEMBER' }[] = [],
+) {
+  return {
+    id: 'm1',
+    projectId: PROJECT_ID,
+    userId: ME,
+    role,
+    visibility,
+    allowedBucketIds,
+    teamMemberships,
+  };
 }
 
 /**
@@ -134,6 +148,7 @@ function item(overrides: Partial<ItemFacts> = {}): ItemFacts {
     createdById: OTHER,
     assigneeIds: [],
     bucketId: BUCKET_A,
+    teamId: null,
     hasChildren: false,
     ...overrides,
   };
@@ -434,6 +449,131 @@ describe('ProjectAccessService', () => {
       expect(service.canMoveItem(access, others)).toBe(false);
       expect(service.canDeleteItem(access, others, false)).toBe(false);
       expect(service.canAnnotateItem(access, others)).toBe(false);
+    });
+  });
+
+  describe('teams (SPEC §3.5)', () => {
+    const TEAM_A = '66666666-6666-4666-8666-666666666666';
+    const TEAM_B = '77777777-7777-4777-8777-777777777777';
+    const TEAM_C = '88888888-8888-4888-8888-888888888888';
+
+    /**
+     * Resolves access for a member with teams.
+     *
+     * @param role Project role.
+     * @param visibility Stored visibility.
+     * @param teams Team places.
+     * @returns The service and access.
+     */
+    async function withTeams(
+      role: ProjectRole,
+      visibility: string,
+      teams: { teamId: string; role: 'LEAD' | 'MEMBER' }[],
+    ) {
+      const { service } = setup([member(role, visibility, [], teams)]);
+      return { service, access: await resolveAs(service) };
+    }
+
+    for (const role of ['MEMBER', 'VIEWER'] as const) {
+      it(`${role} TEAMS: sees items of their teams only`, async () => {
+        const { service, access } = await withTeams(role, 'TEAMS', [
+          { teamId: TEAM_A, role: 'MEMBER' },
+          { teamId: TEAM_B, role: 'MEMBER' },
+        ]);
+        expect(service.canViewItem(access, item({ teamId: TEAM_A }))).toBe(true);
+        expect(service.canViewItem(access, item({ teamId: TEAM_B }))).toBe(true);
+        expect(service.canViewItem(access, item({ teamId: TEAM_C }))).toBe(false);
+        expect(service.canViewItem(access, item({ teamId: null }))).toBe(false);
+        expect(service.itemScopeFilter(access)).toEqual({ teamId: { in: [TEAM_A, TEAM_B] } });
+        expect(service.ancestorsAreTitleOnly(access)).toBe(true);
+      });
+    }
+
+    it('TEAMS with no teams sees nothing', async () => {
+      const { service, access } = await withTeams('MEMBER', 'TEAMS', []);
+      expect(service.canViewItem(access, item({ teamId: TEAM_A }))).toBe(false);
+      expect(service.itemScopeFilter(access)).toEqual({ teamId: { in: [] } });
+    });
+
+    it('a team Lead has Lead rights on their team items, whatever their scope', async () => {
+      const { service, access } = await withTeams('MEMBER', 'OWN', [
+        { teamId: TEAM_A, role: 'LEAD' },
+        { teamId: TEAM_B, role: 'MEMBER' },
+      ]);
+      const led = item({ teamId: TEAM_A, hasChildren: true });
+      expect(service.canViewItem(access, led)).toBe(true);
+      expect(service.canEditItem(access, led)).toBe(true);
+      expect(service.canMoveItem(access, led)).toBe(true);
+      expect(service.canDeleteItem(access, led, false)).toBe(true);
+      // Cascading deletes stay with project PMs and Leads.
+      expect(service.canDeleteItem(access, led, true)).toBe(false);
+      expect(service.canAssign(access, [OTHER], { teamId: TEAM_A })).toBe(true);
+      expect(service.itemScopeFilter(access)).toEqual({
+        OR: [
+          { OR: [{ createdById: ME }, { assignees: { some: { userId: ME } } }] },
+          { teamId: { in: [TEAM_A] } },
+        ],
+      });
+    });
+
+    it('team membership alone grants no extra rights', async () => {
+      const { service, access } = await withTeams('MEMBER', 'ALL', [
+        { teamId: TEAM_B, role: 'MEMBER' },
+      ]);
+      const memberTeamItem = item({ teamId: TEAM_B });
+      expect(service.canViewItem(access, memberTeamItem)).toBe(true);
+      expect(service.canEditItem(access, memberTeamItem)).toBe(false);
+      expect(service.canMoveItem(access, memberTeamItem)).toBe(false);
+      expect(service.canDeleteItem(access, memberTeamItem, false)).toBe(false);
+      expect(service.canAssign(access, [OTHER], { teamId: TEAM_B })).toBe(false);
+    });
+
+    it('a team Lead has no Lead rights on items of other teams or without a team', async () => {
+      const { service, access } = await withTeams('MEMBER', 'ALL', [
+        { teamId: TEAM_A, role: 'LEAD' },
+      ]);
+      for (const other of [item({ teamId: TEAM_C }), item({ teamId: null })]) {
+        expect(service.canEditItem(access, other)).toBe(false);
+        expect(service.canAssign(access, [OTHER], other)).toBe(false);
+      }
+    });
+
+    it('never gives a Viewer Lead rights, even if stored as a team Lead', async () => {
+      const { service, access } = await withTeams('VIEWER', 'OWN', [
+        { teamId: TEAM_A, role: 'LEAD' },
+      ]);
+      const teamItem = item({ teamId: TEAM_A });
+      expect(service.canViewItem(access, teamItem)).toBe(false);
+      expect(service.canEditItem(access, teamItem)).toBe(false);
+      expect(service.itemScopeFilter(access)).toEqual({
+        OR: [{ createdById: ME }, { assignees: { some: { userId: ME } } }],
+      });
+    });
+
+    it('a Viewer stored as team Lead under TEAMS sees the team items as a member only', async () => {
+      const { service, access } = await withTeams('VIEWER', 'TEAMS', [
+        { teamId: TEAM_A, role: 'LEAD' },
+      ]);
+      const teamItem = item({ teamId: TEAM_A });
+      expect(service.canViewItem(access, teamItem)).toBe(true);
+      expect(service.canEditItem(access, teamItem)).toBe(false);
+      expect(service.canAssign(access, [OTHER], teamItem)).toBe(false);
+      expect(service.itemScopeFilter(access)).toEqual({ teamId: { in: [TEAM_A] } });
+    });
+
+    it('PMs and project Leads keep an empty filter whatever their teams', async () => {
+      for (const role of ['PM', 'LEAD'] as const) {
+        const { service, access } = await withTeams(role, 'TEAMS', [
+          { teamId: TEAM_A, role: 'LEAD' },
+        ]);
+        expect(service.itemScopeFilter(access)).toEqual({});
+        expect(service.canViewItem(access, item({ teamId: TEAM_C }))).toBe(true);
+      }
+    });
+
+    it('non-member admins have no teams', async () => {
+      const access = await resolveAs(setup([]).service, 'ADMIN');
+      expect(access.teams).toEqual([]);
     });
   });
 });
