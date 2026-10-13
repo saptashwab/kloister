@@ -121,7 +121,7 @@ import { required } from '../../core/validators';
         @for (project of projects(); track project.id) {
           <tr>
             <td>
-              <a [routerLink]="['/p', project.key, 'settings']">{{ project.key }}</a>
+              <a [routerLink]="['/p', project.key]">{{ project.key }}</a>
             </td>
             <td>{{ project.name }}</td>
             <td>{{ project.myRole ? roleLabels[project.myRole] : 'Not a member' }}</td>

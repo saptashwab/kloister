@@ -9,6 +9,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { Router } from '@angular/router';
 import {
   assignsPmsOnly,
+  type BucketDto,
   isScopedRole,
   type MemberCandidateDto,
   PROJECT_DESCRIPTION_MAX,
@@ -22,9 +23,12 @@ import {
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
 import { ROLE_LABELS, VISIBILITY_LABELS } from '../../core/labels';
+import { ItemsApiService } from '../../core/items-api.service';
+import { ProjectContext } from '../../core/project-context';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { SessionStore } from '../../core/session.store';
 import { required } from '../../core/validators';
+import { ProjectBoardSettings } from './project-board-settings';
 import { ProjectTeamsComponent } from './project-teams';
 
 /**
@@ -36,8 +40,9 @@ import { ProjectTeamsComponent } from './project-teams';
  * who are not PMs get controls to grant and remove the PM role only. The API
  * enforces the same rules and answers 404 to non-members.
  *
- * Bucket selection for the `BUCKETS` scope arrives with buckets (M3/M4);
- * until then only `ALL` and `OWN` can be chosen here.
+ * Members with the `BUCKETS` scope get a bucket picker. The board settings
+ * (buckets, labels, the status → bucket map) follow; buckets and labels need
+ * `MANAGE_BOARD` (PM, Lead).
  */
 @Component({
   selector: 'app-project-settings',
@@ -50,14 +55,10 @@ import { ProjectTeamsComponent } from './project-teams';
     MatInputModule,
     MatSelectModule,
     ProjectTeamsComponent,
+    ProjectBoardSettings,
   ],
   template: `
-    @if (project(); as project) {
-      <h2>{{ project.key }} · {{ project.name }}</h2>
-      @if (project.archivedAt) {
-        <p role="status">This project is archived and read-only.</p>
-      }
-    } @else if (!error()) {
+    @if (!project() && !error()) {
       <p>Loading…</p>
     }
 
@@ -196,12 +197,24 @@ import { ProjectTeamsComponent } from './project-teams';
                           <mat-option [value]="visibility.TEAMS">{{
                             visibilityLabels.TEAMS
                           }}</mat-option>
-                          @if (m.visibility === visibility.BUCKETS) {
-                            <mat-option [value]="visibility.BUCKETS" disabled>{{
-                              visibilityLabels.BUCKETS
-                            }}</mat-option>
-                          }
+                          <mat-option [value]="visibility.BUCKETS">{{
+                            visibilityLabels.BUCKETS
+                          }}</mat-option>
                         </mat-select>
+                        @if (m.visibility === visibility.BUCKETS) {
+                          <mat-select
+                            multiple
+                            placeholder="Choose buckets"
+                            [aria-label]="'Buckets visible to ' + m.displayName"
+                            [value]="m.allowedBucketIds"
+                            (valueChange)="pendingBuckets.set(m.userId, $event)"
+                            (openedChange)="$event || saveBuckets(m)"
+                          >
+                            @for (b of buckets(); track b.id) {
+                              <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                            }
+                          </mat-select>
+                        }
                       } @else {
                         {{ visibilityLabels.ALL }}
                       }
@@ -213,6 +226,9 @@ import { ProjectTeamsComponent } from './project-teams';
                     <td>{{ roleLabels[m.role] }}</td>
                     <td>
                       {{ isScoped(m) ? visibilityLabels[m.visibility] : visibilityLabels.ALL }}
+                      @if (isScoped(m) && m.visibility === visibility.BUCKETS) {
+                        ({{ bucketNames(m) }})
+                      }
                     </td>
                     <td class="actions">
                       @if (pmOnly()) {
@@ -249,6 +265,14 @@ import { ProjectTeamsComponent } from './project-teams';
         [members]="members()"
         [canEdit]="canEditMembers()"
       />
+
+      <app-project-board-settings
+        [project]="project"
+        [(buckets)]="buckets"
+        [canManageBoard]="canManageBoard()"
+        [canManageProject]="canManageProject() && !project.archivedAt"
+        (projectChange)="boardSettingsSaved($event)"
+      />
     }
   `,
 })
@@ -256,6 +280,9 @@ export class ProjectSettingsPage implements OnInit {
   private readonly api = inject(ProjectsApiService);
   private readonly router = inject(Router);
   private readonly store = inject(SessionStore);
+  private readonly itemsApi = inject(ItemsApiService);
+  /** The project shell's shared state, kept in step with changes made here. */
+  private readonly ctx = inject(ProjectContext, { optional: true });
 
   /** Project key from the route (`/p/:key/settings`). */
   readonly key = input.required<string>();
@@ -275,6 +302,10 @@ export class ProjectSettingsPage implements OnInit {
   protected readonly project = signal<ProjectDto | null>(null);
   /** Loaded members. */
   protected readonly members = signal<ProjectMemberDto[]>([]);
+  /** Bucket lists picked for members but not yet saved, by user id. */
+  protected readonly pendingBuckets = new Map<string, string[]>();
+  /** Buckets in column order, for the `BUCKETS` scope picker and board settings. */
+  protected readonly buckets = signal<BucketDto[]>([]);
   /** Users found by the add-member search. */
   protected readonly candidates = signal<MemberCandidateDto[]>([]);
   /** User chosen to add. */
@@ -297,6 +328,10 @@ export class ProjectSettingsPage implements OnInit {
    * role (SPEC §3.1), archived projects included.
    */
   protected readonly pmOnly = computed(() => assignsPmsOnly(this.project()?.myPermissions ?? []));
+  /** True when buckets and labels are editable: `MANAGE_BOARD` on an unarchived project. */
+  protected readonly canManageBoard = computed(
+    () => this.has(ProjectPermission.MANAGE_BOARD) && !this.project()?.archivedAt,
+  );
   /** True when the add-member controls are shown. */
   protected readonly canAddMembers = computed(() => this.canEditMembers() || this.pmOnly());
 
@@ -312,9 +347,16 @@ export class ProjectSettingsPage implements OnInit {
    */
   ngOnInit(): void {
     void this.run(async () => {
-      const project = await this.api.get(this.key());
+      // The project shell has usually loaded the project already; another
+      // request would mean another audit entry for non-member admins.
+      const known = this.ctx?.project();
+      const project = known?.key === this.key() ? known : await this.api.get(this.key());
       this.setProject(project);
-      await this.loadMembers(project.id);
+      const [buckets] = await Promise.all([
+        this.itemsApi.buckets(project.id),
+        this.loadMembers(project.id),
+      ]);
+      this.buckets.set(buckets);
     });
   }
 
@@ -329,6 +371,45 @@ export class ProjectSettingsPage implements OnInit {
   }
 
   /**
+   * Names the buckets a member with the `BUCKETS` scope sees.
+   *
+   * @param member The member.
+   * @returns Comma-separated bucket names.
+   */
+  protected bucketNames(member: ProjectMemberDto): string {
+    const names = member.allowedBucketIds
+      .map((id) => this.buckets().find((b) => b.id === id)?.name)
+      .filter((name) => name !== undefined);
+    return names.length > 0 ? names.join(', ') : 'none';
+  }
+
+  /**
+   * Saves the buckets picked for a member once the picker closes, so one
+   * request carries the whole selection.
+   *
+   * @param member The member.
+   * @returns Resolves once saved.
+   */
+  protected async saveBuckets(member: ProjectMemberDto): Promise<void> {
+    const picked = this.pendingBuckets.get(member.userId);
+    this.pendingBuckets.delete(member.userId);
+    if (picked === undefined) return;
+    await this.updateMember(member, { allowedBucketIds: picked });
+  }
+
+  /**
+   * Takes the project after the board settings changed it, and reloads the
+   * members: deleting a bucket also removes it from their bucket lists.
+   *
+   * @param project The updated project.
+   * @returns Resolves once reloaded.
+   */
+  protected async boardSettingsSaved(project: ProjectDto): Promise<void> {
+    this.setProject(project);
+    await this.run(() => this.loadMembers(project.id));
+  }
+
+  /**
    * Saves the general settings.
    *
    * @returns Resolves once saved.
@@ -338,13 +419,14 @@ export class ProjectSettingsPage implements OnInit {
     if (project === null) return;
     const { name, description, membersCanAssignOthers } = this.generalForm.getRawValue();
     await this.run(async () => {
-      this.setProject(
-        await this.api.update(project.id, {
-          name,
-          description,
-          settings: { membersCanAssignOthers },
-        }),
-      );
+      const saved = await this.api.update(project.id, {
+        name,
+        description,
+        settings: { membersCanAssignOthers },
+      });
+      // Saved: the form shows the stored values again.
+      this.generalForm.markAsPristine();
+      this.setProject(saved);
     });
   }
 
@@ -468,8 +550,12 @@ export class ProjectSettingsPage implements OnInit {
    *
    * @param project The project.
    */
-  private setProject(project: ProjectDto): void {
+  protected setProject(project: ProjectDto): void {
     this.project.set(project);
+    this.ctx?.project.set(project);
+    // Keep the user's unsaved edits when the project is refreshed for
+    // another reason (e.g. a bucket was deleted below).
+    if (!this.generalForm.pristine) return;
     this.generalForm.setValue({
       name: project.name,
       description: project.description,

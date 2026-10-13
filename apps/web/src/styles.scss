@@ -89,3 +89,68 @@ table.data {
 mat-card {
   margin-bottom: 16px;
 }
+
+.spacer {
+  flex: 1;
+}
+
+/* Item type badge: a letter on a tinted square (no icon fonts). */
+.badge {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--mat-sys-surface-variant);
+  color: var(--mat-sys-on-surface-variant);
+
+  &[data-type='EPIC'] {
+    background: var(--mat-sys-tertiary-container);
+    color: var(--mat-sys-on-tertiary-container);
+  }
+
+  &[data-type='FEATURE'] {
+    background: var(--mat-sys-primary-container);
+    color: var(--mat-sys-on-primary-container);
+  }
+
+  &[data-type='STORY'] {
+    background: var(--mat-sys-secondary-container);
+    color: var(--mat-sys-on-secondary-container);
+  }
+
+  &[data-type='BUG'] {
+    background: var(--mat-sys-error-container);
+    color: var(--mat-sys-on-error-container);
+  }
+}
+
+/* Inline text field used for quick-add and in-place renames. */
+.quick-add {
+  box-sizing: border-box;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border: 1px dashed var(--mat-sys-outline);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+/* Label chip; the label's colour is set as the left border colour. */
+.label {
+  padding: 0 6px;
+  border-left: 8px solid;
+  border-radius: 8px;
+  background: var(--mat-sys-surface-container);
+  font-size: 0.75rem;
+}
+
+ul.labels {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

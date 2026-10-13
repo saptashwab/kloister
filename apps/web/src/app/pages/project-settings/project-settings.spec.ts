@@ -1,6 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { Page, ProjectDto, ProjectMemberDto, ProjectPermission } from '@kloister/shared';
+import { makeBucket, makeMember, settle } from '../../../testing/fixtures';
+import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { ProjectSettingsPage } from './project-settings';
 
@@ -17,7 +19,11 @@ const member: ProjectMemberDto = {
 };
 
 describe('ProjectSettingsPage', () => {
-  async function render(permissions: ProjectPermission[], archived = false) {
+  async function render(
+    permissions: ProjectPermission[],
+    archived = false,
+    members: ProjectMemberDto[] = [member],
+  ) {
     const project: ProjectDto = {
       id: 'p1',
       key: 'KLO',
@@ -35,16 +41,26 @@ describe('ProjectSettingsPage', () => {
       get: vi.fn<(ref: string) => Promise<ProjectDto>>().mockResolvedValue(project),
       members: vi
         .fn<(id: string) => Promise<Page<ProjectMemberDto>>>()
-        .mockResolvedValue({ items: [member], nextCursor: null }),
+        .mockResolvedValue({ items: members, nextCursor: null }),
       teams: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+    };
+    const itemsApi = {
+      buckets: vi
+        .fn()
+        .mockResolvedValue([makeBucket('b1', 'To Do', 1), makeBucket('b2', 'Done', 2)]),
+      labels: vi.fn().mockResolvedValue([{ id: 'l1', name: 'urgent', colour: '#ff0000' }]),
     };
     await TestBed.configureTestingModule({
       imports: [ProjectSettingsPage],
-      providers: [provideRouter([]), { provide: ProjectsApiService, useValue: api }],
+      providers: [
+        provideRouter([]),
+        { provide: ProjectsApiService, useValue: api },
+        { provide: ItemsApiService, useValue: itemsApi },
+      ],
     }).compileComponents();
     const fixture = TestBed.createComponent(ProjectSettingsPage);
     fixture.componentRef.setInput('key', 'KLO');
-    await fixture.whenStable();
+    await settle(fixture);
     return { root: fixture.nativeElement as HTMLElement, api };
   }
 
@@ -76,9 +92,47 @@ describe('ProjectSettingsPage', () => {
   });
 
   it('hides member editing on archived projects', async () => {
-    const { root } = await render(['VIEW_ITEMS', 'MANAGE_PROJECT', 'MANAGE_MEMBERS'], true);
-    expect(root.textContent).toContain('archived and read-only');
+    const { root } = await render(
+      ['VIEW_ITEMS', 'MANAGE_PROJECT', 'MANAGE_MEMBERS', 'MANAGE_BOARD'],
+      true,
+    );
     expect(root.textContent).toContain('Unarchive');
     expect(root.textContent).not.toContain('Remove');
+    // Buckets, labels and the status map are read-only too.
+    expect(root.textContent).not.toContain('Add bucket');
+    expect(root.textContent).not.toContain('Add label');
+  });
+
+  it('offers a bucket picker for members with the BUCKETS scope', async () => {
+    const scoped = makeMember('u2', 'Bea', {
+      visibility: 'BUCKETS',
+      allowedBucketIds: ['b2'],
+    });
+    const { root } = await render(['VIEW_ITEMS', 'MANAGE_MEMBERS'], false, [scoped]);
+    expect(root.querySelector('[aria-label="Buckets visible to Bea"]')?.textContent).toContain(
+      'Done',
+    );
+  });
+
+  it('names the visible buckets in the read-only view', async () => {
+    const scoped = makeMember('u2', 'Bea', {
+      visibility: 'BUCKETS',
+      allowedBucketIds: ['b2'],
+    });
+    const { root } = await render(['VIEW_ITEMS'], false, [scoped]);
+    expect(root.textContent?.replace(/\s+/g, ' ')).toContain('Selected buckets (Done)');
+  });
+
+  it('shows board settings, editable with MANAGE_BOARD only', async () => {
+    const viewer = await render(['VIEW_ITEMS']);
+    expect(viewer.root.textContent).toContain('To Do');
+    expect(viewer.root.textContent).toContain('urgent');
+    expect(viewer.root.textContent).not.toContain('Add bucket');
+    TestBed.resetTestingModule();
+    const lead = await render(['VIEW_ITEMS', 'MANAGE_BOARD']);
+    expect(lead.root.textContent).toContain('Add bucket');
+    expect(lead.root.textContent).toContain('Add label');
+    // The status → bucket map is a project setting (PM only).
+    expect(lead.root.textContent).not.toContain('Save status moves');
   });
 });

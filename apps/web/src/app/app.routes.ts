@@ -2,6 +2,16 @@ import { Routes } from '@angular/router';
 import { adminGuard, authGuard, guestGuard, signedInGuard } from './core/auth.guards';
 
 /**
+ * Loads the item drawer, shown beside the board or the backlog.
+ *
+ * @returns The drawer component.
+ */
+const itemDrawer = () => import('./pages/item-drawer/item-drawer').then((m) => m.ItemDrawer);
+
+/** Empty child route: the board or backlog without an open item. */
+const NO_DRAWER: Routes = [{ path: '', children: [] }];
+
+/**
  * Top-level routes. Pages are lazy-loaded to keep the initial bundle small.
  * Guards only shape navigation; the API enforces every permission itself.
  */
@@ -28,10 +38,33 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/admin-audit/admin-audit').then((m) => m.AdminAuditPage),
   },
   {
-    path: 'p/:key/settings',
+    // A project: the board by default, the item drawer at `items/:number`
+    // (SPEC §6 deep link), plus backlog, sprints and settings. Child routes
+    // inherit `:key` (see `paramsInheritanceStrategy` in app.config.ts).
+    path: 'p/:key',
     canActivate: [authGuard],
-    loadComponent: () =>
-      import('./pages/project-settings/project-settings').then((m) => m.ProjectSettingsPage),
+    loadComponent: () => import('./pages/project/project-shell').then((m) => m.ProjectShellPage),
+    children: [
+      {
+        path: 'backlog',
+        loadComponent: () => import('./pages/backlog/backlog').then((m) => m.BacklogPage),
+        children: [{ path: 'items/:number', loadComponent: itemDrawer }, ...NO_DRAWER],
+      },
+      {
+        path: 'sprints',
+        loadComponent: () => import('./pages/sprints/sprints').then((m) => m.SprintsPage),
+      },
+      {
+        path: 'settings',
+        loadComponent: () =>
+          import('./pages/project-settings/project-settings').then((m) => m.ProjectSettingsPage),
+      },
+      {
+        path: '',
+        loadComponent: () => import('./pages/board/board').then((m) => m.BoardPage),
+        children: [{ path: 'items/:number', loadComponent: itemDrawer }, ...NO_DRAWER],
+      },
+    ],
   },
   {
     path: '',
