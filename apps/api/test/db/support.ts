@@ -2,7 +2,15 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { CSRF_HEADER, CSRF_HEADER_VALUE, type SystemRole } from '@kloister/shared';
 import { createApp } from '../../src/app.factory.js';
 import { PasswordService } from '../../src/auth/password.service.js';
-import type { Project, Team, User } from '../../src/generated/prisma/client.js';
+import type {
+  Bucket,
+  Label,
+  Project,
+  Sprint,
+  Team,
+  User,
+  WorkItem,
+} from '../../src/generated/prisma/client.js';
 import { PrismaService } from '../../src/prisma/prisma.service.js';
 
 // Helpers for tests against a real, disposable Postgres (see jest.db.config.js).
@@ -36,11 +44,14 @@ export async function startApp(): Promise<{ app: NestFastifyApplication; prisma:
  */
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "Session", "AppSetting", "TeamMember", "Team", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "AuditLog", "Session", "AppSetting", "ChecklistItem", "WorkItemLabel", "WorkItemDependency", "WorkItemAssignee", "WorkItem", "Label", "Sprint", "Bucket", "TeamMember", "Team", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
   );
 }
 
 const passwords = new PasswordService();
+
+/** Hash of {@link PASSWORD}, computed once: argon2 is slow by design. */
+let defaultHash: Promise<string> | undefined;
 
 /**
  * Inserts a user directly.
@@ -69,7 +80,10 @@ export async function seedUser(
       email: fields.email,
       displayName: fields.email.split('@')[0] ?? fields.email,
       systemRole: fields.systemRole ?? 'USER',
-      passwordHash: await passwords.hash(fields.password ?? PASSWORD),
+      passwordHash:
+        fields.password === undefined
+          ? await (defaultHash ??= passwords.hash(PASSWORD))
+          : await passwords.hash(fields.password),
       mustChangePassword: fields.mustChangePassword ?? false,
       isActive: fields.isActive ?? true,
     },
@@ -93,7 +107,8 @@ export async function seedProject(
   members: {
     userId: string;
     role: 'PM' | 'LEAD' | 'MEMBER' | 'VIEWER';
-    visibility?: 'ALL' | 'BUCKETS' | 'OWN';
+    visibility?: 'ALL' | 'BUCKETS' | 'OWN' | 'TEAMS';
+    allowedBucketIds?: string[];
   }[],
   fields: { archivedAt?: Date; settings?: object } = {},
 ): Promise<Project> {
@@ -130,6 +145,133 @@ export async function seedTeam(
       name,
       // Prisma fills teamId and projectId from the parent team.
       members: { create: members },
+    },
+  });
+}
+
+/**
+ * Inserts a bucket directly, after the project's existing buckets.
+ *
+ * @param prisma Database client.
+ * @param projectId Project id.
+ * @param name Bucket name.
+ * @param rule Optional entry rule.
+ * @param rule.onEnterMode Rule mode.
+ * @param rule.onEnterStatus Status the rule sets.
+ * @returns The created bucket.
+ */
+export async function seedBucket(
+  prisma: PrismaService,
+  projectId: string,
+  name: string,
+  rule: {
+    onEnterMode?: 'NONE' | 'SET' | 'SET_IF_NOT_STARTED';
+    onEnterStatus?: 'NOT_STARTED' | 'IN_PROGRESS' | 'BLOCKED' | 'DONE';
+  } = {},
+): Promise<Bucket> {
+  const count = await prisma.bucket.count({ where: { projectId } });
+  return prisma.bucket.create({
+    data: { projectId, name, position: (count + 1) * 1024, ...rule },
+  });
+}
+
+/**
+ * Inserts a work item directly, taking the next item number. Assignees must
+ * be project members (the database enforces it).
+ *
+ * @param prisma Database client.
+ * @param projectId Project id.
+ * @param fields Item fields.
+ * @param fields.createdById Creator.
+ * @param fields.type Defaults to TASK.
+ * @param fields.title Defaults to "Item <n>".
+ * @param fields.bucketId Bucket (required for STORY/TASK/BUG).
+ * @param fields.parentId Parent item.
+ * @param fields.teamId Team.
+ * @param fields.sprintId Sprint.
+ * @param fields.status Defaults to NOT_STARTED.
+ * @param fields.position Defaults to the item number times 1024.
+ * @param fields.assigneeIds Assignees.
+ * @returns The created item.
+ */
+export async function seedItem(
+  prisma: PrismaService,
+  projectId: string,
+  fields: {
+    createdById: string;
+    type?: 'EPIC' | 'FEATURE' | 'STORY' | 'TASK' | 'BUG';
+    title?: string;
+    bucketId?: string | null;
+    parentId?: string | null;
+    teamId?: string | null;
+    sprintId?: string | null;
+    status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'BLOCKED' | 'DONE';
+    position?: number;
+    assigneeIds?: string[];
+  },
+): Promise<WorkItem> {
+  const { lastItemNumber: number } = await prisma.project.update({
+    where: { id: projectId },
+    data: { lastItemNumber: { increment: 1 } },
+  });
+  const item = await prisma.workItem.create({
+    data: {
+      projectId,
+      number,
+      type: fields.type ?? 'TASK',
+      title: fields.title ?? `Item ${number}`,
+      bucketId: fields.bucketId ?? null,
+      parentId: fields.parentId ?? null,
+      teamId: fields.teamId ?? null,
+      sprintId: fields.sprintId ?? null,
+      status: fields.status ?? 'NOT_STARTED',
+      position: fields.position ?? number * 1024,
+      createdById: fields.createdById,
+    },
+  });
+  if (fields.assigneeIds !== undefined && fields.assigneeIds.length > 0) {
+    // Explicit columns: both composite keys need projectId.
+    await prisma.workItemAssignee.createMany({
+      data: fields.assigneeIds.map((userId) => ({ workItemId: item.id, projectId, userId })),
+    });
+  }
+  return item;
+}
+
+/**
+ * Inserts a label directly.
+ *
+ * @param prisma Database client.
+ * @param projectId Project id.
+ * @param name Label name.
+ * @returns The created label.
+ */
+export function seedLabel(prisma: PrismaService, projectId: string, name: string): Promise<Label> {
+  return prisma.label.create({ data: { projectId, name, colour: '#336699' } });
+}
+
+/**
+ * Inserts a sprint directly.
+ *
+ * @param prisma Database client.
+ * @param projectId Project id.
+ * @param name Sprint name.
+ * @param state Defaults to PLANNED.
+ * @returns The created sprint.
+ */
+export function seedSprint(
+  prisma: PrismaService,
+  projectId: string,
+  name: string,
+  state: 'PLANNED' | 'ACTIVE' | 'CLOSED' = 'PLANNED',
+): Promise<Sprint> {
+  return prisma.sprint.create({
+    data: {
+      projectId,
+      name,
+      state,
+      startDate: new Date('2026-11-02T00:00:00.000Z'),
+      endDate: new Date('2026-11-13T00:00:00.000Z'),
     },
   });
 }

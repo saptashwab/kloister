@@ -18,7 +18,7 @@ import { isUUID } from 'class-validator';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { ApiException } from '../common/api-exception.js';
-import type { Project } from '../generated/prisma/client.js';
+import type { Prisma, Project } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { parseProjectSettings } from './project-settings.js';
 
@@ -61,9 +61,8 @@ export interface ProjectAccess {
 }
 
 /**
- * The facts about a work item that permission checks need. Work items arrive
- * in M3; the checks are defined here so every item endpoint uses the same
- * rules.
+ * The facts about a work item that permission checks need, so every item
+ * endpoint uses the same rules.
  */
 export interface ItemFacts {
   /** Creator's user id. */
@@ -78,22 +77,12 @@ export interface ItemFacts {
   hasChildren: boolean;
 }
 
-/** One visibility-scope condition on work items. */
-export type ItemScopeCondition =
-  | { bucketId: { in: string[] } }
-  | { OR: [{ createdById: string }, { assignees: { some: { userId: string } } }] }
-  | { teamId: { in: string[] } };
-
 /**
- * Prisma-compatible `where` fragment restricting work items to the caller's
- * visibility scope (SPEC §3.3), widened by the items of teams they lead
- * (SPEC §3.5). Combine it with `AND` into every item query. M3 narrows this
- * to `Prisma.WorkItemWhereInput` once the table exists.
+ * Prisma `where` fragment restricting work items to the caller's visibility
+ * scope (SPEC §3.3), widened by the items of teams they lead (SPEC §3.5).
+ * Combine it with `AND` into every query that returns items to the caller.
  */
-export type ItemScopeFilter =
-  | Record<string, never>
-  | ItemScopeCondition
-  | { OR: [ItemScopeCondition, { teamId: { in: string[] } }] };
+export type ItemScopeFilter = Prisma.WorkItemWhereInput;
 
 /** Where a project reference from the URL points. */
 type ProjectLookup = { id: string } | { key: string };
@@ -110,6 +99,10 @@ type ProjectLookup = { id: string } | { key: string };
  *   "own" conditions and team leadership (SPEC §3.5), and
  *   {@link itemScopeFilter} builds the same visibility into queries. Items
  *   outside it must be answered with 404, not 403.
+ *
+ * The item checks do not look at `archivedAt`: every item write is a
+ * non-GET route behind `ProjectAccessGuard`, which refuses writes to
+ * archived projects.
  *
  * Admins who are members are bound by their membership like anyone else,
  * except that every admin may assign PMs (`ASSIGN_PMS`).
@@ -311,8 +304,8 @@ export class ProjectAccessService {
    * visible item, with or without cascade; team Leads may delete their
    * team's items without cascade (a subtree may span other teams); Members
    * only items they created that have no children, never with cascade.
-   * Rejecting a non-cascade delete of an item with children is a separate
-   * validation rule (M3).
+   * Callers allowed here still get 409 `HAS_CHILDREN` for a non-cascade
+   * delete of an item with children (SPEC §4.1).
    *
    * @param access The caller's access.
    * @param item The item.
@@ -367,12 +360,43 @@ export class ProjectAccessService {
   }
 
   /**
+   * Team rule (SPEC §3.5): who may put an item into a team or take it out.
+   * Project PMs and Leads may set any team. Anyone else may only move an item
+   * between "no team" and the teams they lead; when creating an item, a team
+   * Member may also put it into one of their own teams, so callers with the
+   * `TEAMS` scope can create items they will see. The caller must separately
+   * be allowed to create or edit the item.
+   *
+   * @param access The caller's access.
+   * @param from The item's current team (null for none or a new item).
+   * @param to The requested team.
+   * @param creating True when the item is being created.
+   * @returns True if the change is allowed.
+   */
+  canSetTeam(
+    access: ProjectAccess,
+    from: string | null,
+    to: string | null,
+    creating: boolean,
+  ): boolean {
+    if (from === to) return true;
+    if (access.role === ProjectRole.PM || access.role === ProjectRole.LEAD) return true;
+    const led = ledTeamIds(access);
+    const leftOk = from === null || led.includes(from);
+    const joinOk =
+      to === null ||
+      led.includes(to) ||
+      (creating && access.role === ProjectRole.MEMBER && access.teams.some((t) => t.teamId === to));
+    return leftOk && joinOk;
+  }
+
+  /**
    * The condition of the caller's visibility scope, or null for `ALL`.
    *
    * @param access The caller's access.
    * @returns The condition.
    */
-  private scopeCondition(access: ProjectAccess): ItemScopeCondition | null {
+  private scopeCondition(access: ProjectAccess): Prisma.WorkItemWhereInput | null {
     switch (access.visibility) {
       case Visibility.ALL:
         return null;

@@ -16,4 +16,6 @@ export default {
   testPathIgnorePatterns: ['/node_modules/'],
   setupFiles: [],
   maxWorkers: 1,
+  // Permission matrices sign in many times, and argon2 is slow by design.
+  testTimeout: 30_000,
 };

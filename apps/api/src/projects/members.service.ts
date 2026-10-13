@@ -13,7 +13,7 @@ import {
 } from '@kloister/shared';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
-import { ApiException } from '../common/api-exception.js';
+import { ApiException, invalidField } from '../common/api-exception.js';
 import { type PageQueryDto, pageArgs, toPage } from '../common/pagination.js';
 import { isUniqueViolation, mapTransactionConflict } from '../common/prisma-errors.js';
 import type { Prisma, ProjectMember } from '../generated/prisma/client.js';
@@ -159,6 +159,7 @@ export class MembersService {
     try {
       return await this.serializable(async (tx) => {
         await this.assertMayChange(tx, projectId, auth.user.id, pmOnly);
+        await assertProjectBuckets(tx, projectId, placement.allowedBucketIds);
         const user = await tx.user.findUnique({ where: { id: dto.userId } });
         if (user === null || !user.isActive) {
           throw new ApiException(
@@ -240,6 +241,7 @@ export class MembersService {
         changes['visibility'] = { from: current.visibility, to: next.visibility };
       }
       if (!sameIds(next.allowedBucketIds, current.allowedBucketIds)) {
+        await assertProjectBuckets(tx, projectId, next.allowedBucketIds);
         changes['allowedBucketIds'] = { from: current.allowedBucketIds, to: next.allowedBucketIds };
       }
       if (Object.keys(changes).length === 0) return toMemberDto(current);
@@ -435,6 +437,26 @@ export class MembersService {
         'A project must keep at least one active Project Manager',
       );
     }
+  }
+}
+
+/**
+ * Throws 400 unless every id is a bucket of the project (`BUCKETS` scope).
+ * Deleted buckets are removed from scopes when the bucket is deleted.
+ *
+ * @param tx Transaction client.
+ * @param projectId Project id.
+ * @param bucketIds Bucket ids.
+ */
+async function assertProjectBuckets(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  bucketIds: readonly string[],
+): Promise<void> {
+  if (bucketIds.length === 0) return;
+  const found = await tx.bucket.count({ where: { projectId, id: { in: [...bucketIds] } } });
+  if (found !== bucketIds.length) {
+    throw invalidField('allowedBucketIds', 'Choose buckets of this project');
   }
 }
 

@@ -1,6 +1,7 @@
 import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT, type Page } from '@kloister/shared';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { LowercaseUuid } from './uuid.js';
 
 /**
  * Query parameters shared by every cursor-paginated list endpoint (SPEC §8).
@@ -9,6 +10,7 @@ import { IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
 export class PageQueryDto {
   /** Id of the last item already received. */
   @IsOptional()
+  @LowercaseUuid()
   @IsUUID()
   cursor?: string;
 

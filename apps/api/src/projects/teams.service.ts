@@ -136,8 +136,8 @@ export class TeamsService {
   }
 
   /**
-   * Deletes a team and its memberships. Users stay project members. (From
-   * M3, the team's items are left without a team.)
+   * Deletes a team and its memberships. Users stay project members and the
+   * team's items are left without a team (database `SET NULL`).
    *
    * Permissions: PM only (`MANAGE_MEMBERS`).
    *
@@ -151,10 +151,12 @@ export class TeamsService {
     await this.change(async (tx) => {
       await assertStillPm(tx, projectId, auth.user.id);
       const team = await findTeam(tx, projectId, teamId);
+      const items = await tx.workItem.count({ where: { teamId } });
       await tx.team.delete({ where: { id: teamId } });
       await this.record(tx, auth, projectId, AuditAction.TEAM_DELETED, teamId, {
         name: team.name,
         members: team.members.length,
+        items,
       });
     });
   }

@@ -8,5 +8,6 @@ export * from './api.js';
 export * from './audit.js';
 export * from './auth.js';
 export * from './errors.js';
+export * from './items.js';
 export * from './pagination.js';
 export * from './projects.js';

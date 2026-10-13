@@ -1,7 +1,8 @@
 // Kloister database schema (SPEC §4).
 //
 // Tables are added milestone by milestone; M1 covers accounts, sessions,
-// the audit log and app settings; M2 adds projects and members. Every table
+// the audit log and app settings; M2 adds projects, members and teams; M3
+// adds work items, buckets, labels, checklists and sprints. Every table
 // has a uuid `id`, plus `createdAt`/`updatedAt` unless SPEC §4 says otherwise.
 
 generator client {
@@ -40,9 +41,10 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  sessions    Session[]
-  auditLogs   AuditLog[]
-  memberships ProjectMember[]
+  sessions     Session[]
+  auditLogs    AuditLog[]
+  memberships  ProjectMember[]
+  createdItems WorkItem[]
 }
 
 /// A server-side login session. The cookie carries a random token; only its
@@ -121,20 +123,27 @@ enum TeamRole {
 
 /// A project. Only system admins create projects (SPEC §3.1).
 model Project {
-  id          String    @id @default(uuid()) @db.Uuid
+  id             String    @id @default(uuid()) @db.Uuid
   /// 2–6 uppercase letters, used in item numbers like `KLO-42`. Never changes.
-  key         String    @unique
-  name        String
-  description String    @default("")
+  key            String    @unique
+  name           String
+  description    String    @default("")
   /// Archived projects are read-only and hidden from the default project list.
-  archivedAt  DateTime?
+  archivedAt     DateTime?
   /// membersCanAssignOthers (M2), statusToBucket rules (M3), ADO settings (M8).
-  settings    Json      @default("{}")
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  settings       Json      @default("{}")
+  /// Last item number handed out; numbers are never reused, so `KLO-42`
+  /// always means the same item.
+  lastItemNumber Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   members ProjectMember[]
   teams   Team[]
+  buckets Bucket[]
+  sprints Sprint[]
+  labels  Label[]
+  items   WorkItem[]
 }
 
 /// A user's membership of a project. A project always keeps at least one
@@ -150,9 +159,10 @@ model ProjectMember {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project         Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   teamMemberships TeamMember[]
+  assignments     WorkItemAssignee[]
 
   @@unique([projectId, userId])
   @@index([userId])
@@ -169,6 +179,7 @@ model Team {
 
   project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   members TeamMember[]
+  items   WorkItem[]
 
   @@unique([projectId, name])
   /// Target of TeamMember's composite key, which keeps team and membership in one project.
@@ -192,4 +203,214 @@ model TeamMember {
 
   @@unique([teamId, userId])
   @@index([projectId, userId])
+}
+
+/// Work item types; allowed parents are in SPEC §4.1.
+enum ItemType {
+  EPIC
+  FEATURE
+  STORY
+  TASK
+  BUG
+}
+
+/// Work item status. Status and bucket are independent fields (SPEC §4.2).
+enum ItemStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  DONE
+}
+
+/// What moving a card into a bucket does to its status (SPEC §4.2).
+enum BucketRule {
+  NONE
+  SET
+  SET_IF_NOT_STARTED
+}
+
+/// Sprint lifecycle. A project has at most one ACTIVE sprint.
+enum SprintState {
+  PLANNED
+  ACTIVE
+  CLOSED
+}
+
+/// A board column (SPEC §4). New projects get the default buckets of SPEC §4.2.
+model Bucket {
+  id            String      @id @default(uuid()) @db.Uuid
+  projectId     String      @db.Uuid
+  name          String
+  /// Column order, ascending (fractional, so a move rewrites one row).
+  position      Float
+  onEnterMode   BucketRule  @default(NONE)
+  /// Status set by `SET` and `SET_IF_NOT_STARTED`; null for `NONE`.
+  onEnterStatus ItemStatus?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   WorkItem[]
+
+  /// Target of WorkItem's composite key, which keeps item and bucket in one project.
+  @@unique([id, projectId])
+  @@index([projectId, position])
+}
+
+/// A sprint (SPEC §4). Dates are calendar days without a time of day.
+model Sprint {
+  id               String      @id @default(uuid()) @db.Uuid
+  projectId        String      @db.Uuid
+  name             String
+  startDate        DateTime    @db.Date
+  endDate          DateTime    @db.Date
+  state            SprintState @default(PLANNED)
+  /// Overrides the iteration path built from the project's ADO root (SPEC §7.3).
+  adoIterationPath String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   WorkItem[]
+
+  @@index([projectId, startDate])
+}
+
+/// A label (SPEC §4). Names are unique per project.
+model Label {
+  id        String   @id @default(uuid()) @db.Uuid
+  projectId String   @db.Uuid
+  name      String
+  /// `#rrggbb`.
+  colour    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  items   WorkItemLabel[]
+
+  @@unique([projectId, name])
+  /// Target of WorkItemLabel's composite key, which keeps label and item in one project.
+  @@unique([id, projectId])
+}
+
+/// A work item (SPEC §4). Composite keys keep the parent and bucket in the
+/// item's project. Sprint and team are checked against the project in code,
+/// because deleting a sprint or team must clear only that one column.
+model WorkItem {
+  id          String     @id @default(uuid()) @db.Uuid
+  projectId   String     @db.Uuid
+  /// Per-project sequence taken from `Project.lastItemNumber`.
+  number      Int
+  type        ItemType
+  /// Deleting an item with children is refused unless its whole subtree is
+  /// deleted in the same statement (SPEC §4.1).
+  parentId    String?    @db.Uuid
+  title       String
+  /// Sanitized HTML (SPEC §5).
+  description String     @default("")
+  status      ItemStatus @default(NOT_STARTED)
+  /// 1 (highest) to 4.
+  priority    Int        @default(2)
+  /// Required for STORY, TASK and BUG; optional for EPIC and FEATURE. A
+  /// bucket that still holds items cannot be deleted.
+  bucketId    String?    @db.Uuid
+  sprintId    String?    @db.Uuid
+  teamId      String?    @db.Uuid
+  startDate   DateTime?  @db.Date
+  dueDate     DateTime?  @db.Date
+  /// Order within the bucket, ascending (fractional index).
+  position    Float
+  createdById String     @db.Uuid
+  /// Set when the status becomes DONE, cleared when it leaves DONE.
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  project   Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent    WorkItem?            @relation("WorkItemHierarchy", fields: [parentId, projectId], references: [id, projectId], onDelete: NoAction)
+  children  WorkItem[]           @relation("WorkItemHierarchy")
+  bucket    Bucket?              @relation(fields: [bucketId, projectId], references: [id, projectId], onDelete: NoAction)
+  sprint    Sprint?              @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  team      Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  assignees WorkItemAssignee[]
+  labels    WorkItemLabel[]
+  checklist ChecklistItem[]
+  blockedBy WorkItemDependency[] @relation("BlockedItem")
+  blocks    WorkItemDependency[] @relation("BlockingItem")
+
+  @@unique([projectId, number])
+  /// Target of the composite keys that keep links inside one project.
+  @@unique([id, projectId])
+  @@index([projectId, bucketId, position])
+  @@index([parentId])
+  @@index([sprintId])
+  @@index([teamId])
+}
+
+/// An item's assignee. The composite key ties the assignee to a membership
+/// of the item's project, so leaving the project removes the assignment.
+model WorkItemAssignee {
+  id         String   @id @default(uuid()) @db.Uuid
+  workItemId String   @db.Uuid
+  projectId  String   @db.Uuid
+  userId     String   @db.Uuid
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workItem      WorkItem      @relation(fields: [workItemId, projectId], references: [id, projectId], onDelete: Cascade)
+  projectMember ProjectMember @relation(fields: [projectId, userId], references: [projectId, userId], onDelete: Cascade)
+
+  @@unique([workItemId, userId])
+  @@index([projectId, userId])
+}
+
+/// "Blocked by" links between items of one project. They may cross teams and
+/// never form a cycle (checked in code).
+model WorkItemDependency {
+  id             String   @id @default(uuid()) @db.Uuid
+  projectId      String   @db.Uuid
+  blockedItemId  String   @db.Uuid
+  blockingItemId String   @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  blockedItem  WorkItem @relation("BlockedItem", fields: [blockedItemId, projectId], references: [id, projectId], onDelete: Cascade)
+  blockingItem WorkItem @relation("BlockingItem", fields: [blockingItemId, projectId], references: [id, projectId], onDelete: Cascade)
+
+  @@unique([blockedItemId, blockingItemId])
+  @@index([blockingItemId])
+}
+
+/// Labels on an item; label and item belong to the same project.
+model WorkItemLabel {
+  id         String   @id @default(uuid()) @db.Uuid
+  workItemId String   @db.Uuid
+  projectId  String   @db.Uuid
+  labelId    String   @db.Uuid
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workItem WorkItem @relation(fields: [workItemId, projectId], references: [id, projectId], onDelete: Cascade)
+  label    Label    @relation(fields: [labelId, projectId], references: [id, projectId], onDelete: Cascade)
+
+  @@unique([workItemId, labelId])
+  @@index([labelId])
+}
+
+/// One checklist line. Checklists show progress and never change status (SPEC §4.2).
+model ChecklistItem {
+  id         String   @id @default(uuid()) @db.Uuid
+  workItemId String   @db.Uuid
+  text       String
+  done       Boolean  @default(false)
+  /// Order, ascending (fractional index).
+  position   Float
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@index([workItemId, position])
 }

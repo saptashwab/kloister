@@ -575,5 +575,76 @@ describe('ProjectAccessService', () => {
       const access = await resolveAs(setup([]).service, 'ADMIN');
       expect(access.teams).toEqual([]);
     });
+
+    describe('who may set an item team', () => {
+      // TEAM_A: led by the caller; TEAM_B: the caller is a team Member; TEAM_C: neither.
+      const places = [
+        { teamId: TEAM_A, role: 'LEAD' as const },
+        { teamId: TEAM_B, role: 'MEMBER' as const },
+      ];
+      type Case = [from: string | null, to: string | null, creating: boolean];
+      const cases: [string, Case, Record<'PM' | 'LEAD' | 'MEMBER' | 'VIEWER', boolean>][] = [
+        [
+          'unchanged',
+          [TEAM_C, TEAM_C, false],
+          { PM: true, LEAD: true, MEMBER: true, VIEWER: true },
+        ],
+        [
+          'none → led team',
+          [null, TEAM_A, false],
+          { PM: true, LEAD: true, MEMBER: true, VIEWER: false },
+        ],
+        [
+          'led team → none',
+          [TEAM_A, null, false],
+          { PM: true, LEAD: true, MEMBER: true, VIEWER: false },
+        ],
+        [
+          'none → own team (edit)',
+          [null, TEAM_B, false],
+          { PM: true, LEAD: true, MEMBER: false, VIEWER: false },
+        ],
+        [
+          'none → own team (create)',
+          [null, TEAM_B, true],
+          { PM: true, LEAD: true, MEMBER: true, VIEWER: false },
+        ],
+        [
+          'none → other team (create)',
+          [null, TEAM_C, true],
+          { PM: true, LEAD: true, MEMBER: false, VIEWER: false },
+        ],
+        [
+          'other team → led team',
+          [TEAM_C, TEAM_A, false],
+          { PM: true, LEAD: true, MEMBER: false, VIEWER: false },
+        ],
+        [
+          'led team → other team',
+          [TEAM_A, TEAM_C, false],
+          { PM: true, LEAD: true, MEMBER: false, VIEWER: false },
+        ],
+        [
+          'other team → none',
+          [TEAM_C, null, false],
+          { PM: true, LEAD: true, MEMBER: false, VIEWER: false },
+        ],
+      ];
+      for (const [name, [from, to, creating], expected] of cases) {
+        for (const role of ['PM', 'LEAD', 'MEMBER', 'VIEWER'] as const) {
+          it(`${role}: ${name} → ${expected[role] ? 'allowed' : 'refused'}`, async () => {
+            // Viewers never lead, whatever is stored (SPEC §3.5).
+            const { service, access } = await withTeams(role, 'ALL', places);
+            expect(service.canSetTeam(access, from, to, creating)).toBe(expected[role]);
+          });
+        }
+      }
+
+      it('non-member admins cannot set teams', async () => {
+        const { service } = setup([]);
+        const access = await resolveAs(service, 'ADMIN');
+        expect(service.canSetTeam(access, null, TEAM_A, true)).toBe(false);
+      });
+    });
   });
 });

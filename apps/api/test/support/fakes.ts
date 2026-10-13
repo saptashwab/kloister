@@ -152,6 +152,7 @@ export function makeProject(overrides: Partial<Project> = {}): Project {
     description: '',
     archivedAt: null,
     settings: {},
+    lastItemNumber: 0,
     createdAt: now,
     updatedAt: now,
     ...overrides,

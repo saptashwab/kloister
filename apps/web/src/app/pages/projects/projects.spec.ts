@@ -12,7 +12,7 @@ const project: ProjectDto = {
   name: 'Kanban',
   description: '',
   archivedAt: null,
-  settings: { membersCanAssignOthers: false },
+  settings: { membersCanAssignOthers: false, statusToBucket: {} },
   myRole: 'LEAD',
   myVisibility: 'ALL',
   myTeams: [],

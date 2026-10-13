@@ -1,3 +1,5 @@
+import type { ItemStatus } from './items.js';
+
 /**
  * Per-project roles (SPEC §3.2). System admins have no project role unless
  * they are also added as members.
@@ -188,16 +190,27 @@ export const PROJECT_NAME_MAX = 100;
 export const PROJECT_DESCRIPTION_MAX = 2000;
 
 /**
- * Project settings stored in `Project.settings` (SPEC §4). M3 adds
- * `statusToBucket`, M8 the ADO export settings.
+ * Optional map of status to bucket id (SPEC §4.2): when an item's status
+ * changes from the detail view, the card moves to the mapped bucket.
+ */
+export type StatusToBucket = Partial<Record<ItemStatus, string>>;
+
+/**
+ * Project settings stored in `Project.settings` (SPEC §4). M8 adds the ADO
+ * export settings.
  */
 export interface ProjectSettings {
   /** Lets Members assign items to others (SPEC §3.2; default off). */
   membersCanAssignOthers: boolean;
+  /** Status → bucket moves; only buckets of the project, empty by default. */
+  statusToBucket: StatusToBucket;
 }
 
 /** Settings of a new project. */
-export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = { membersCanAssignOthers: false };
+export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
+  membersCanAssignOthers: false,
+  statusToBucket: {},
+};
 
 /** A project as the API returns it, from the caller's point of view. */
 export interface ProjectDto {
@@ -246,7 +259,7 @@ export interface UpdateProjectRequest {
   name?: string;
   /** New description. */
   description?: string;
-  /** Settings to change. */
+  /** Settings to change; `statusToBucket` replaces the whole map. */
   settings?: Partial<ProjectSettings>;
 }
 

@@ -23,6 +23,17 @@ export function isUniqueViolation(error: unknown): boolean {
 }
 
 /**
+ * Reports whether an error is a foreign-key violation, i.e. a referenced
+ * row was deleted by a concurrent request after it was checked.
+ *
+ * @param error Anything thrown by Prisma.
+ * @returns True for Prisma error P2003.
+ */
+export function isForeignKeyViolation(error: unknown): boolean {
+  return prismaCode(error) === 'P2003';
+}
+
+/**
  * Converts a serializable-transaction conflict (Prisma P2034, raised when a
  * concurrent transaction touched the same rows) into 409 `CONFLICT`, so the
  * client sees "try again" rather than a 500. Other errors are returned as is.

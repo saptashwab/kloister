@@ -1,18 +1,22 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   AuditAction,
+  DEFAULT_BUCKETS,
   DEFAULT_PROJECT_SETTINGS,
   ErrorCode,
   type Page,
   type ProjectDto,
   ProjectRole,
+  type ProjectSettings,
+  type StatusToBucket,
   SystemRole,
   Visibility,
 } from '@kloister/shared';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
-import { ApiException } from '../common/api-exception.js';
+import { ApiException, invalidField } from '../common/api-exception.js';
 import { pageArgs, toPage } from '../common/pagination.js';
+import { POSITION_STEP } from '../common/positions.js';
 import { isUniqueViolation, mapTransactionConflict } from '../common/prisma-errors.js';
 import type { Prisma, Project } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -98,7 +102,8 @@ export class ProjectsService {
   }
 
   /**
-   * Creates a project with one or more Project Managers (SPEC §3.1).
+   * Creates a project with one or more Project Managers (SPEC §3.1) and the
+   * default buckets of SPEC §4.2.
    *
    * Permissions: system admins only (enforced by the controller). The admin
    * does not become a member unless they name themselves as a PM.
@@ -126,6 +131,12 @@ export class ProjectsService {
             name: dto.name,
             description: dto.description ?? '',
             settings: { ...DEFAULT_PROJECT_SETTINGS },
+            buckets: {
+              create: DEFAULT_BUCKETS.map((bucket, index) => ({
+                ...bucket,
+                position: (index + 1) * POSITION_STEP,
+              })),
+            },
             members: {
               create: pms.map((pm) => ({
                 userId: pm.id,
@@ -229,7 +240,7 @@ export class ProjectsService {
           }
           const settingsChange = dto.settings ?? {};
           const settings = parseProjectSettings(current.settings);
-          const changedSettings: Record<string, boolean> = {};
+          const changedSettings: Partial<ProjectSettings> = {};
           if (
             settingsChange.membersCanAssignOthers !== undefined &&
             settingsChange.membersCanAssignOthers !== settings.membersCanAssignOthers
@@ -238,6 +249,24 @@ export class ProjectsService {
             changes['settings.membersCanAssignOthers'] = {
               from: settings.membersCanAssignOthers,
               to: settingsChange.membersCanAssignOthers,
+            };
+          }
+          const statusToBucket = settingsChange.statusToBucket;
+          if (statusToBucket !== undefined && !sameMap(statusToBucket, settings.statusToBucket)) {
+            const bucketIds = [...new Set(Object.values(statusToBucket))];
+            const found = await tx.bucket.count({
+              where: { projectId: id, id: { in: bucketIds } },
+            });
+            if (found !== bucketIds.length) {
+              throw invalidField(
+                'settings.statusToBucket',
+                'Every status must map to a bucket of this project',
+              );
+            }
+            changedSettings.statusToBucket = statusToBucket;
+            changes['settings.statusToBucket'] = {
+              from: settings.statusToBucket,
+              to: statusToBucket,
             };
           }
           if (Object.keys(changedSettings).length > 0) {
@@ -304,4 +333,16 @@ export class ProjectsService {
     });
     return toProjectDto(access, updated);
   }
+}
+
+/**
+ * Compares two status → bucket maps.
+ *
+ * @param a First map.
+ * @param b Second map.
+ * @returns True if both map the same statuses to the same buckets.
+ */
+function sameMap(a: StatusToBucket, b: StatusToBucket): boolean {
+  const keys = Object.keys(a) as (keyof StatusToBucket)[];
+  return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
 }

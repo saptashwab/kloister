@@ -1,12 +1,14 @@
 import {
   type AddMemberRequest,
   type CreateProjectRequest,
+  ItemStatus,
   MAX_INITIAL_PMS,
   PROJECT_DESCRIPTION_MAX,
   PROJECT_KEY_PATTERN,
   PROJECT_NAME_MAX,
   ProjectRole,
   type ProjectSettings,
+  type StatusToBucket,
   type UpdateMemberRequest,
   type UpdateProjectRequest,
   Visibility,
@@ -23,13 +25,16 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  isUUID,
   Length,
   Matches,
   MaxLength,
+  ValidateBy,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { PageQueryDto } from '../common/pagination.js';
+import { LowercaseUuid } from '../common/uuid.js';
 
 /**
  * Trims string input; leaves anything else for the validators to reject.
@@ -81,9 +86,35 @@ export class CreateProjectDto implements CreateProjectRequest {
   @ArrayMinSize(1)
   @ArrayMaxSize(MAX_INITIAL_PMS)
   @ArrayUnique()
+  @LowercaseUuid()
   @IsUUID('all', { each: true })
   pmUserIds: string[];
 }
+
+/**
+ * Accepts a status → bucket map: an object whose keys are item statuses and
+ * whose values are bucket uuids. Whether the buckets belong to the project is
+ * checked by the service.
+ *
+ * @returns The property decorator.
+ */
+const IsStatusToBucket = (): PropertyDecorator =>
+  ValidateBy({
+    name: 'isStatusToBucket',
+    validator: {
+      validate: (value: unknown) =>
+        typeof value === 'object' &&
+        value !== null &&
+        !Array.isArray(value) &&
+        Object.entries(value).every(
+          ([status, bucketId]) =>
+            (Object.values(ItemStatus) as string[]).includes(status) &&
+            typeof bucketId === 'string' &&
+            isUUID(bucketId),
+        ),
+      defaultMessage: () => '$property must map item statuses to bucket ids',
+    },
+  });
 
 /** The settings part of `PATCH /projects/:id`. */
 export class ProjectSettingsChangeDto implements Partial<ProjectSettings> {
@@ -91,6 +122,18 @@ export class ProjectSettingsChangeDto implements Partial<ProjectSettings> {
   @OmittableNotNull()
   @IsBoolean()
   membersCanAssignOthers?: boolean;
+
+  /** Replaces the status → bucket map (SPEC §4.2); `{}` clears it. */
+  @OmittableNotNull()
+  @IsStatusToBucket()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value).map(([k, v]) => [k, typeof v === 'string' ? v.toLowerCase() : v]),
+        )
+      : value,
+  )
+  statusToBucket?: StatusToBucket;
 }
 
 /** Body of `PATCH /projects/:id`. */
@@ -142,6 +185,7 @@ export class ListProjectsQueryDto extends PageQueryDto {
 /** Body of `POST /projects/:id/members`. */
 export class AddMemberDto implements AddMemberRequest {
   /** User to add. */
+  @LowercaseUuid()
   @IsUUID()
   userId: string;
 
@@ -158,6 +202,7 @@ export class AddMemberDto implements AddMemberRequest {
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_ALLOWED_BUCKETS)
+  @LowercaseUuid()
   @IsUUID('all', { each: true })
   allowedBucketIds?: string[];
 }
@@ -178,6 +223,7 @@ export class UpdateMemberDto implements UpdateMemberRequest {
   @OmittableNotNull()
   @IsArray()
   @ArrayMaxSize(MAX_ALLOWED_BUCKETS)
+  @LowercaseUuid()
   @IsUUID('all', { each: true })
   allowedBucketIds?: string[];
 }

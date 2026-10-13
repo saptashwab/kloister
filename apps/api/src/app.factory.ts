@@ -6,6 +6,7 @@ import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fa
 import { API_PREFIX } from '@kloister/shared';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
+import { UuidParamCasePipe } from './common/uuid.js';
 import { createValidationPipe } from './common/validation.js';
 import { loadConfig } from './config/app-config.js';
 
@@ -34,7 +35,8 @@ export async function configureApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyCookie);
   app.setGlobalPrefix(API_PREFIX);
   app.useGlobalFilters(new AllExceptionsFilter());
-  app.useGlobalPipes(createValidationPipe());
+  // Uuid path parameters are lowercased before validation and route pipes.
+  app.useGlobalPipes(new UuidParamCasePipe(), createValidationPipe());
 }
 
 /**
