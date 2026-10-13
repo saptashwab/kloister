@@ -382,8 +382,10 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M2 | Projects, members, roles, optional teams, visibility enforcement plus the full permission test matrix |
 | M3 | Work items, hierarchy, dependencies, team assignment, buckets and rules, labels, checklists, sprints (API) |
 | M4 | Board, item drawer, backlog tree, sprint views (UI) |
+| M4.5 | Design foundation: the owner-approved design direction recorded in `docs/DESIGN.md`; design tokens (colour, type, spacing, radius, elevation) as CSS custom properties that M6 theming builds on; a bundled UI font and SVG icon set (nothing loaded from external hosts); app shell (sidebar with project switcher, header, user menu); shared feedback components (toasts with undo, styled confirm dialogs, empty states, loading skeletons); prominent coloured labels (curated palette plus custom colour, automatic text contrast, per-project label style); inline editing in the item drawer; the M1–M4 screens rebuilt on the foundation, with browser-test screenshots for review |
 | M5 | Notes, mentions, attachments, notifications |
 | M6 | Theming and branding, admin settings, backups, log retention, disk usage |
+| M6.5 | Polish pass over every screen, reviewed from the browser-test screenshots: consistency, accessibility (WCAG 2.2 AA: keyboard, focus, contrast, screen readers, reduced motion), layouts at phone and tablet width, motion, keyboard shortcuts and a command palette, large-board performance |
 | M7 | Deploy scripts, release workflow, INSTALL/UPGRADE/ADMIN docs, end-to-end install test on a RHEL 8 VM (first usable release, v1.0) |
 | M8 | ADO export plus preview, validated by tests against the documented import rules (v1.1) |
 
