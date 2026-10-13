@@ -128,7 +128,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   mustChangePassword, isActive, failedLoginCount, lockedUntil, themePrefs (json), lastLoginAt
 - **Session**: userId, tokenHash, expiresAt, lastSeenAt, userAgent, ip
 - **Project**: key (2–6 uppercase chars, unique, used in item numbers like `KLO-42`), name, description,
-  archivedAt, settings (json: membersCanAssignOthers, statusToBucket rules, ado settings)
+  archivedAt, settings (json: membersCanAssignOthers, statusToBucket rules, labelStyle (`SOLID|TINTED|COVER`, default `SOLID`, set by PMs), ado settings)
 - **ProjectMember**: projectId, userId, role (`PM|LEAD|MEMBER|VIEWER`), visibility (`ALL|BUCKETS|OWN|TEAMS`),
   allowedBucketIds (uuid[]); unique (projectId, userId)
 - **Bucket**: projectId, name, position, onEnterMode (`NONE|SET|SET_IF_NOT_STARTED`), onEnterStatus (nullable)
@@ -144,7 +144,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Label**: projectId, name, colour; **WorkItemLabel**: join table
 - **ChecklistItem**: workItemId, text, done, position
 - **Note**: workItemId, authorId, body (sanitized HTML), editedAt
-- **Attachment**: workItemId, uploaderId, originalName, storedName, sizeBytes, mimeType, sha256
+- **Attachment**: workItemId, uploaderId, originalName, storedName, sizeBytes, mimeType, sha256, inline (true for images pasted or dropped into a description or note; these are not listed as attachments)
 - **Notification**: userId, type, workItemId, actorId, readAt
 - **AuditLog**: actorId, action, entityType, entityId, projectId, meta (json), createdAt only
 - **AppSetting**: key (unique), value (json)
@@ -180,11 +180,12 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - When an admin creates a user or resets a password, a random temporary password is shown **once** in the UI;
   `mustChangePassword=true` forces a change on next login.
 - Password changes and resets invalidate the user's other sessions.
-- Rich text is sanitized server-side against an allow-list.
+- Rich text is sanitized server-side against an allow-list. Images are allowed only when their source is the app's own inline-image endpoint for the same item; only PNG, JPEG, GIF and WebP are accepted (never SVG).
 - Attachment rules:
   - stored as `/app/kloister/data/attachments/<projectId>/<uuid>`, never under the web root
   - served via an authenticated endpoint with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`
-  - max file size 25 MB and per-project quota 2 GB by default, both admin-configurable
+  - max file size 25 MB and per-project quota 2 GB by default, both admin-configurable; inline images use the same size limit and count toward the quota
+  - inline images are served only to users who can see the item, with `X-Content-Type-Options: nosniff`
 - No outbound network calls from the backend at runtime.
 
 ---
@@ -197,17 +198,20 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - columns are buckets, with a Group-by switch: Bucket (default), Status, Assignee, Sprint
   - drag-drop between and within columns
   - filters: assignee, label, sprint, type, due (overdue / this week), text search
-  - cards show type icon, key-number, title, labels, assignee avatars, due date (red if overdue), checklist progress
+  - cards show type icon, key-number, title, labels, assignee avatars (initials), due date (red if overdue), checklist progress
+  - labels use the project's label style (solid by default; tinted or cover bar), with text contrast chosen automatically
+  - hovering an assignee avatar shows their name and email; clicking it filters the board to that person, and
+    "View all their work" lists their items across every project the viewer can open, limited by the viewer's access in each
   - quick-add card at the top of each column
 - **Item detail** (side drawer, deep-linkable `/<app>/p/:key/items/:number`):
   title, type, parent picker, status, bucket, sprint, assignees, labels, priority, start and due dates,
-  description editor, checklist (add, reorder, tick), notes thread with `@mention`, attachments,
+  description editor (images can be pasted or dropped in; notes too), checklist (add, reorder, tick), notes thread with `@mention`, attachments,
   children list, activity history (from AuditLog)
 - **Backlog / hierarchy view**: tree of Epic → Feature → Story → Task with expand/collapse,
   multi-select (also used to choose what to export), bulk set sprint/bucket/assignee
 - **Sprints**: create and edit, set active, sprint board (the board filtered to one sprint), close sprint with an option to move unfinished items
 - **Project settings** (PM): general, members (role and visibility per member), teams (optional), buckets (with rules),
-  labels, statusToBucket map, ADO export settings
+  labels, label style, statusToBucket map, ADO export settings
 - **Notifications**: bell with unread count, polled every 60s. Notification types:
   assigned to you, mentioned, due tomorrow, overdue, status change on items you created.
   Due-date checks run daily at 09:00 server time.
@@ -215,7 +219,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Admin**:
   - users
   - projects
-  - branding (app name, logo upload, default theme)
+  - branding (app name, logo upload, default theme, UI font: a preset (Figtree (default), Atkinson Hyperlegible, IBM Plex Sans,
+    Georgia, Arial) or an uploaded font file; one font for everyone, no per-user override)
   - security (session timeouts, lockout)
   - storage (attachment limits, disk usage of `/app/kloister`)
   - backups (enable, time, retention days, last results, "run now")
@@ -382,9 +387,9 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M2 | Projects, members, roles, optional teams, visibility enforcement plus the full permission test matrix |
 | M3 | Work items, hierarchy, dependencies, team assignment, buckets and rules, labels, checklists, sprints (API) |
 | M4 | Board, item drawer, backlog tree, sprint views (UI) |
-| M4.5 | Design foundation: the owner-approved design direction recorded in `docs/DESIGN.md`; design tokens (colour, type, spacing, radius, elevation) as CSS custom properties that M6 theming builds on; a bundled UI font and SVG icon set (nothing loaded from external hosts); app shell (sidebar with project switcher, header, user menu); shared feedback components (toasts with undo, styled confirm dialogs, empty states, loading skeletons); prominent coloured labels (curated palette plus custom colour, automatic text contrast, per-project label style); inline editing in the item drawer; the M1–M4 screens rebuilt on the foundation, with browser-test screenshots for review |
-| M5 | Notes, mentions, attachments, notifications |
-| M6 | Theming and branding, admin settings, backups, log retention, disk usage |
+| M4.5 | Design foundation: the owner-approved design direction recorded in `docs/DESIGN.md`; design tokens (colour, type, spacing, radius, elevation) as CSS custom properties that M6 theming builds on; a bundled UI font and SVG icon set (nothing loaded from external hosts); app shell (sidebar with project switcher, header, user menu); shared feedback components (toasts with undo, styled confirm dialogs, empty states, loading skeletons); prominent coloured labels (curated palette plus custom colour, automatic text contrast, per-project label style); inline editing in the item drawer; assignee avatars with hover card, board filter and the cross-project "all their work" list (with its API endpoint and permission tests); the M1–M4 screens rebuilt on the foundation, with browser-test screenshots for review |
+| M5 | Notes, mentions, attachments, images pasted or dropped into descriptions and notes, notifications |
+| M6 | Theming and branding (including the UI font), admin settings, backups, log retention, disk usage |
 | M6.5 | Polish pass over every screen, reviewed from the browser-test screenshots: consistency, accessibility (WCAG 2.2 AA: keyboard, focus, contrast, screen readers, reduced motion), layouts at phone and tablet width, motion, keyboard shortcuts and a command palette, large-board performance |
 | M7 | Deploy scripts, release workflow, INSTALL/UPGRADE/ADMIN docs, end-to-end install test on a RHEL 8 VM (first usable release, v1.0) |
 | M8 | ADO export plus preview, validated by tests against the documented import rules (v1.1) |
