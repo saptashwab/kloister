@@ -179,7 +179,7 @@ const FIELD_NAMES: Record<string, string> = {
                 <button
                   type="button"
                   class="title-btn"
-                  aria-label="Edit title"
+                  title="Edit the title"
                   (click)="editTitle()"
                 >
                   {{ d.title }}

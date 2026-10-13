@@ -122,7 +122,9 @@ describe('ItemDrawer', () => {
       makeItem(4, { title: 'Locked', can: readOnly, assigneeIds: ['u2'] }),
     );
     expect(root.querySelector('h1')?.textContent).toContain('Locked');
-    expect(root.querySelector('[aria-label="Edit title"]')).toBeNull();
+    // The heading's accessible name is the title itself, editable or not.
+    expect(root.querySelector('h1 [aria-label]')).toBeNull();
+    expect(root.querySelector('button.title-btn')).toBeNull();
     expect(root.querySelectorAll('mat-select').length).toBe(0);
     expect(root.querySelectorAll('input[type="date"]').length).toBe(0);
     expect(root.querySelector('dl.fields')?.textContent).toContain('Bob');
@@ -133,7 +135,7 @@ describe('ItemDrawer', () => {
 
   it('shows inline editors and the activity history when the item is editable', async () => {
     const { root, itemsApi } = await render(makeItem(4));
-    expect(root.querySelector('[aria-label="Edit title"]')).not.toBeNull();
+    expect(root.querySelector('button.title-btn')).not.toBeNull();
     for (const field of ['Status', 'Bucket', 'Assignees', 'Labels', 'Sprint', 'Priority']) {
       expect(root.querySelector(`mat-select[aria-label="${field}"]`)).not.toBeNull();
     }
@@ -147,7 +149,7 @@ describe('ItemDrawer', () => {
     const item = makeItem(4, { title: 'Old title' });
     const { root, itemsApi, fixture } = await render(item);
     itemsApi.update.mockResolvedValue({ ...item, title: 'New title' });
-    root.querySelector<HTMLButtonElement>('[aria-label="Edit title"]')?.click();
+    root.querySelector<HTMLButtonElement>('button.title-btn')?.click();
     await settle(fixture);
     const input = root.querySelector<HTMLInputElement>('input[aria-label="Title"]')!;
     input.value = 'New title';

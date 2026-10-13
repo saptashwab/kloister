@@ -81,15 +81,17 @@ test('inline edits in the drawer can be undone', async ({ page }) => {
   await priority.click();
   await page.getByRole('option', { name: /Highest/ }).click();
   await expect(priority).toContainText('1 – Highest');
-  const toast = page.locator('.k-toast');
-  await expect(toast).toContainText('Priority saved');
+  const toast = page.locator('.k-toast', { hasText: 'Priority saved' });
+  await expect(toast).toBeVisible();
   await snap(page, 'drawer inline edit with undo');
   await toast.getByRole('button', { name: 'Undo' }).click();
   await expect(priority).toContainText('2 – High');
-  await expect(page.locator('.k-toast')).toContainText('Change undone');
+  // The new toast replaces the old one, which may still be fading out.
+  await expect(page.locator('.k-toast', { hasText: 'Change undone' })).toBeVisible();
 
   // Title edits in place.
-  await drawer.getByRole('button', { name: 'Edit title' }).click();
+  // The title is the heading; clicking it edits in place.
+  await drawer.getByRole('heading', { level: 1 }).getByRole('button').click();
   const title = drawer.getByRole('textbox', { name: 'Title' });
   await title.fill('Invoice PDF layout');
   await title.press('Enter');

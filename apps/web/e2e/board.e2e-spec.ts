@@ -72,8 +72,8 @@ test('a PM works the board and the item drawer', async ({ page }) => {
   const moved = column(page, 'In Progress').locator('.open', { hasText: 'Write release notes' });
   await expect(moved).toBeVisible();
   // The move is confirmed by a toast with Undo (docs/DESIGN.md §11).
-  const toast = page.locator('.k-toast');
-  await expect(toast).toContainText('moved to In Progress');
+  const toast = page.locator('.k-toast', { hasText: 'moved to In Progress' });
+  await expect(toast).toBeVisible();
   await expect(toast.getByRole('button', { name: 'Undo' })).toBeVisible();
   await snap(page, 'board with undo toast');
 
