@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { test as setup } from '@playwright/test';
 import { E2E_PASSWORD, PROJECT_KEY, USERS } from './support';
@@ -86,12 +87,16 @@ function day(days: number): string {
 }
 
 setup('seed users, project and items', async () => {
+  // Relative to this config's folder, not to wherever the runner started.
+  const configFile = setup.info().config.configFile ?? '';
+  const apiDir = resolve(dirname(configFile), '../../api');
+
   // The first admin, created by the CLI; its temporary password is read
   // from stdout and kept in memory only.
   const { stdout } = await promisify(execFile)(
     'node',
     ['dist/cli/create-admin.js', '--email', USERS.admin, '--name', 'Ada Admin'],
-    { cwd: '../../api' },
+    { cwd: apiDir },
   );
   const temporary = /Temporary password[^:]*: (\S+)/.exec(stdout)?.[1];
   if (temporary === undefined) throw new Error(`create-admin printed no password:\n${stdout}`);
