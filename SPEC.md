@@ -201,7 +201,10 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - cards show type icon, key-number, title, labels, assignee avatars (initials), due date (red if overdue), checklist progress
   - labels use the project's label style (solid by default; tinted or cover bar), with text contrast chosen automatically
   - hovering an assignee avatar shows their name and email; clicking it filters the board to that person, and
-    "View all their work" lists their items across every project the viewer can open, limited by the viewer's access in each
+    "View all their work" lists their items across the viewer's own unarchived projects, limited by the viewer's access in
+    each. Projects a system admin is not a member of are never included (no cross-project reads, so no
+    `ADMIN_CROSS_PROJECT_ACCESS` entries); admins open such projects directly, audited as in 3.1. Non-admins can look up
+    only people who share a project with them (404 otherwise)
   - quick-add card at the top of each column
 - **Item detail** (side drawer, deep-linkable `/<app>/p/:key/items/:number`):
   title, type, parent picker, status, bucket, sprint, assignees, labels, priority, start and due dates,
@@ -292,7 +295,7 @@ and the export preview lists this as a warning.
 - `GET /api/v1/health` returns 200 with no auth required, for scripts.
 - An OpenAPI doc is generated at build time into `docs/` (not served in production).
 
-Main groups: `auth`, `me`, `admin/users`, `admin/settings`, `admin/audit`, `admin/backups`,
+Main groups: `auth`, `me`, `users/:id/work`, `admin/users`, `admin/settings`, `admin/audit`, `admin/backups`,
 `projects`, `projects/:id/members`, `projects/:id/teams`, `buckets`, `labels`, `sprints`, `items` (+ `/move`, `/checklist`,
 `/notes`, `/attachments`, `/children`), `notifications`, `projects/:id/export/ado` (+ `/preview`).
 
