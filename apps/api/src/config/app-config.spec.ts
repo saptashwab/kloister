@@ -22,9 +22,24 @@ describe('loadConfig', () => {
 
   it('requires APP_NAME in production so the cookie path is never silently "/"', () => {
     expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(/APP_NAME/);
-    expect(loadConfig({ ...base, NODE_ENV: 'production', APP_NAME: 'tracker' }).cookiePath).toBe(
-      '/tracker/',
+    const production = {
+      ...base,
+      NODE_ENV: 'production',
+      APP_NAME: 'tracker',
+      ATTACHMENTS_DIR: '/srv/tracker/data/attachments',
+    };
+    expect(loadConfig(production).cookiePath).toBe('/tracker/');
+  });
+
+  it('requires an absolute ATTACHMENTS_DIR in production, with a temporary folder in development', () => {
+    expect(() => loadConfig({ ...base, NODE_ENV: 'production', APP_NAME: 'tracker' })).toThrow(
+      /ATTACHMENTS_DIR/,
     );
+    expect(() => loadConfig({ ...base, ATTACHMENTS_DIR: 'data/attachments' })).toThrow(
+      /ATTACHMENTS_DIR/,
+    );
+    expect(loadConfig({ ...base, ATTACHMENTS_DIR: '/srv/a' }).attachmentsDir).toBe('/srv/a');
+    expect(loadConfig(base).attachmentsDir).toMatch(/kloister-dev-attachments$/);
   });
 
   it('rejects an APP_NAME that is not a safe path segment', () => {

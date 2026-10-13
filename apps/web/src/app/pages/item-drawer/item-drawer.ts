@@ -17,6 +17,7 @@ import {
   ALLOWED_PARENT_TYPES,
   ItemStatus,
   ItemType,
+  inlineImagePath,
   ITEM_TITLE_MAX,
   LabelStyle,
   type MoveItemRequest,
@@ -28,23 +29,27 @@ import {
   type WorkItemDetailDto,
   type WorkItemDto,
 } from '@kloister/shared';
+import { AnnotationsApiService } from '../../core/annotations-api.service';
 import { errorMessage } from '../../core/api';
 import { isoDate, NONE } from '../../core/board-logic';
 import { dueState, dueText, revertMove, shortDate, undoFields } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
 import { PRIORITY_LABELS, SPRINT_STATE_LABELS, TYPE_LABELS } from '../../core/labels';
 import { ProjectContext } from '../../core/project-context';
+import { forDisplay, type Mentionable } from '../../core/rich-text';
 import { SessionStore } from '../../core/session.store';
 import { Avatar, PERSON_FILTER, StaticAvatar } from '../../ui/avatar';
 import { Dialogs } from '../../ui/dialogs';
 import { Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
+import { ViewImages } from '../../ui/image-viewer';
 import { LabelPill } from '../../ui/label-pill';
 import { PriorityIcon, StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
-import { DescriptionEditor } from './description-editor';
 import { ItemActivity } from './item-activity';
+import { ItemAttachments } from './item-attachments';
 import { ItemChecklist } from './item-checklist';
+import { type ImageUploader, RichTextEditor } from './rich-text-editor';
 
 /** Display names of the fields, for toasts. */
 const FIELD_NAMES: Record<string, string> = {
@@ -77,7 +82,9 @@ const FIELD_NAMES: Record<string, string> = {
  * rule) replaces what is shown.
  *
  * Ancestors outside the caller's scope are shown as read-only titles
- * (SPEC §3.3). Notes and attachments arrive in M5.
+ * (SPEC §3.3). Notes, attachments and images pasted or dropped into the
+ * description or notes need the item's `can.annotate` (SPEC §3.2 "Notes and
+ * attachments"); images open in the full-size viewer (DESIGN §10).
  */
 @Component({
   selector: 'app-item-drawer',
@@ -85,16 +92,18 @@ const FIELD_NAMES: Record<string, string> = {
     MatMenuModule,
     MatSelectModule,
     Avatar,
-    DescriptionEditor,
     Icon,
     ItemActivity,
+    ItemAttachments,
     ItemChecklist,
     LabelPill,
     PriorityIcon,
+    RichTextEditor,
     Skeleton,
     StaticAvatar,
     StatusPill,
     TypeIcon,
+    ViewImages,
   ],
   // Avatars here show their hover card on click; they do not filter the
   // board behind the drawer.
@@ -492,12 +501,13 @@ const FIELD_NAMES: Record<string, string> = {
           <section aria-labelledby="d-desc">
             <h2 id="d-desc">Description</h2>
             @if (canEdit()) {
-              <app-description-editor
+              <app-rich-text-editor
                 [html]="d.description"
+                [uploadImage]="imageUploader()"
                 (save)="save({ description: $event })"
               />
             } @else if (d.description) {
-              <div class="description" [innerHTML]="d.description"></div>
+              <div class="description k-rich" appViewImages [innerHTML]="descriptionHtml()"></div>
             } @else {
               <p class="muted">No description.</p>
             }
@@ -586,8 +596,26 @@ const FIELD_NAMES: Record<string, string> = {
             }
           </section>
 
-          <section aria-label="Activity">
-            <app-item-activity [projectId]="projectId()" [itemId]="d.id" [version]="version()" />
+          <section aria-labelledby="d-files">
+            <app-item-attachments
+              [projectId]="projectId()"
+              [itemId]="d.id"
+              [canAdd]="canAnnotate()"
+              [writable]="ctx.writable()"
+              (changed)="reloadHistory()"
+            />
+          </section>
+
+          <section aria-labelledby="d-activity">
+            <app-item-activity
+              [projectId]="projectId()"
+              [itemId]="d.id"
+              [version]="version()"
+              [canAnnotate]="canAnnotate()"
+              [writable]="ctx.writable()"
+              [mentionables]="mentionables()"
+              [uploadImage]="imageUploader()"
+            />
           </section>
         } @empty {
           @if (!error()) {
@@ -606,6 +634,7 @@ export class ItemDrawer {
   private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
   private readonly dialogs = inject(Dialogs);
+  private readonly annotations = inject(AnnotationsApiService);
   private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
 
   /** Item number from the route (`items/:number`). */
@@ -678,6 +707,31 @@ export class ItemDrawer {
     const d = this.detail();
     return d !== null && this.ctx.canMove(d);
   });
+  /** Notes, attachments and images can be added. */
+  protected readonly canAnnotate = computed(() => {
+    const d = this.detail();
+    return d !== null && this.ctx.writable() && d.can.annotate;
+  });
+  /** Uploads images pasted or dropped into the description or a note. */
+  protected readonly imageUploader = computed<ImageUploader | null>(() => {
+    const d = this.detail();
+    const projectId = this.projectId();
+    if (d === null || !this.canAnnotate()) return null;
+    return {
+      prefix: inlineImagePath(projectId, d.id, ''),
+      upload: (file: File) => this.annotations.addImage(projectId, d.id, file),
+    };
+  });
+  /** Active members, who can be mentioned in notes. */
+  protected readonly mentionables = computed<Mentionable[]>(() =>
+    this.ctx
+      .members()
+      .filter((m) => m.isActive)
+      .map((m) => ({ id: m.userId, name: m.displayName })),
+  );
+  /** The description prepared for read-only display. */
+  protected readonly descriptionHtml = computed(() => forDisplay(this.detail()?.description ?? ''));
+
   /** Deleting is offered. */
   protected readonly canDelete = computed(() => {
     const d = this.detail();
@@ -787,6 +841,11 @@ export class ItemDrawer {
   protected canAssign(userId: string): boolean {
     const d = this.detail();
     return userId === this.session.user()?.id || this.ctx.canAssignOthers(d?.teamId ?? null);
+  }
+
+  /** Reloads the activity history, e.g. after an attachment was added. */
+  protected reloadHistory(): void {
+    this.version.update((v) => v + 1);
   }
 
   /**

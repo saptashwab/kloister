@@ -517,7 +517,7 @@ describe('work items (db)', () => {
       }
     }
 
-    it('notes and attachments: reported per item until the M5 endpoints exist', async () => {
+    it('notes and attachments: the capability matches the annotations.db-spec.ts matrix', async () => {
       const annotate: Record<string, boolean> = {};
       for (const caller of ['pm', 'lead', 'member', 'viewer', 'admin'] as const) {
         const res = await as(caller, 'GET', item(N.theirs));

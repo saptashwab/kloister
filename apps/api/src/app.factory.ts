@@ -3,7 +3,7 @@ import fastifyCookie from '@fastify/cookie';
 import { NestFactory } from '@nestjs/core';
 import type { NestApplicationOptions } from '@nestjs/common';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
-import { API_PREFIX } from '@kloister/shared';
+import { API_PREFIX, UPLOAD_CONTENT_TYPE } from '@kloister/shared';
 import { AppModule } from './app.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { UuidParamCasePipe } from './common/uuid.js';
@@ -25,7 +25,7 @@ export function createAdapter(trustProxy: string | false): FastifyAdapter {
 
 /**
  * Applies the global setup every instance of the app needs: cookies, route
- * prefix, error shape and DTO validation. Shared by {@link createApp} and
+ * prefix, error shape, DTO validation and raw upload bodies. Shared by {@link createApp} and
  * tests that build the app from a testing module.
  *
  * @param app An application that has not been initialised yet.
@@ -33,6 +33,16 @@ export function createAdapter(trustProxy: string | false): FastifyAdapter {
  */
 export async function configureApp(app: NestFastifyApplication): Promise<void> {
   await app.register(fastifyCookie);
+  // Uploads (attachments, inline images) arrive as raw bytes. The body is
+  // handed on unread, so the route's guards run before any of it is read and
+  // the file is streamed to disk under the admin's size limit instead of
+  // being buffered (Fastify's 1 MB JSON body limit does not apply).
+  app
+    .getHttpAdapter()
+    .getInstance()
+    .addContentTypeParser(UPLOAD_CONTENT_TYPE, (_request, payload, done) => {
+      done(null, payload);
+    });
   app.setGlobalPrefix(API_PREFIX);
   app.useGlobalFilters(new AllExceptionsFilter());
   // Uuid path parameters are lowercased before validation and route pipes.

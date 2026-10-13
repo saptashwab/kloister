@@ -7,6 +7,7 @@ import {
   type ItemRefDto,
   ItemStatus,
   type ItemType,
+  NotificationType,
   type Page,
   requiresBucket,
   SprintState,
@@ -24,12 +25,14 @@ import { isForeignKeyViolation } from '../common/prisma-errors.js';
 import { sanitizeRichText } from '../common/sanitize-html.js';
 import { serializable } from '../common/transactions.js';
 import type { Bucket, Prisma } from '../generated/prisma/client.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   type ItemFacts,
   type ProjectAccess,
   ProjectAccessService,
 } from '../projects/project-access.service.js';
+import { FileStoreService } from '../storage/file-store.service.js';
 import {
   assertChildrenFit,
   assertParentType,
@@ -48,6 +51,7 @@ import {
   toItemDto,
   toItemRef,
 } from './item.mapper.js';
+import { sanitizeItemText } from './item-rich-text.js';
 import {
   type CreateItemDto,
   type ListItemsQueryDto,
@@ -74,6 +78,9 @@ type Change = { from: Prisma.InputJsonValue | null; to: Prisma.InputJsonValue | 
  * Some internal queries are deliberately unscoped and return no item
  * content: ancestor titles (shown read-only whatever the scope, SPEC §3.3),
  * card positions, child types and cycle checks.
+ *
+ * Assigning someone else and changing the status of an item someone else
+ * created notify those people (SPEC §6), if they can see the item.
  */
 @Injectable()
 export class ItemsService {
@@ -83,11 +90,15 @@ export class ItemsService {
    * @param prisma Database access.
    * @param audit Audit log; item entries form the activity history.
    * @param access Item permission rules and the visibility filter.
+   * @param notifications Notifications for assignees and creators.
+   * @param files Attachment files, removed with deleted items.
    */
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly access: ProjectAccessService,
+    private readonly notifications: NotificationsService,
+    private readonly files: FileStoreService,
   ) {}
 
   /**
@@ -221,6 +232,7 @@ export class ItemsService {
     if (!this.access.canAssign(access, assigneeIds, { teamId })) {
       throw forbidden('Your project role does not allow assigning items to others');
     }
+    // A new item has no inline images yet, so any image is dropped.
     const description = sanitizeRichText(dto.description ?? '');
     const startDate = dto.startDate ?? null;
     const dueDate = dto.dueDate ?? null;
@@ -299,6 +311,14 @@ export class ItemsService {
           number,
           type: item.type,
           title: item.title,
+        });
+        await this.notifications.notify(tx, {
+          type: NotificationType.ASSIGNED,
+          actorId: auth.user.id,
+          projectId,
+          itemId: item.id,
+          facts,
+          recipients: assigneeIds,
         });
         return tx.workItem.findUniqueOrThrow({
           where: { id: item.id },
@@ -404,7 +424,12 @@ export class ItemsService {
         data.title = dto.title;
       }
       if (dto.description !== undefined) {
-        const description = sanitizeRichText(dto.description);
+        const { html: description } = await sanitizeItemText(
+          tx,
+          projectId,
+          current.id,
+          dto.description,
+        );
         if (description !== current.description) {
           // The text itself stays out of the audit log; it can be long.
           note('description', null, null);
@@ -491,10 +516,22 @@ export class ItemsService {
         number: current.number,
         changes,
       });
-      return tx.workItem.findUniqueOrThrow({
+      const updated = await tx.workItem.findUniqueOrThrow({
         where: { id: current.id },
         include: this.include(access),
       });
+      await this.notifications.notify(tx, {
+        type: NotificationType.ASSIGNED,
+        actorId: auth.user.id,
+        projectId,
+        itemId: current.id,
+        facts: itemFacts(updated),
+        recipients: after.filter((id) => !before.includes(id)),
+      });
+      if (changes['status'] !== undefined) {
+        await this.notifyStatusChange(tx, auth, access, updated);
+      }
+      return updated;
     });
     return this.detail(this.prisma, access, row);
   }
@@ -580,10 +617,12 @@ export class ItemsService {
           ...(status === current.status ? {} : { status: { from: current.status, to: status } }),
         });
       }
-      return tx.workItem.findUniqueOrThrow({
+      const moved = await tx.workItem.findUniqueOrThrow({
         where: { id: current.id },
         include: this.include(access),
       });
+      if (status !== current.status) await this.notifyStatusChange(tx, auth, access, moved);
+      return moved;
     });
     return this.detail(this.prisma, access, row);
   }
@@ -610,7 +649,7 @@ export class ItemsService {
     cascade: boolean,
   ): Promise<void> {
     const projectId = access.project.id;
-    await serializable(this.prisma, async (tx) => {
+    const files = await serializable(this.prisma, async (tx) => {
       const current = await this.findVisible(tx, access, ref);
       // Every child counts here, also those the caller cannot see.
       const children = await tx.workItem.count({ where: { parentId: current.id } });
@@ -632,6 +671,11 @@ export class ItemsService {
         frontier = children.map((c) => c.id);
         ids.push(...frontier);
       }
+      // Their notes, attachments and notifications go with the rows.
+      const files = await tx.attachment.findMany({
+        where: { workItemId: { in: ids } },
+        select: { storedName: true },
+      });
       // One statement, so the parent links are checked only once all rows are gone.
       await tx.workItem.deleteMany({ where: { projectId, id: { in: ids } } });
       await this.record(tx, auth, access, AuditAction.ITEM_DELETED, current.id, {
@@ -640,7 +684,10 @@ export class ItemsService {
         title: current.title,
         ...(cascade ? { cascade: true, descendants: ids.length - 1 } : {}),
       });
+      return files;
     });
+    // Only once the rows are gone for good; a rolled-back delete keeps its files.
+    await this.files.remove(files.map((f) => ({ projectId, storedName: f.storedName })));
   }
 
   /**
@@ -772,6 +819,31 @@ export class ItemsService {
       },
       db,
     );
+  }
+
+  /**
+   * Tells an item's creator that someone else changed its status (SPEC §6).
+   *
+   * @param db Transaction client.
+   * @param auth The caller.
+   * @param access The caller's access.
+   * @param row The item after the change.
+   * @returns Resolves once recorded.
+   */
+  private async notifyStatusChange(
+    db: DbClient,
+    auth: AuthContext,
+    access: ProjectAccess,
+    row: ItemRow,
+  ): Promise<void> {
+    await this.notifications.notify(db, {
+      type: NotificationType.STATUS_CHANGED,
+      actorId: auth.user.id,
+      projectId: access.project.id,
+      itemId: row.id,
+      facts: itemFacts(row),
+      recipients: [row.createdById],
+    });
   }
 
   /**

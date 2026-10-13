@@ -14,6 +14,7 @@ import type { ConnectedPosition } from '@angular/cdk/overlay';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { AuthService } from './core/auth.service';
+import { NotificationsStore } from './core/notifications.store';
 import { ProjectsNav } from './core/projects-nav';
 import { SessionStore } from './core/session.store';
 import { StaticAvatar } from './ui/avatar';
@@ -24,6 +25,9 @@ import { Icon } from './ui/icon';
  * sidebar with the app name, "My work", the project switcher, admin links
  * and the user menu; the sign-in and forced password change screens are
  * shown without it. At narrow widths the sidebar opens from a menu button.
+ * The bell (sidebar link, and a top bar button at narrow widths) shows the
+ * unread notification count, polled every 60 seconds while signed in
+ * (SPEC §6).
  *
  * The name is a placeholder; from M6 it comes from the admin branding
  * settings so no product or employer name is baked into the build. Admin
@@ -53,6 +57,8 @@ export class App {
   protected readonly store = inject(SessionStore);
   /** The caller's projects for the switcher. */
   protected readonly nav = inject(ProjectsNav);
+  /** The unread notification count for the bell. */
+  protected readonly notifications = inject(NotificationsStore);
   /** App name shown in the sidebar. */
   protected readonly title = signal('Kloister');
   /** The account menu opens above its button. */
@@ -71,6 +77,18 @@ export class App {
     return user && !user.mustChangePassword ? user : null;
   });
 
+  /** The unread count as shown on the badge. */
+  protected readonly unreadText = computed(() => {
+    const count = this.notifications.unread();
+    return count > 99 ? '99+' : String(count);
+  });
+
+  /** Accessible name of the bell links, with the unread count. */
+  protected readonly bellLabel = computed(() => {
+    const count = this.notifications.unread();
+    return count === 0 ? 'Notifications' : `Notifications, ${count} unread`;
+  });
+
   /** The current URL, for highlighting the open project. */
   private readonly url = toSignal(
     this.router.events.pipe(
@@ -86,13 +104,22 @@ export class App {
   );
 
   /**
-   * Loads the project switcher when someone signs in and closes the narrow
+   * Loads the project switcher and starts the notification polling when
+   * someone signs in (stopping it when they sign out), and closes the narrow
    * sidebar after every navigation.
    */
   constructor() {
     effect(() => {
       const id = this.user()?.id;
-      untracked(() => (id === undefined ? this.nav.clear() : void this.nav.refresh()));
+      untracked(() => {
+        if (id === undefined) {
+          this.nav.clear();
+          this.notifications.stop();
+        } else {
+          void this.nav.refresh();
+          this.notifications.start();
+        }
+      });
     });
     effect(() => {
       this.url();

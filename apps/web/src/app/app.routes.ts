@@ -38,6 +38,13 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/admin-audit/admin-audit').then((m) => m.AdminAuditPage),
   },
   {
+    // The bell's list (SPEC §6).
+    path: 'notifications',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/notifications/notifications').then((m) => m.NotificationsPage),
+  },
+  {
     // "All their work" (SPEC §6); the sidebar's "My work" is the caller's own.
     path: 'people/:userId',
     canActivate: [authGuard],

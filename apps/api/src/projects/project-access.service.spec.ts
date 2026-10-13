@@ -417,6 +417,17 @@ describe('ProjectAccessService', () => {
       expect(v.service.canAnnotateItem(v.access, others)).toBe(false);
     });
 
+    it("moderating others' notes and attachments: PM and Lead only", async () => {
+      for (const role of ['PM', 'LEAD'] as const) {
+        const { service, access } = await as(role);
+        expect(service.canModerateAnnotations(access, others)).toBe(true);
+      }
+      for (const role of ['MEMBER', 'VIEWER'] as const) {
+        const { service, access } = await as(role);
+        expect(service.canModerateAnnotations(access, created)).toBe(false);
+      }
+    });
+
     it('assign: self always; others needs ASSIGN_OTHERS (Members via the project setting)', async () => {
       for (const role of ['PM', 'LEAD'] as const) {
         const { service, access } = await as(role);
@@ -514,6 +525,16 @@ describe('ProjectAccessService', () => {
           { teamId: { in: [TEAM_A] } },
         ],
       });
+    });
+
+    it("a team Lead may moderate notes and attachments on their team's items only", async () => {
+      const { service, access } = await withTeams('MEMBER', 'ALL', [
+        { teamId: TEAM_A, role: 'LEAD' },
+        { teamId: TEAM_B, role: 'MEMBER' },
+      ]);
+      expect(service.canModerateAnnotations(access, item({ teamId: TEAM_A }))).toBe(true);
+      expect(service.canModerateAnnotations(access, item({ teamId: TEAM_B }))).toBe(false);
+      expect(service.canModerateAnnotations(access, item({ teamId: null }))).toBe(false);
     });
 
     it('team membership alone grants no extra rights', async () => {

@@ -369,3 +369,11 @@ docs/DECISIONS.md:
   of a separate removable person chip (section 9).
 - The sidebar does not yet collapse to icons at tablet width, and the drawer does not yet trap focus (sections 7
   and 13); both are part of the M6.5 polish pass.
+
+M5 adds:
+
+- The bell opens a notifications page rather than a dropdown, and at narrow widths a bell button with the count
+  sits in the top bar (section 7).
+- Editable descriptions and notes have Image and View images buttons next to the formatting buttons, so images can
+  be added and viewed full size without a mouse (section 10).
+- The `@mention` listbox opens under the editing area, not at the caret; M6.5 moves it to the caret.

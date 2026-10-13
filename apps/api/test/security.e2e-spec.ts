@@ -1,5 +1,12 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { CSRF_HEADER, CSRF_HEADER_VALUE, ErrorCode, type ErrorResponse } from '@kloister/shared';
+import {
+  CSRF_HEADER,
+  CSRF_HEADER_VALUE,
+  ErrorCode,
+  type ErrorResponse,
+  FILE_NAME_HEADER,
+  UPLOAD_CONTENT_TYPE,
+} from '@kloister/shared';
 import { createApp } from '../src/app.factory.js';
 
 // HTTP-level security checks that stop before any database query, so they
@@ -84,10 +91,44 @@ describe('API security without a session (e2e)', () => {
     ['PATCH', `/api/v1/projects/${SOME_ID}/items/1/checklist/${SOME_ID}`],
     ['POST', `/api/v1/projects/${SOME_ID}/items/1/checklist/${SOME_ID}/move`],
     ['DELETE', `/api/v1/projects/${SOME_ID}/items/1/checklist/${SOME_ID}`],
+    ['GET', `/api/v1/projects/${SOME_ID}/items/1/notes`],
+    ['POST', `/api/v1/projects/${SOME_ID}/items/1/notes`],
+    ['PATCH', `/api/v1/projects/${SOME_ID}/items/1/notes/${SOME_ID}`],
+    ['DELETE', `/api/v1/projects/${SOME_ID}/items/1/notes/${SOME_ID}`],
+    ['GET', `/api/v1/projects/${SOME_ID}/items/1/attachments`],
+    ['POST', `/api/v1/projects/${SOME_ID}/items/1/attachments`],
+    ['GET', `/api/v1/projects/${SOME_ID}/items/1/attachments/${SOME_ID}`],
+    ['DELETE', `/api/v1/projects/${SOME_ID}/items/1/attachments/${SOME_ID}`],
+    ['POST', `/api/v1/projects/${SOME_ID}/items/1/images`],
+    ['GET', `/api/v1/projects/${SOME_ID}/items/1/images/${SOME_ID}`],
+    ['GET', '/api/v1/notifications'],
+    ['GET', '/api/v1/notifications/unread-count'],
+    ['POST', '/api/v1/notifications/read-all'],
+    ['POST', `/api/v1/notifications/${SOME_ID}/read`],
   ] as const)('%s %s returns 401 without a session', async (method, url) => {
     const res = await app.inject({ method, url, headers: CSRF, payload: {} });
     expect(res.statusCode).toBe(401);
     expect(res.json()).toEqual({ code: ErrorCode.UNAUTHENTICATED, message: 'Not signed in' });
+  });
+
+  // Uploads send raw bytes; they must be refused before any of the body is
+  // used, by the same CSRF and session checks as every other write.
+  it.each([
+    `/api/v1/projects/${SOME_ID}/items/1/attachments`,
+    `/api/v1/projects/${SOME_ID}/items/1/images`,
+  ])('refuses uploads to %s without the CSRF header or a session', async (url) => {
+    const upload = {
+      method: 'POST' as const,
+      url,
+      payload: Buffer.from('GIF89a'),
+    };
+    const headers = { 'content-type': UPLOAD_CONTENT_TYPE, [FILE_NAME_HEADER]: 'a.gif' };
+    const noCsrf = await app.inject({ ...upload, headers });
+    expect(noCsrf.statusCode).toBe(403);
+    expect(errorOf(noCsrf).code).toBe(ErrorCode.CSRF_HEADER_MISSING);
+    const noSession = await app.inject({ ...upload, headers: { ...headers, ...CSRF } });
+    expect(noSession.statusCode).toBe(401);
+    expect(errorOf(noSession).code).toBe(ErrorCode.UNAUTHENTICATED);
   });
 
   it('requires the CSRF header on state-changing requests, even public ones', async () => {

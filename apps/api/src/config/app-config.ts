@@ -1,3 +1,6 @@
+import { tmpdir } from 'node:os';
+import { isAbsolute, join } from 'node:path';
+
 /**
  * Runtime configuration for the backend, read once at startup from the
  * environment (`config/kloister.env` on the server, written by install.sh).
@@ -24,6 +27,12 @@ export class AppConfig {
   readonly loginRateLimit: number;
   /** Window for {@link loginRateLimit}, in milliseconds. */
   readonly loginRateWindowMs: number;
+  /**
+   * Absolute directory holding attachments and inline images, one folder per
+   * project (SPEC §5: `/app/<app_name>/data/attachments`, never under the web
+   * root).
+   */
+  readonly attachmentsDir: string;
 
   /**
    * Wraps already-validated values; build instances with {@link loadConfig}.
@@ -38,6 +47,7 @@ export class AppConfig {
     trustProxy: string | false;
     loginRateLimit: number;
     loginRateWindowMs: number;
+    attachmentsDir: string;
   }) {
     this.databaseUrl = values.databaseUrl;
     this.host = values.host;
@@ -46,6 +56,7 @@ export class AppConfig {
     this.trustProxy = values.trustProxy;
     this.loginRateLimit = values.loginRateLimit;
     this.loginRateWindowMs = values.loginRateWindowMs;
+    this.attachmentsDir = values.attachmentsDir;
   }
 }
 
@@ -94,6 +105,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error('APP_NAME must be set when NODE_ENV=production');
   }
 
+  // Uploaded files must land in the server's data folder, set by install.sh;
+  // only local development may fall back to a temporary folder.
+  const attachmentsDir = env['ATTACHMENTS_DIR'] ?? '';
+  if (attachmentsDir === '' && env['NODE_ENV'] === 'production') {
+    throw new Error('ATTACHMENTS_DIR must be set when NODE_ENV=production');
+  }
+  if (attachmentsDir !== '' && !isAbsolute(attachmentsDir)) {
+    throw new Error(`ATTACHMENTS_DIR must be an absolute path, got "${attachmentsDir}"`);
+  }
+
   // Default to trusting only loopback: httpd runs on the same host and
   // proxies from 127.0.0.1 (SPEC §9.4). "false" disables proxy trust.
   const rawTrust = env['TRUST_PROXY'] ?? 'loopback';
@@ -108,5 +129,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     loginRateLimit: positiveInt('LOGIN_RATE_LIMIT', env['LOGIN_RATE_LIMIT'], 10),
     loginRateWindowMs:
       positiveInt('LOGIN_RATE_WINDOW_SECONDS', env['LOGIN_RATE_WINDOW_SECONDS'], 60) * 1000,
+    attachmentsDir:
+      attachmentsDir === '' ? join(tmpdir(), 'kloister-dev-attachments') : attachmentsDir,
   });
 }

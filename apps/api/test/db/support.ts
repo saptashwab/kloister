@@ -1,10 +1,23 @@
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync } from 'node:fs';
+import { access, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
-import { CSRF_HEADER, CSRF_HEADER_VALUE, type SystemRole } from '@kloister/shared';
+import {
+  CSRF_HEADER,
+  CSRF_HEADER_VALUE,
+  FILE_NAME_HEADER,
+  type SystemRole,
+  UPLOAD_CONTENT_TYPE,
+} from '@kloister/shared';
 import { createApp } from '../../src/app.factory.js';
 import { PasswordService } from '../../src/auth/password.service.js';
 import type {
+  Attachment,
   Bucket,
   Label,
+  Note,
   Project,
   Sprint,
   Team,
@@ -22,15 +35,22 @@ export const TEST_APP_NAME = 'kloister-test';
 export const PASSWORD = 'seeded-password-1';
 
 /**
+ * Attachments folder of this test run: a fresh temporary directory, so
+ * uploads never land anywhere real.
+ */
+export const ATTACHMENTS_DIR = mkdtempSync(join(tmpdir(), 'kloister-db-attachments-'));
+
+/**
  * Boots the full app. The login rate limit is raised so suites that sign in
  * many times from the same address are not throttled; the limiter itself is
- * covered by the database-free e2e tests.
+ * covered by the database-free e2e tests. Uploads go to {@link ATTACHMENTS_DIR}.
  *
  * @returns The app and its Prisma client.
  */
 export async function startApp(): Promise<{ app: NestFastifyApplication; prisma: PrismaService }> {
   process.env['APP_NAME'] = TEST_APP_NAME;
   process.env['LOGIN_RATE_LIMIT'] = '10000';
+  process.env['ATTACHMENTS_DIR'] = ATTACHMENTS_DIR;
   const app = await createApp({ logger: false });
   await app.getHttpAdapter().getInstance().ready();
   return { app, prisma: app.get(PrismaService) };
@@ -44,7 +64,7 @@ export async function startApp(): Promise<{ app: NestFastifyApplication; prisma:
  */
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "Session", "AppSetting", "ChecklistItem", "WorkItemLabel", "WorkItemDependency", "WorkItemAssignee", "WorkItem", "Label", "Sprint", "Bucket", "TeamMember", "Team", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "Notification", "Attachment", "Note", "AuditLog", "Session", "AppSetting", "ChecklistItem", "WorkItemLabel", "WorkItemDependency", "WorkItemAssignee", "WorkItem", "Label", "Sprint", "Bucket", "TeamMember", "Team", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
   );
 }
 
@@ -273,6 +293,118 @@ export function seedSprint(
       startDate: new Date('2026-11-02T00:00:00.000Z'),
       endDate: new Date('2026-11-13T00:00:00.000Z'),
     },
+  });
+}
+
+/**
+ * Inserts a note directly.
+ *
+ * @param prisma Database client.
+ * @param workItemId Item id.
+ * @param authorId Author.
+ * @param body Stored (already safe) HTML.
+ * @returns The created note.
+ */
+export function seedNote(
+  prisma: PrismaService,
+  workItemId: string,
+  authorId: string,
+  body = '<p>Seeded note</p>',
+): Promise<Note> {
+  return prisma.note.create({ data: { workItemId, authorId, body } });
+}
+
+/** A tiny valid GIF (1 x 1 pixel), used as an image and attachment in tests. */
+export const GIF = Buffer.from(
+  'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+  'base64',
+);
+
+/**
+ * Inserts an attachment (or inline image) row and writes its file into
+ * {@link ATTACHMENTS_DIR}, as an upload would.
+ *
+ * @param prisma Database client.
+ * @param projectId The item's project.
+ * @param workItemId Item id.
+ * @param uploaderId Uploader.
+ * @param fields Optional fields.
+ * @param fields.inline True for an inline image.
+ * @param fields.name File name.
+ * @param fields.bytes Content; a tiny GIF by default.
+ * @param fields.createdAt Upload time; now by default.
+ * @returns The created row.
+ */
+export async function seedAttachment(
+  prisma: PrismaService,
+  projectId: string,
+  workItemId: string,
+  uploaderId: string,
+  fields: { inline?: boolean; name?: string; bytes?: Buffer; createdAt?: Date } = {},
+): Promise<Attachment> {
+  const bytes = fields.bytes ?? GIF;
+  const storedName = randomUUID();
+  await mkdir(join(ATTACHMENTS_DIR, projectId), { recursive: true });
+  await writeFile(join(ATTACHMENTS_DIR, projectId, storedName), bytes);
+  return prisma.attachment.create({
+    data: {
+      workItemId,
+      uploaderId,
+      originalName: fields.name ?? 'seeded.gif',
+      storedName,
+      sizeBytes: bytes.length,
+      mimeType: 'image/gif',
+      sha256: 'seeded',
+      inline: fields.inline ?? false,
+      ...(fields.createdAt === undefined ? {} : { createdAt: fields.createdAt }),
+    },
+  });
+}
+
+/**
+ * Reports whether a stored file exists on disk.
+ *
+ * @param projectId Project id.
+ * @param storedName Stored name.
+ * @returns True if the file is there.
+ */
+export async function storedFileExists(projectId: string, storedName: string): Promise<boolean> {
+  try {
+    await access(join(ATTACHMENTS_DIR, projectId, storedName));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Uploads raw bytes the way the web app does: `application/octet-stream`
+ * with the name, percent-encoded, in the `x-file-name` header.
+ *
+ * @param app The app.
+ * @param url Upload path including `/api/v1`.
+ * @param sid Session token.
+ * @param bytes File content.
+ * @param name File name.
+ * @returns The response.
+ */
+export async function upload(
+  app: NestFastifyApplication,
+  url: string,
+  sid: string,
+  bytes: Buffer,
+  name = 'file.gif',
+): Promise<Res> {
+  return app.inject({
+    method: 'POST',
+    url,
+    headers: {
+      [CSRF_HEADER]: CSRF_HEADER_VALUE,
+      'content-type': UPLOAD_CONTENT_TYPE,
+      [FILE_NAME_HEADER]: encodeURIComponent(name),
+    },
+    cookies: { sid },
+    payload: bytes,
   });
 }
 

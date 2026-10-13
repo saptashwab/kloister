@@ -18,6 +18,12 @@ export const ErrorCode = {
   HAS_CHILDREN: 'HAS_CHILDREN',
   BUCKET_NOT_EMPTY: 'BUCKET_NOT_EMPTY',
   RATE_LIMITED: 'RATE_LIMITED',
+  /** An upload is larger than the admin's size limit (413). */
+  FILE_TOO_LARGE: 'FILE_TOO_LARGE',
+  /** An upload would take the project over its storage quota (409). */
+  QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
+  /** An inline image is not PNG, JPEG, GIF or WebP by content (415). */
+  UNSUPPORTED_FILE_TYPE: 'UNSUPPORTED_FILE_TYPE',
   INTERNAL: 'INTERNAL',
 } as const;
 

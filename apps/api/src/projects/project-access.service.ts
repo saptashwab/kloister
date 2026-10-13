@@ -203,6 +203,42 @@ export class ProjectAccessService {
   }
 
   /**
+   * Builds the access other users have to a project, as {@link resolve}
+   * would build it for each of them, for deciding whom a notification may
+   * reach (SPEC §6: only people who can see the item). Users who are not
+   * members, or whose account is deactivated, are left out.
+   *
+   * Permissions: none; this reads other users' memberships for server-side
+   * decisions only and is never returned to a caller.
+   *
+   * @param db Database or transaction client.
+   * @param projectId Project id.
+   * @param userIds The users.
+   * @returns Each active member's access, by user id.
+   */
+  async accessesOf(
+    db: Prisma.TransactionClient | PrismaService,
+    projectId: string,
+    userIds: readonly string[],
+  ): Promise<Map<string, ProjectAccess>> {
+    if (userIds.length === 0) return new Map();
+    const rows = await db.projectMember.findMany({
+      where: { projectId, userId: { in: [...userIds] }, user: { isActive: true } },
+      include: {
+        project: true,
+        user: { select: { systemRole: true } },
+        teamMemberships: { select: { teamId: true, role: true } },
+      },
+    });
+    return new Map(
+      rows.map(({ project, user, ...member }) => [
+        member.userId,
+        memberAccess(project, member, member.userId, user.systemRole === SystemRole.ADMIN),
+      ]),
+    );
+  }
+
+  /**
    * Reports whether the caller's role grants a permission (SPEC §3.2).
    * Conditional rows (own items, no children, team items) need the item
    * checks below.
@@ -345,6 +381,22 @@ export class ProjectAccessService {
    */
   canAnnotateItem(access: ProjectAccess, item: ItemFacts): boolean {
     return this.canViewItem(access, item) && this.has(access, P.ANNOTATE_ITEMS);
+  }
+
+  /**
+   * Moderation rule for notes and attachments: besides their author, callers
+   * who may edit any item (project PMs and Leads) and the item's team Leads
+   * may delete them. Changing a note's text stays with its author.
+   *
+   * @param access The caller's access.
+   * @param item The item.
+   * @returns True if the caller may delete others' notes and attachments.
+   */
+  canModerateAnnotations(access: ProjectAccess, item: ItemFacts): boolean {
+    return (
+      this.canAnnotateItem(access, item) &&
+      (this.has(access, P.EDIT_ANY_ITEM) || leadsItemTeam(access, item))
+    );
   }
 
   /**

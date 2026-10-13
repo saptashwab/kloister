@@ -5,10 +5,12 @@ import {
   type ProjectRole,
   Visibility,
 } from '@kloister/shared';
-import { fakeAudit, makeProject, makeUser } from '../../test/support/fakes.js';
+import { fakeAudit, makeConfig, makeProject, makeUser } from '../../test/support/fakes.js';
 import type { ApiException } from '../common/api-exception.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import { type ProjectAccess, ProjectAccessService } from '../projects/project-access.service.js';
+import { FileStoreService } from '../storage/file-store.service.js';
 import type { ListItemsQueryDto } from './items.dto.js';
 import { ItemsService } from './items.service.js';
 
@@ -43,7 +45,9 @@ function setup() {
   const prisma = fake as unknown as PrismaService;
   const audit = fakeAudit();
   const access = new ProjectAccessService(prisma, audit.service);
-  return { service: new ItemsService(prisma, audit.service, access), fake };
+  const notifications = new NotificationsService(prisma, access);
+  const files = new FileStoreService(makeConfig());
+  return { service: new ItemsService(prisma, audit.service, access, notifications, files), fake };
 }
 
 /**

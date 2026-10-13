@@ -39,6 +39,16 @@ export const ICONS = {
   grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
   archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
   lock: 'M6 11h12v10H6zM8 11V7a4 4 0 0 1 8 0v4',
+  bell: 'M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4',
+  paperclip:
+    'M20 11.5 12.5 19a5 5 0 0 1-7-7L13 4.5a3.3 3.3 0 0 1 4.7 4.7L10.2 16.7a1.7 1.7 0 0 1-2.4-2.4L14.5 7.6',
+  download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  edit: 'M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4',
+  arrowLeft: 'M15 6l-6 6 6 6',
+  arrowRight: 'M9 6l6 6-6 6',
+  file: 'M6 3h8l4 4v14H6zM14 3v4h4',
+  note: 'M4 5h16v11H9l-5 4z',
+  at: 'M16 12a4 4 0 1 1-8 0a4 4 0 1 1 8 0M16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1',
   /* Item types (DESIGN §3.1). */
   EPIC: 'M13 2 4 14h7l-1 8 9-12h-7l1-8z',
   FEATURE: 'M12 3 3 8l9 5 9-5-9-5zM3 13l9 5 9-5',

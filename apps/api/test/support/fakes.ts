@@ -176,6 +176,7 @@ export function makeConfig(
     trustProxy: 'loopback',
     loginRateLimit: 10,
     loginRateWindowMs: 60_000,
+    attachmentsDir: '/unused/attachments',
     ...overrides,
   });
 }

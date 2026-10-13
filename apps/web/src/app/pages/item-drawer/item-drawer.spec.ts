@@ -2,11 +2,13 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import type { AuditEntryDto, ItemRefDto, ProjectDto, WorkItemDetailDto } from '@kloister/shared';
 import { makeBucket, makeItem, makeMember, makeProject, settle } from '../../../testing/fixtures';
+import { AnnotationsApiService } from '../../core/annotations-api.service';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { SessionStore } from '../../core/session.store';
 import { Dialogs } from '../../ui/dialogs';
+import { ImageViewer } from '../../ui/image-viewer';
 import { ToastService } from '../../ui/toast.service';
 import { ItemDrawer } from './item-drawer';
 
@@ -65,6 +67,11 @@ describe('ItemDrawer', () => {
       remove: vi.fn().mockResolvedValue(undefined),
     };
     const dialogs = { confirm: vi.fn().mockResolvedValue(true) };
+    const annotationsApi = {
+      notes: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+      attachments: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+      addImage: vi.fn(),
+    };
     await TestBed.configureTestingModule({
       imports: [ItemDrawer],
       providers: [
@@ -72,6 +79,7 @@ describe('ItemDrawer', () => {
         ProjectContext,
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
+        { provide: AnnotationsApiService, useValue: annotationsApi },
         { provide: Dialogs, useValue: dialogs },
       ],
     }).compileComponents();
@@ -130,7 +138,7 @@ describe('ItemDrawer', () => {
     expect(root.querySelector('dl.fields')?.textContent).toContain('Bob');
     expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
     expect(root.querySelector('input[aria-label="New checklist line"]')).toBeNull();
-    expect(root.querySelector('app-description-editor')).toBeNull();
+    expect(root.querySelector('app-rich-text-editor')).toBeNull();
   });
 
   it('shows inline editors and the activity history when the item is editable', async () => {
@@ -139,7 +147,7 @@ describe('ItemDrawer', () => {
     for (const field of ['Status', 'Bucket', 'Assignees', 'Labels', 'Sprint', 'Priority']) {
       expect(root.querySelector(`mat-select[aria-label="${field}"]`)).not.toBeNull();
     }
-    expect(root.querySelector('app-description-editor')).not.toBeNull();
+    expect(root.querySelector('app-rich-text-editor')).not.toBeNull();
     expect(root.querySelector('[aria-label="More actions"]')).not.toBeNull();
     expect(itemsApi.activity).toHaveBeenCalledWith('p1', 'i4', undefined);
     expect(root.textContent).toContain('Ann created this Task');
@@ -246,10 +254,36 @@ describe('ItemDrawer', () => {
     expect(state('Bob')).toBe('true');
   });
 
+  it('offers notes and attachments to callers who may annotate but not edit', async () => {
+    const annotateOnly = { ...readOnly, annotate: true };
+    const { root } = await render(makeItem(4, { can: annotateOnly }));
+    expect(root.querySelector('[contenteditable][aria-label="New note"]')).not.toBeNull();
+    expect(root.querySelector('[contenteditable][aria-label="Description"]')).toBeNull();
+    expect(root.querySelector('app-item-attachments')?.textContent).toContain('Attach files');
+  });
+
+  it('hides the note composer and attaching from callers who may not annotate', async () => {
+    const { root } = await render(makeItem(4, { can: readOnly }));
+    expect(root.querySelector('[aria-label="New note"]')).toBeNull();
+    expect(root.querySelector('app-item-attachments')?.textContent).not.toContain('Attach files');
+  });
+
+  it('opens images of a read-only description in the full-size viewer', async () => {
+    const src = 'api/v1/projects/p1/items/i4/images/a';
+    const { root } = await render(
+      makeItem(4, { can: readOnly, description: `<p>See</p><img src="${src}" alt="Shot">` }),
+    );
+    const open = vi.spyOn(TestBed.inject(ImageViewer), 'open').mockImplementation(() => undefined);
+    const img = root.querySelector<HTMLImageElement>('.description img')!;
+    expect(img.getAttribute('tabindex')).toBe('0');
+    img.click();
+    expect(open).toHaveBeenCalledWith([{ src, alt: 'Shot' }], 0);
+  });
+
   it('is read-only on archived projects whatever the item allows', async () => {
     const project = makeProject({ archivedAt: '2026-10-01T00:00:00.000Z' });
     const { root } = await render(makeItem(4), [], project);
-    expect(root.querySelector('app-description-editor')).toBeNull();
+    expect(root.querySelector('app-rich-text-editor')).toBeNull();
     expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
     expect(root.querySelectorAll('mat-select').length).toBe(0);
   });

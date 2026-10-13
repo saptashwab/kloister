@@ -161,6 +161,17 @@ export function describeActivity(entry: AuditEntryDto, names: ActivityNames): st
       return [`marked this as blocked by ${blocker()}`];
     case AuditAction.DEPENDENCY_REMOVED:
       return [`removed the block by ${blocker()}`];
+    // Note texts never enter the history; the notes themselves show them.
+    case AuditAction.NOTE_ADDED:
+      return ['added a note'];
+    case AuditAction.NOTE_UPDATED:
+      return ['edited a note'];
+    case AuditAction.NOTE_DELETED:
+      return ['deleted a note'];
+    case AuditAction.ATTACHMENT_ADDED:
+      return [`attached “${scalar(meta['name'])}”`];
+    case AuditAction.ATTACHMENT_DELETED:
+      return [`deleted the attachment “${scalar(meta['name'])}”`];
     default:
       return [entry.action.toLowerCase().replaceAll('_', ' ')];
   }

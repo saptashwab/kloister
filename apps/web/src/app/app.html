@@ -21,6 +21,17 @@
       </a>
       <a
         class="nav-link"
+        routerLink="/notifications"
+        routerLinkActive="active"
+        [attr.aria-label]="bellLabel()"
+      >
+        <app-icon name="bell" [size]="18" />Notifications
+        @if (notifications.unread() > 0) {
+          <span class="k-badge" aria-hidden="true">{{ unreadText() }}</span>
+        }
+      </a>
+      <a
+        class="nav-link"
         routerLink="/"
         routerLinkActive="active"
         [routerLinkActiveOptions]="{ exact: true }"
@@ -97,6 +108,13 @@
           <app-icon name="menu" [size]="20" />
         </button>
         <span class="topbar-title">{{ title() }}</span>
+        <span class="spacer"></span>
+        <a class="k-icon-btn bell" routerLink="/notifications" [attr.aria-label]="bellLabel()">
+          <app-icon name="bell" [size]="20" />
+          @if (notifications.unread() > 0) {
+            <span class="k-badge" aria-hidden="true">{{ unreadText() }}</span>
+          }
+        </a>
       </header>
       <main id="main" tabindex="-1">
         <router-outlet />

@@ -2,7 +2,8 @@
 //
 // Tables are added milestone by milestone; M1 covers accounts, sessions,
 // the audit log and app settings; M2 adds projects, members and teams; M3
-// adds work items, buckets, labels, checklists and sprints. Every table
+// adds work items, buckets, labels, checklists and sprints; M5 adds notes,
+// attachments and notifications. Every table
 // has a uuid `id`, plus `createdAt`/`updatedAt` unless SPEC §4 says otherwise.
 
 generator client {
@@ -41,10 +42,14 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  sessions     Session[]
-  auditLogs    AuditLog[]
-  memberships  ProjectMember[]
-  createdItems WorkItem[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  memberships   ProjectMember[]
+  createdItems  WorkItem[]
+  notes         Note[]
+  attachments   Attachment[]
+  notifications Notification[]  @relation("NotificationRecipient")
+  causedNotices Notification[]  @relation("NotificationActor")
 }
 
 /// A server-side login session. The cookie carries a random token; only its
@@ -327,18 +332,21 @@ model WorkItem {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  project   Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  parent    WorkItem?            @relation("WorkItemHierarchy", fields: [parentId, projectId], references: [id, projectId], onDelete: NoAction)
-  children  WorkItem[]           @relation("WorkItemHierarchy")
-  bucket    Bucket?              @relation(fields: [bucketId, projectId], references: [id, projectId], onDelete: NoAction)
-  sprint    Sprint?              @relation(fields: [sprintId], references: [id], onDelete: SetNull)
-  team      Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  createdBy User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
-  assignees WorkItemAssignee[]
-  labels    WorkItemLabel[]
-  checklist ChecklistItem[]
-  blockedBy WorkItemDependency[] @relation("BlockedItem")
-  blocks    WorkItemDependency[] @relation("BlockingItem")
+  project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  parent        WorkItem?            @relation("WorkItemHierarchy", fields: [parentId, projectId], references: [id, projectId], onDelete: NoAction)
+  children      WorkItem[]           @relation("WorkItemHierarchy")
+  bucket        Bucket?              @relation(fields: [bucketId, projectId], references: [id, projectId], onDelete: NoAction)
+  sprint        Sprint?              @relation(fields: [sprintId], references: [id], onDelete: SetNull)
+  team          Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  createdBy     User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  assignees     WorkItemAssignee[]
+  labels        WorkItemLabel[]
+  checklist     ChecklistItem[]
+  blockedBy     WorkItemDependency[] @relation("BlockedItem")
+  blocks        WorkItemDependency[] @relation("BlockingItem")
+  notes         Note[]
+  attachments   Attachment[]
+  notifications Notification[]
 
   @@unique([projectId, number])
   /// Target of the composite keys that keep links inside one project.
@@ -413,4 +421,83 @@ model ChecklistItem {
   workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
 
   @@index([workItemId, position])
+}
+
+/// A note in an item's thread (SPEC §4, §6). Notes are deleted with their item.
+model Note {
+  id         String    @id @default(uuid()) @db.Uuid
+  workItemId String    @db.Uuid
+  authorId   String    @db.Uuid
+  /// Sanitized HTML (SPEC §5): mentions as `span[data-mention]`, images only
+  /// from the item's own inline-image endpoint.
+  body       String
+  /// Set when the author changes the note.
+  editedAt   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  /// Accounts are deactivated, never deleted, so authors are kept.
+  author   User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([workItemId, createdAt])
+}
+
+/// A file attached to an item, or an image pasted or dropped into its
+/// description or notes (`inline`). The bytes live outside the web root at
+/// `<attachments dir>/<projectId>/<storedName>` (SPEC §5); both kinds count
+/// toward the project's quota.
+model Attachment {
+  id           String   @id @default(uuid()) @db.Uuid
+  workItemId   String   @db.Uuid
+  uploaderId   String   @db.Uuid
+  /// The uploaded file name, cleaned of path parts and control characters.
+  originalName String
+  /// Random file name on disk; never derived from user input.
+  storedName   String   @unique
+  sizeBytes    Int
+  /// Detected from the content, never taken from the client.
+  mimeType     String
+  /// Hex SHA-256 of the content.
+  sha256       String
+  /// True for images in a description or note; these are not listed as attachments.
+  inline       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  uploader User     @relation(fields: [uploaderId], references: [id], onDelete: Restrict)
+
+  @@index([workItemId, inline, createdAt])
+}
+
+/// In-app notification types (SPEC §6).
+enum NotificationType {
+  ASSIGNED
+  MENTIONED
+  DUE_TOMORROW
+  OVERDUE
+  STATUS_CHANGED
+}
+
+/// An in-app notification (SPEC §4, §6). Deleted with its item; shown only
+/// while the recipient can still see the item.
+model Notification {
+  id         String           @id @default(uuid()) @db.Uuid
+  userId     String           @db.Uuid
+  type       NotificationType
+  workItemId String           @db.Uuid
+  /// Null for due-date notifications (no actor).
+  actorId    String?          @db.Uuid
+  readAt     DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  user     User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  actor    User?    @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+  @@index([workItemId])
 }
