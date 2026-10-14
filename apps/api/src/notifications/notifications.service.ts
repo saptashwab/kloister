@@ -130,6 +130,7 @@ export class NotificationsService {
         teamId: true,
         dueDate: true,
         assignees: { select: { userId: true } },
+        project: { select: { ownerId: true } },
       },
     });
     let created = 0;
@@ -140,7 +141,12 @@ export class NotificationsService {
           ? NotificationType.DUE_TOMORROW
           : NotificationType.OVERDUE;
       const assigneeIds = item.assignees.map((a) => a.userId);
-      const recipients = assigneeIds.length > 0 ? assigneeIds : [item.createdById];
+      const recipients =
+        item.project.ownerId !== null
+          ? [item.project.ownerId]
+          : assigneeIds.length > 0
+            ? assigneeIds
+            : [item.createdById];
       // "Due tomorrow" once a day; "overdue" once per due date.
       const since = type === NotificationType.DUE_TOMORROW ? windows.startOfToday : dueDate;
       const already = await this.prisma.notification.findMany({
@@ -260,6 +266,8 @@ export class NotificationsService {
     where: Prisma.NotificationWhereInput,
   ): Promise<Prisma.NotificationWhereInput> {
     const accesses = await this.access.memberAccesses(auth);
+    const personal = await this.access.ownPersonalAccess(auth);
+    if (personal !== null) accesses.push(personal);
     return {
       AND: [
         { userId: auth.user.id },
@@ -296,7 +304,7 @@ function toNotificationDto(
     item: {
       id: item.id,
       number: item.number,
-      key: `${item.project.key}-${item.number}`,
+      key: item.project.key === null ? `#${item.number}` : `${item.project.key}-${item.number}`,
       title: item.title,
       projectKey: item.project.key,
     },

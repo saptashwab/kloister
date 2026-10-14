@@ -26,9 +26,9 @@ const fn = (): Fn => jest.fn<(...args: unknown[]) => Promise<unknown>>();
 export interface FakePrisma {
   user: { findUnique: Fn; findMany: Fn; create: Fn; update: Fn; count: Fn };
   session: { findUnique: Fn; create: Fn; update: Fn; deleteMany: Fn };
-  auditLog: { create: Fn; findMany: Fn };
+  auditLog: { create: Fn; findMany: Fn; count: Fn };
   appSetting: { findUnique: Fn; upsert: Fn };
-  project: { findUnique: Fn; findMany: Fn; create: Fn; update: Fn };
+  project: { findUnique: Fn; findFirst: Fn; findMany: Fn; create: Fn; update: Fn; upsert: Fn };
   projectMember: {
     findUnique: Fn;
     findMany: Fn;
@@ -52,9 +52,16 @@ export function fakePrisma(): { fake: FakePrisma; prisma: PrismaService } {
   const fake: FakePrisma = {
     user: { findUnique: fn(), findMany: fn(), create: fn(), update: fn(), count: fn() },
     session: { findUnique: fn(), create: fn(), update: fn(), deleteMany: fn() },
-    auditLog: { create: fn(), findMany: fn() },
+    auditLog: { create: fn(), findMany: fn(), count: fn() },
     appSetting: { findUnique: fn(), upsert: fn() },
-    project: { findUnique: fn(), findMany: fn(), create: fn(), update: fn() },
+    project: {
+      findUnique: fn(),
+      findFirst: fn(),
+      findMany: fn(),
+      create: fn(),
+      update: fn(),
+      upsert: fn(),
+    },
     projectMember: {
       findUnique: fn(),
       findMany: fn(),
@@ -70,6 +77,10 @@ export function fakePrisma(): { fake: FakePrisma; prisma: PrismaService } {
   fake.$transaction.mockImplementation((callback: unknown) =>
     (callback as (tx: FakePrisma) => Promise<unknown>)(fake),
   );
+  fake.project.findFirst.mockResolvedValue(null);
+  fake.project.findUnique.mockResolvedValue(null);
+  fake.project.findMany.mockResolvedValue([]);
+  fake.auditLog.count.mockResolvedValue(0);
   fake.session.deleteMany.mockResolvedValue({ count: 0 });
   fake.auditLog.create.mockResolvedValue({});
   fake.teamMember.count.mockResolvedValue(0);
@@ -148,6 +159,7 @@ export function makeProject(overrides: Partial<Project> = {}): Project {
   return {
     id: '33333333-3333-4333-8333-333333333333',
     key: 'KLO',
+    ownerId: null,
     name: 'Test project',
     description: '',
     archivedAt: null,

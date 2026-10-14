@@ -12,6 +12,7 @@ import {
   type ProjectAccess,
   ProjectAccessService,
   pmAssignmentOnly,
+  projectNotFound,
 } from './project-access.service.js';
 
 /** Metadata key set by {@link RequireProjectPermission}. */
@@ -129,6 +130,14 @@ export class ProjectAccessGuard implements CanActivate {
     const ref = (request.params as Record<string, string | undefined>)['id'] ?? '';
     const via = `${request.method} ${request.routeOptions.url ?? request.url}`;
     const access = await this.access.resolve(request.auth, ref, via);
+    if (
+      access.project.ownerId !== null &&
+      /\/(?:members|member-candidates|teams|export|archive|unarchive)(?:\/|$)/.test(
+        request.routeOptions.url ?? request.url,
+      )
+    ) {
+      throw projectNotFound();
+    }
     // Reads stay open on archived projects whatever permission they need
     // (e.g. member candidates); every write is refused unless the route opts out.
     const isWrite = !READ_METHODS.has(request.method);

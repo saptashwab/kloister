@@ -32,7 +32,9 @@ export class ProjectsNav {
       );
       if (run === this.run) {
         this.projects.set(
-          projects.filter((p) => p.archivedAt === null).sort((a, b) => a.key.localeCompare(b.key)),
+          projects
+            .filter((p) => p.archivedAt === null && p.ownerId === null)
+            .sort((a, b) => (a.key ?? '').localeCompare(b.key ?? '')),
         );
       }
     } catch {

@@ -236,8 +236,10 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
 export interface ProjectDto {
   /** Project id (uuid). */
   id: string;
-  /** Unique key, e.g. `KLO`. */
-  key: string;
+  /** Unique key, or null for a personal space. */
+  key: string | null;
+  /** Personal owner; null for an ordinary project. */
+  ownerId: string | null;
   /** Display name. */
   name: string;
   /** Plain-text description; may be empty. */

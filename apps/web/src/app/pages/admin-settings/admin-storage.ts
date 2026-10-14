@@ -58,6 +58,12 @@ interface UsageRow {
           <input matInput type="number" formControlName="projectQuotaMb" />
           <mat-hint>{{ quotaHint() }}</mat-hint>
         </mat-form-field>
+        <mat-form-field
+          ><mat-label>Personal space per user (MB)</mat-label
+          ><input matInput type="number" formControlName="personalQuotaMb" /><mat-hint
+            >Separate from project storage</mat-hint
+          ></mat-form-field
+        >
       </div>
       <div class="k-actions">
         <button mat-flat-button type="submit" [disabled]="form.invalid || busy()">
@@ -122,6 +128,7 @@ export class AdminStoragePage implements OnInit {
   protected readonly form = inject(NonNullableFormBuilder).group({
     maxFileSizeMb: [25, wholeNumber(STORAGE_LIMITS.maxFileSizeMb)],
     projectQuotaMb: [2048, wholeNumber(STORAGE_LIMITS.projectQuotaMb)],
+    personalQuotaMb: [1024, wholeNumber(STORAGE_LIMITS.personalQuotaMb)],
   });
 
   /** The folders, each as a share of the app folder. */
@@ -205,6 +212,7 @@ export class AdminStoragePage implements OnInit {
         await this.api.saveStorage({
           maxFileSizeMb: Number(v.maxFileSizeMb),
           projectQuotaMb: Number(v.projectQuotaMb),
+          personalQuotaMb: Number(v.personalQuotaMb),
         }),
       );
       this.toast.show('Attachment limits saved');

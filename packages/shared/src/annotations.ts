@@ -146,7 +146,7 @@ export interface NotificationItemDto {
   /** Title. */
   title: string;
   /** Project key, for the link `/p/<projectKey>/items/<number>`. */
-  projectKey: string;
+  projectKey: string | null;
 }
 
 /** A notification, from `GET /notifications`. */

@@ -20,6 +20,7 @@ export function makeProject(overrides: Partial<ProjectDto> = {}): ProjectDto {
   return {
     id: 'p1',
     key: 'KLO',
+    ownerId: null,
     name: 'Kanban',
     description: '',
     archivedAt: null,

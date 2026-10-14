@@ -27,6 +27,7 @@ describe('ProjectSettingsPage', () => {
     const project: ProjectDto = {
       id: 'p1',
       key: 'KLO',
+      ownerId: null,
       name: 'Kanban',
       description: 'About',
       archivedAt: archived ? '2026-01-02T00:00:00.000Z' : null,

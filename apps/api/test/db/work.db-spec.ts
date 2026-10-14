@@ -183,6 +183,18 @@ describe('all their work (db)', () => {
     expect(await workOf('dev')).toEqual([items.o1, items.a1, items.a2]);
   });
 
+  for (const who of NAMES) {
+    it(`me/work obeys the same project role and scope as the own-person list for ${who}`, async () => {
+      const mine = await get(who, '/me/work?includeCreated=true&includeDone=true');
+      const person = await get(who, `/users/${ids[who]}/work?includeCreated=true&includeDone=true`);
+      expect(mine.statusCode).toBe(200);
+      expect(mine.json()).toEqual(person.json());
+      expect(await prisma.auditLog.count({ where: { action: 'ADMIN_CROSS_PROJECT_ACCESS' } })).toBe(
+        0,
+      );
+    });
+  }
+
   it('includes Done items on request', async () => {
     const listed = await workOf('pm', '?includeDone=true');
     // Dated items first, by due date; undated ones after them (by id).

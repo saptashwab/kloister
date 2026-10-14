@@ -185,10 +185,7 @@ export class ItemsService {
     page: PageQueryDto,
   ): Promise<Page<AuditEntryDto>> {
     const item = await this.findVisible(this.prisma, access, ref);
-    const entries = await this.audit.list(
-      { entityType: 'WorkItem', entityId: item.id, projectId: access.project.id },
-      page,
-    );
+    const entries = await this.audit.listItemHistory(access, item.id, page);
     if (!this.access.ancestorsAreTitleOnly(access)) return entries;
     const refs = [...new Set(entries.items.flatMap((e) => itemRefsIn(e.meta)))];
     if (refs.length === 0) return entries;
@@ -226,6 +223,11 @@ export class ItemsService {
     const projectId = access.project.id;
     const teamId = dto.teamId ?? null;
     const assigneeIds = dto.assigneeIds ?? [];
+    if (access.project.ownerId !== null && (assigneeIds.length > 0 || teamId !== null))
+      throw invalidField(
+        'assigneeIds',
+        'Personal tasks belong to their owner and cannot have assignments or teams',
+      );
     if (!this.access.canSetTeam(access, null, teamId, true)) {
       throw forbidden('You cannot put items into this team');
     }
@@ -373,6 +375,8 @@ export class ItemsService {
       }
       const before = current.assignees.map((a) => a.userId);
       const after = dto.assigneeIds ?? before;
+      if (access.project.ownerId !== null && (after.length > 0 || teamId !== null))
+        throw invalidField('assigneeIds', 'Personal tasks cannot have assignments or teams');
       const touched = [
         ...after.filter((id) => !before.includes(id)),
         ...before.filter((id) => !after.includes(id)),

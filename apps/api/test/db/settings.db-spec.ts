@@ -96,7 +96,11 @@ describe('admin settings, branding, themes and backups (db)', () => {
       ['GET', '/api/v1/admin/settings/security', undefined],
       ['PUT', '/api/v1/admin/settings/security', SECURITY],
       ['GET', '/api/v1/admin/settings/storage', undefined],
-      ['PUT', '/api/v1/admin/settings/storage', { maxFileSizeMb: 1, projectQuotaMb: 1 }],
+      [
+        'PUT',
+        '/api/v1/admin/settings/storage',
+        { maxFileSizeMb: 1, projectQuotaMb: 1, personalQuotaMb: 1024 },
+      ],
       ['GET', '/api/v1/admin/settings/storage/usage', undefined],
       ['GET', '/api/v1/admin/settings/logs', undefined],
       ['PUT', '/api/v1/admin/settings/logs', { retentionDays: 1 }],
@@ -203,14 +207,14 @@ describe('admin settings, branding, themes and backups (db)', () => {
   it('saves storage limits, which uploads then follow, and reports disk usage', async () => {
     const bad = await call(app, 'PUT', '/api/v1/admin/settings/storage', {
       sid: adminSid,
-      body: { maxFileSizeMb: 10, projectQuotaMb: 5 },
+      body: { maxFileSizeMb: 10, projectQuotaMb: 5, personalQuotaMb: 1024 },
     });
     expect(bad.statusCode).toBe(400);
     const res = await call(app, 'PUT', '/api/v1/admin/settings/storage', {
       sid: adminSid,
-      body: { maxFileSizeMb: 1, projectQuotaMb: 3 },
+      body: { maxFileSizeMb: 1, projectQuotaMb: 3, personalQuotaMb: 1024 },
     });
-    expect(res.json()).toEqual({ maxFileSizeMb: 1, projectQuotaMb: 3 });
+    expect(res.json()).toEqual({ maxFileSizeMb: 1, projectQuotaMb: 3, personalQuotaMb: 1024 });
 
     await writeFile(join(BACKUP_DIR, 'kloister-test-20260101-020000.dump'), Buffer.alloc(300));
     const usage = (

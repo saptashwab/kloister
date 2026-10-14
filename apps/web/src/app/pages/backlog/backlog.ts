@@ -156,16 +156,22 @@ import { SessionStore } from '../../core/session.store';
           }
         </mat-select>
       </mat-form-field>
-      <mat-form-field>
-        <mat-label>Assignee</mat-label>
-        <mat-select [value]="filter().assigneeId" (valueChange)="setFilter({ assigneeId: $event })">
-          <mat-option value="">Anyone</mat-option>
-          <mat-option [value]="none">Unassigned</mat-option>
-          @for (m of ctx.members(); track m.userId) {
-            <mat-option [value]="m.userId">{{ m.displayName }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
+      @if (ctx.project()?.ownerId === null) {
+        <mat-form-field>
+          <mat-label>Assignee</mat-label>
+          <mat-select
+            [value]="filter().assigneeId"
+            (valueChange)="setFilter({ assigneeId: $event })"
+          >
+            <mat-option value="">Anyone</mat-option>
+            <mat-option [value]="none">Unassigned</mat-option>
+            @for (m of ctx.members(); track m.userId) {
+              <mat-option [value]="m.userId">{{ m.displayName }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
+
       <button mat-button type="button" (click)="collapsed.set(allParents())">Collapse all</button>
       <button mat-button type="button" (click)="collapsed.set(emptySet)">Expand all</button>
     </div>
@@ -197,15 +203,17 @@ import { SessionStore } from '../../core/session.store';
                 }
               </mat-select>
             </mat-form-field>
-            <mat-form-field>
-              <mat-label>Set assignee</mat-label>
-              <mat-select [disabled]="busy()" (valueChange)="bulk('assignee', $event)">
-                <mat-option [value]="none">Unassigned</mat-option>
-                @for (m of activeMembers(); track m.userId) {
-                  <mat-option [value]="m.userId">{{ m.displayName }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
+            @if (ctx.project()?.ownerId === null) {
+              <mat-form-field>
+                <mat-label>Set assignee</mat-label>
+                <mat-select [disabled]="busy()" (valueChange)="bulk('assignee', $event)">
+                  <mat-option [value]="none">Unassigned</mat-option>
+                  @for (m of activeMembers(); track m.userId) {
+                    <mat-option [value]="m.userId">{{ m.displayName }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
           }
         }
         <button mat-button type="button" (click)="selected.set(emptySet)">Clear selection</button>

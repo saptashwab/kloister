@@ -3,6 +3,8 @@ import type { AuditAction, AuditEntryDto, Page } from '@kloister/shared';
 import { type PageQueryDto, pageArgs, toPage } from '../common/pagination.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { ProjectAccess } from '../projects/project-access.service.js';
+import { notFound } from '../common/api-exception.js';
 
 /** What to record in one audit entry. */
 export interface AuditRecord {
@@ -84,12 +86,80 @@ export class AuditService {
    * @returns One page of entries.
    */
   async list(filter: AuditFilter, page: PageQueryDto): Promise<Page<AuditEntryDto>> {
+    return this.read(filter, page, false);
+  }
+
+  /**
+   * Reads history for an already-visible item; personal history stays owner-only.
+   * @param access Access resolved by the project guard.
+   * @param itemId Item id already checked by ItemsService.findVisible.
+   * @param page Pagination.
+   * @returns The item's activity, including its owner's personal entries.
+   */
+  async listItemHistory(
+    access: ProjectAccess,
+    itemId: string,
+    page: PageQueryDto,
+  ): Promise<Page<AuditEntryDto>> {
+    if (access.project.ownerId !== null && access.project.ownerId !== access.userId)
+      throw notFound('Project');
+    return this.read(
+      { projectId: access.project.id, entityType: 'WorkItem', entityId: itemId },
+      page,
+      true,
+    );
+  }
+
+  /**
+   * Reads the requested history with separate admin and item privacy paths.
+   * @param filter Filters fixed by the public entry point.
+   * @param page Pagination.
+   * @param itemHistory True only for an authorized, project-scoped item read.
+   * @returns The page.
+   */
+  private async read(
+    filter: AuditFilter,
+    page: PageQueryDto,
+    itemHistory: boolean,
+  ): Promise<Page<AuditEntryDto>> {
     const createdAt: Prisma.DateTimeFilter = {};
     if (filter.from !== undefined) createdAt.gte = filter.from;
     if (filter.to !== undefined) createdAt.lt = filter.to;
 
+    const personal = itemHistory
+      ? []
+      : await this.prisma.project.findMany({
+          where: { ownerId: { not: null } },
+          select: { id: true },
+        });
+    const privacy: Prisma.AuditLogWhereInput = itemHistory
+      ? {}
+      : {
+          OR: [{ projectId: null }, { projectId: { notIn: personal.map((p) => p.id) } }],
+        };
+    if (
+      page.cursor !== undefined &&
+      (await this.prisma.auditLog.count({
+        where: {
+          AND: [
+            privacy,
+            {
+              projectId: filter.projectId,
+              entityType: filter.entityType,
+              entityId: filter.entityId,
+              actorId: filter.actorId,
+              action: filter.action,
+              createdAt,
+            },
+            { id: page.cursor },
+          ],
+        },
+      })) === 0
+    )
+      return { items: [], nextCursor: null };
     const rows = await this.prisma.auditLog.findMany({
       where: {
+        AND: [privacy],
         actorId: filter.actorId,
         action: filter.action,
         entityType: filter.entityType,

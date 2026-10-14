@@ -144,7 +144,9 @@ describe('AdminSecurityPage', () => {
 describe('AdminStoragePage', () => {
   it('shows the disk usage of each folder and saves the limits', async () => {
     const api = {
-      storage: vi.fn().mockResolvedValue({ maxFileSizeMb: 25, projectQuotaMb: 2048 }),
+      storage: vi
+        .fn()
+        .mockResolvedValue({ maxFileSizeMb: 25, projectQuotaMb: 2048, personalQuotaMb: 1024 }),
       saveStorage: vi.fn().mockImplementation((v: object) => Promise.resolve(v)),
       diskUsage: vi.fn().mockResolvedValue(USAGE),
     };
@@ -159,7 +161,11 @@ describe('AdminStoragePage', () => {
     await settle(fixture);
     button(root, 'Save limits').click();
     await settle(fixture);
-    expect(api.saveStorage).toHaveBeenCalledWith({ maxFileSizeMb: 50, projectQuotaMb: 2048 });
+    expect(api.saveStorage).toHaveBeenCalledWith({
+      maxFileSizeMb: 50,
+      projectQuotaMb: 2048,
+      personalQuotaMb: 1024,
+    });
     expect(show).toHaveBeenCalledWith('Attachment limits saved');
     button(root, 'Measure again').click();
     await settle(fixture);

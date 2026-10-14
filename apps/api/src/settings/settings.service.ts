@@ -40,6 +40,7 @@ export type StorageSettings = StorageSettingsDto;
 export const DEFAULT_STORAGE_SETTINGS: StorageSettings = {
   maxFileSizeMb: 25,
   projectQuotaMb: 2048,
+  personalQuotaMb: 1024,
 };
 
 /** `AppSetting.key` holding {@link StorageSettings}. */

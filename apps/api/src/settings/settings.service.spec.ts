@@ -43,6 +43,7 @@ describe('SettingsService.getStorage', () => {
     await expect(new SettingsService(prisma).getStorage()).resolves.toEqual({
       maxFileSizeMb: 25,
       projectQuotaMb: 2048,
+      personalQuotaMb: 1024,
     });
   });
 

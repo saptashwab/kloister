@@ -70,6 +70,7 @@ export class ProjectsService {
     const userId = auth.user.id;
     const q = query.q?.trim();
     const where: Prisma.ProjectWhereInput = {
+      ownerId: null,
       ...(all ? {} : { members: { some: { userId } } }),
       ...(query.includeArchived === true ? {} : { archivedAt: null }),
       ...(q === undefined || q === ''
@@ -81,6 +82,14 @@ export class ProjectsService {
             ],
           }),
     };
+    if (
+      query.cursor !== undefined &&
+      (await this.prisma.project.findFirst({
+        where: { AND: [where, { id: query.cursor }] },
+        select: { id: true },
+      })) === null
+    )
+      return { items: [], nextCursor: null };
     const rows = await this.prisma.project.findMany({
       where,
       include: {
@@ -218,6 +227,11 @@ export class ProjectsService {
     access: ProjectAccess,
     dto: UpdateProjectDto,
   ): Promise<ProjectDto> {
+    if (access.project.ownerId !== null && dto.settings?.membersCanAssignOthers !== undefined)
+      throw invalidField(
+        'settings.membersCanAssignOthers',
+        'Personal spaces do not have assignments',
+      );
     const id = access.project.id;
     // The row is re-read inside a serializable transaction so settings are
     // merged into the latest stored JSON (concurrent edits to different keys

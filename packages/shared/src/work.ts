@@ -1,4 +1,5 @@
-import type { ItemStatus, ItemType } from './items.js';
+import type { ItemStatus, ItemType, LabelDto } from './items.js';
+import type { LabelStyle } from './projects.js';
 
 /**
  * One item in a person's "all their work" list (SPEC §6): enough to show it
@@ -14,7 +15,17 @@ export interface WorkSummaryDto {
   /** Project id. */
   projectId: string;
   /** Project key, for the item's link (`/p/:key/items/:number`). */
-  projectKey: string;
+  projectKey: string | null;
+  /** True only for the caller's own personal tasks. */
+  personal: boolean;
+  /** Bucket metadata belongs to this project, never a cross-project column. */
+  bucket: { id: string; name: string } | null;
+  /** Readable labels belonging to this item. */
+  labels: LabelDto[];
+  /** This project's label presentation. */
+  labelStyle: LabelStyle;
+  /** Whether the viewer can edit the status. */
+  canEdit: boolean;
   /** Project name. */
   projectName: string;
   /** Item type. */

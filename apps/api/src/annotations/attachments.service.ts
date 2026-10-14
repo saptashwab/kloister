@@ -292,14 +292,15 @@ export class AttachmentsService {
     if (!(upload.body instanceof Readable)) {
       throw invalidField('file', 'Send the file as the request body (application/octet-stream)');
     }
-    const { maxFileSizeMb, projectQuotaMb } = await this.settings.getStorage();
+    const { maxFileSizeMb, projectQuotaMb, personalQuotaMb } = await this.settings.getStorage();
+    const quotaMb = access.project.ownerId === null ? projectQuotaMb : personalQuotaMb;
     const maxBytes = maxFileSizeMb * MB;
     const declared = Number(upload.contentLength);
     if (Number.isFinite(declared) && declared > maxBytes) throw fileTooLarge(maxBytes);
     // A declared size over the remaining quota is refused before anything is
     // written; the locked check below still decides for every upload.
     if (Number.isFinite(declared)) {
-      await this.assertQuota(this.prisma, access.project.id, declared, projectQuotaMb * MB, false);
+      await this.assertQuota(this.prisma, access.project.id, declared, quotaMb * MB, false);
     }
 
     const file = await this.files.receive(upload.body, maxBytes);
@@ -316,7 +317,7 @@ export class AttachmentsService {
       }
       return await this.prisma.$transaction(async (tx) => {
         const item = await this.annotatable(tx, access, ref);
-        await this.assertQuota(tx, access.project.id, file.sizeBytes, projectQuotaMb * MB, true);
+        await this.assertQuota(tx, access.project.id, file.sizeBytes, quotaMb * MB, true);
         const row = await tx.attachment.create({
           data: {
             workItemId: item.id,

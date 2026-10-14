@@ -82,6 +82,8 @@ export class AdminSettingsService {
    * @returns The saved limits.
    */
   async saveStorage(auth: AuthContext, value: StorageSettingsDto): Promise<StorageSettingsDto> {
+    if (value.personalQuotaMb < value.maxFileSizeMb)
+      throw invalidField('personalQuotaMb', 'The personal quota must be at least the largest file');
     if (value.projectQuotaMb < value.maxFileSizeMb) {
       throw invalidField(
         'projectQuotaMb',
@@ -91,6 +93,7 @@ export class AdminSettingsService {
     const saved: StorageSettingsDto = {
       maxFileSizeMb: value.maxFileSizeMb,
       projectQuotaMb: value.projectQuotaMb,
+      personalQuotaMb: value.personalQuotaMb,
     };
     await this.store(auth, STORAGE_SETTINGS_KEY, { ...saved });
     return saved;

@@ -61,7 +61,7 @@ import { ToastService } from '../../ui/toast.service';
               </span>
               <a
                 class="n-link"
-                [routerLink]="['/p', n.item.projectKey, 'items', n.item.number]"
+                [routerLink]="['/p', n.item.projectKey ?? 'personal', 'items', n.item.number]"
                 (click)="opened(n)"
               >
                 <span class="n-what">{{ text(n) }}</span>

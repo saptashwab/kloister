@@ -185,12 +185,15 @@ export interface StorageSettingsDto {
   maxFileSizeMb: number;
   /** Space per project for attachments and inline images, in MB. Default 2048. */
   projectQuotaMb: number;
+  /** Per-user personal attachment quota in MB; default 1024. */
+  personalQuotaMb: number;
 }
 
 /** Accepted ranges of {@link StorageSettingsDto}, inclusive. */
 export const STORAGE_LIMITS = {
   maxFileSizeMb: { min: 1, max: 1_024 },
   projectQuotaMb: { min: 1, max: 1_048_576 },
+  personalQuotaMb: { min: 1, max: 1_048_576 },
 } as const;
 
 /** Space used by one folder. */

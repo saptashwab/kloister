@@ -69,13 +69,13 @@ export function itemFacts(row: ItemRow): ItemFacts {
  * @returns The reference.
  */
 export function toItemRef(
-  projectKey: string,
+  projectKey: string | null,
   row: Pick<RefRow, 'id' | 'number' | 'type' | 'title'>,
 ): ItemRefDto {
   return {
     id: row.id,
     number: row.number,
-    key: `${projectKey}-${row.number}`,
+    key: projectKey === null ? `#${row.number}` : `${projectKey}-${row.number}`,
     type: row.type,
     title: row.title,
   };
@@ -91,7 +91,7 @@ export function toItemRef(
  * @returns The DTO.
  */
 export function toItemDto(
-  projectKey: string,
+  projectKey: string | null,
   row: ItemRow,
   ancestors: ItemRefDto[],
   can: ItemCapabilitiesDto,

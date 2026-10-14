@@ -223,10 +223,13 @@ export class NotesService {
     item: ItemRow,
     html: string,
   ): Promise<{ html: string; mentioned: string[] }> {
-    const members = await db.projectMember.findMany({
-      where: { projectId: access.project.id, user: { isActive: true } },
-      select: { userId: true, user: { select: { displayName: true } } },
-    });
+    const members =
+      access.project.ownerId !== null
+        ? []
+        : await db.projectMember.findMany({
+            where: { projectId: access.project.id, user: { isActive: true } },
+            select: { userId: true, user: { select: { displayName: true } } },
+          });
     const result = await sanitizeItemText(
       db,
       access.project.id,

@@ -125,8 +125,12 @@ export class ProjectContext {
       this.itemsApi.buckets(project.id),
       this.itemsApi.labels(project.id),
       this.itemsApi.sprints(project.id),
-      fetchAll((cursor) => this.projectsApi.members(project.id, cursor)),
-      fetchAll((cursor) => this.projectsApi.teams(project.id, cursor)),
+      project.ownerId !== null
+        ? Promise.resolve([])
+        : fetchAll((cursor) => this.projectsApi.members(project.id, cursor)),
+      project.ownerId !== null
+        ? Promise.resolve([])
+        : fetchAll((cursor) => this.projectsApi.teams(project.id, cursor)),
       this.itemsApi.listAll(project.id),
     ]);
     if (run !== this.refreshRun) return;

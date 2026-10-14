@@ -63,6 +63,10 @@ export class StorageSettingsBody implements StorageSettingsDto {
   /** Per-project space in MB; at least the file size limit (checked by the service). */
   @IntIn(STORAGE_LIMITS.projectQuotaMb)
   projectQuotaMb: number;
+
+  /** Per-user personal quota, in MB. */
+  @IntIn(STORAGE_LIMITS.personalQuotaMb)
+  personalQuotaMb: number;
 }
 
 /** Body of `PUT /admin/settings/logs`. */

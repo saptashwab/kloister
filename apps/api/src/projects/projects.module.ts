@@ -1,3 +1,5 @@
+import { PersonalController } from './personal.controller.js';
+import { PersonalService } from './personal.service.js';
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module.js';
 import { MembersController } from './members.controller.js';
@@ -16,11 +18,18 @@ import { TeamsService } from './teams.service.js';
  */
 @Module({
   imports: [AuditModule],
-  controllers: [ProjectsController, ProjectController, MembersController, TeamsController],
+  controllers: [
+    PersonalController,
+    ProjectsController,
+    ProjectController,
+    MembersController,
+    TeamsController,
+  ],
   providers: [
     ProjectAccessService,
     ProjectAccessGuard,
     ProjectsService,
+    PersonalService,
     MembersService,
     TeamsService,
   ],

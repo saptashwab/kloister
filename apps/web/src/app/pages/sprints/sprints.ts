@@ -217,7 +217,7 @@ export class SprintsPage implements OnInit {
     () => this.ctx.writable() && this.ctx.has(ProjectPermission.MANAGE_BOARD),
   );
   /** Project key, for the sprint board links. */
-  protected readonly key = computed(() => this.ctx.project()?.key ?? '');
+  protected readonly key = computed(() => this.ctx.project()?.key ?? 'personal');
   /** Sprints that are not closed. */
   protected readonly openSprints = computed(() =>
     this.ctx.sprints().filter((s) => s.state !== SprintState.CLOSED),

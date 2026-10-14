@@ -385,11 +385,17 @@ M6 adds:
 - The user menu's "Settings and theme" opens a settings page rather than a theme submenu (section 7).
 - Admin settings are one page with tabs (Branding, Security, Storage, Backups, Logs) under the sidebar's Settings link.
 
-Planned for M6.7 (SPEC §3.6, §6):
+M6.7 adds (SPEC §3.6, §6):
 
 - The sidebar's project list starts with "Personal", the signed-in user's private personal space.
 - My work gets a list view grouped by due date and a board view with the four statuses as columns; cards there show
   a project chip ("Personal" for personal tasks) and their bucket as a small tag.
+- Both work views share source, project, type, label and due filters, created/Done switches and project grouping.
+  Labels retain their project identity. A Material status select on editable work cards provides the keyboard
+  alternative to dragging; the normal project endpoint applies the bucket rule. J/K focuses work links.
+- Personal board, backlog, sprint and drawer screens reuse the existing project presentation. Assignment,
+  member/team management, mentions and archiving controls are omitted. Settings retain buckets, labels and
+  label style; personal tasks show `#number`. The owner is implicit, without membership or assignment rows.
 
 M6.5 resolves and adds:
 

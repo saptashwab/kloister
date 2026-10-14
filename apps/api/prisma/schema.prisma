@@ -42,6 +42,8 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
+  /// Sole private space, kept unchanged when this account is deactivated.
+  personalSpace Project? @relation("PersonalOwner")
   sessions      Session[]
   auditLogs     AuditLog[]
   memberships   ProjectMember[]
@@ -126,11 +128,15 @@ enum TeamRole {
   MEMBER
 }
 
-/// A project. Only system admins create projects (SPEC §3.1).
+/// An ordinary project (created by admins) or an owner-only personal space
+/// initialized on first use (SPEC §3.1, §3.6).
 model Project {
   id             String    @id @default(uuid()) @db.Uuid
-  /// 2–6 uppercase letters, used in item numbers like `KLO-42`. Never changes.
-  key            String    @unique
+  /// 2–6 uppercase letters for ordinary projects; null for personal spaces.
+  key            String?   @unique
+  /// Set only on a private personal space; ownership is independent of membership.
+  ownerId        String?   @unique @db.Uuid
+  owner          User?     @relation("PersonalOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   name           String
   description    String    @default("")
   /// Archived projects are read-only and hidden from the default project list.

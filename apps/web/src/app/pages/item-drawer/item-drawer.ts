@@ -277,48 +277,49 @@ const FIELD_NAMES: Record<string, string> = {
                 </mat-select>
               </dd>
             }
-            <dt>Assignees</dt>
-            <dd>
-              @if (canEdit()) {
-                <mat-select
-                  class="k-inline"
-                  aria-label="Assignees"
-                  multiple
-                  panelWidth="260"
-                  [value]="d.assigneeIds"
-                  (selectionChange)="save({ assigneeIds: $event.value })"
-                  placeholder="Nobody"
-                >
-                  <mat-select-trigger>
-                    <span class="trigger">
-                      @for (p of assignees(); track p.id) {
-                        <span class="trigger"
-                          ><app-avatar-static [userId]="p.id" [name]="p.name" />{{ p.name }}</span
-                        >
-                      }
-                    </span>
-                  </mat-select-trigger>
-                  @for (m of assignable(); track m.userId) {
-                    <mat-option [value]="m.userId" [disabled]="!canAssign(m.userId)">{{
-                      m.displayName
-                    }}</mat-option>
-                  }
-                </mat-select>
-              } @else {
-                <div class="plain">
-                  @for (p of assignees(); track p.id) {
-                    <span class="trigger"
-                      ><app-avatar [userId]="p.id" [name]="p.name" [email]="p.email" />{{
-                        p.name
-                      }}</span
-                    >
-                  } @empty {
-                    <span class="muted">Nobody</span>
-                  }
-                </div>
-              }
-            </dd>
-
+            @if (ctx.project()?.ownerId === null) {
+              <dt>Assignees</dt>
+              <dd>
+                @if (canEdit()) {
+                  <mat-select
+                    class="k-inline"
+                    aria-label="Assignees"
+                    multiple
+                    panelWidth="260"
+                    [value]="d.assigneeIds"
+                    (selectionChange)="save({ assigneeIds: $event.value })"
+                    placeholder="Nobody"
+                  >
+                    <mat-select-trigger>
+                      <span class="trigger">
+                        @for (p of assignees(); track p.id) {
+                          <span class="trigger"
+                            ><app-avatar-static [userId]="p.id" [name]="p.name" />{{ p.name }}</span
+                          >
+                        }
+                      </span>
+                    </mat-select-trigger>
+                    @for (m of assignable(); track m.userId) {
+                      <mat-option [value]="m.userId" [disabled]="!canAssign(m.userId)">{{
+                        m.displayName
+                      }}</mat-option>
+                    }
+                  </mat-select>
+                } @else {
+                  <div class="plain">
+                    @for (p of assignees(); track p.id) {
+                      <span class="trigger"
+                        ><app-avatar [userId]="p.id" [name]="p.name" [email]="p.email" />{{
+                          p.name
+                        }}</span
+                      >
+                    } @empty {
+                      <span class="muted">Nobody</span>
+                    }
+                  </div>
+                }
+              </dd>
+            }
             <dt>Labels</dt>
             <dd>
               @if (canEdit()) {

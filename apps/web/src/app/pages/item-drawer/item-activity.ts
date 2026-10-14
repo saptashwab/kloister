@@ -81,7 +81,11 @@ type Filter = 'all' | 'notes' | 'history';
         label="New note"
         saveLabel="Add note"
         placeholder="Write a note…"
-        hint="Type @ to mention someone, paste or drop an image."
+        [hint]="
+          mentionables().length
+            ? 'Type @ to mention someone, paste or drop an image.'
+            : 'Paste or drop an image.'
+        "
         [alwaysShowActions]="true"
         [clearOnSave]="true"
         [maxLength]="noteMax"

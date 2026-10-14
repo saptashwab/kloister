@@ -20,7 +20,7 @@
         </button>
       </div>
 
-      <a class="nav-link" [routerLink]="['/people', me.id]" routerLinkActive="active">
+      <a class="nav-link" routerLink="/work" routerLinkActive="active">
         <app-icon name="work" [size]="18" /><span class="nav-text">My work</span>
       </a>
       <a
@@ -45,6 +45,16 @@
 
       <div class="nav-section" id="nav-projects">Projects</div>
       <ul class="plain" aria-labelledby="nav-projects">
+        <li>
+          <a
+            class="nav-link project"
+            routerLink="/p/personal"
+            routerLinkActive="active"
+            aria-label="Personal space"
+            title="Personal space"
+            ><app-icon name="work" /><span class="name">Personal</span></a
+          >
+        </li>
         @for (p of nav.projects(); track p.id) {
           <li>
             <a

@@ -67,6 +67,8 @@ export class ProjectsApiService {
    * @returns The project with the caller's role and permissions.
    */
   get(ref: string): Promise<ProjectDto> {
+    if (ref === 'personal')
+      return firstValueFrom(this.http.post<ProjectDto>(apiUrl('me/personal'), {}));
     return firstValueFrom(this.http.get<ProjectDto>(apiUrl(`projects/${encodeURIComponent(ref)}`)));
   }
 

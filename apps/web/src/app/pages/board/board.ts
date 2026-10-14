@@ -197,47 +197,49 @@ const QUICK_PEOPLE = 6;
         />
       </label>
 
-      <button
-        type="button"
-        class="k-chip"
-        [class.on]="!!filter().assigneeId"
-        [matMenuTriggerFor]="assigneeMenu"
-      >
-        <app-icon name="users" [size]="14" />{{ chipText('Assignee', assigneeName()) }}
-      </button>
-      <mat-menu #assigneeMenu="matMenu">
+      @if (ctx.project()?.ownerId === null) {
         <button
-          mat-menu-item
-          role="menuitemradio"
-          [attr.aria-checked]="filter().assigneeId === ''"
-          (click)="setFilter({ assigneeId: '' })"
+          type="button"
+          class="k-chip"
+          [class.on]="!!filter().assigneeId"
+          [matMenuTriggerFor]="assigneeMenu"
         >
-          <span class="check" aria-hidden="true">{{ mark(filter().assigneeId === '') }}</span
-          >Anyone
+          <app-icon name="users" [size]="14" />{{ chipText('Assignee', assigneeName()) }}
         </button>
-        <button
-          mat-menu-item
-          role="menuitemradio"
-          [attr.aria-checked]="filter().assigneeId === none"
-          (click)="setFilter({ assigneeId: none })"
-        >
-          <span class="check" aria-hidden="true">{{ mark(filter().assigneeId === none) }}</span
-          >Unassigned
-        </button>
-        @for (m of ctx.members(); track m.userId) {
+        <mat-menu #assigneeMenu="matMenu">
           <button
             mat-menu-item
             role="menuitemradio"
-            [attr.aria-checked]="filter().assigneeId === m.userId"
-            (click)="setFilter({ assigneeId: m.userId })"
+            [attr.aria-checked]="filter().assigneeId === ''"
+            (click)="setFilter({ assigneeId: '' })"
           >
-            <span class="check" aria-hidden="true">{{
-              mark(filter().assigneeId === m.userId)
-            }}</span
-            >{{ m.displayName }}
+            <span class="check" aria-hidden="true">{{ mark(filter().assigneeId === '') }}</span
+            >Anyone
           </button>
-        }
-      </mat-menu>
+          <button
+            mat-menu-item
+            role="menuitemradio"
+            [attr.aria-checked]="filter().assigneeId === none"
+            (click)="setFilter({ assigneeId: none })"
+          >
+            <span class="check" aria-hidden="true">{{ mark(filter().assigneeId === none) }}</span
+            >Unassigned
+          </button>
+          @for (m of ctx.members(); track m.userId) {
+            <button
+              mat-menu-item
+              role="menuitemradio"
+              [attr.aria-checked]="filter().assigneeId === m.userId"
+              (click)="setFilter({ assigneeId: m.userId })"
+            >
+              <span class="check" aria-hidden="true">{{
+                mark(filter().assigneeId === m.userId)
+              }}</span
+              >{{ m.displayName }}
+            </button>
+          }
+        </mat-menu>
+      }
 
       <button
         type="button"
@@ -434,7 +436,9 @@ const QUICK_PEOPLE = 6;
       >
         <mat-button-toggle value="bucket">Bucket</mat-button-toggle>
         <mat-button-toggle value="status">Status</mat-button-toggle>
-        <mat-button-toggle value="assignee">Assignee</mat-button-toggle>
+        @if (ctx.project()?.ownerId === null) {
+          <mat-button-toggle value="assignee">Assignee</mat-button-toggle>
+        }
         <mat-button-toggle value="sprint">Sprint</mat-button-toggle>
       </mat-button-toggle-group>
     </div>

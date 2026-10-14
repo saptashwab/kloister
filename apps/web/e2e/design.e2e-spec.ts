@@ -56,19 +56,19 @@ test('avatar hover card filters the board and leads to all their work', async ({
   await page.getByRole('dialog', { name: 'Mia Member' }).getByRole('link').click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]+$/);
   await expect(page.getByRole('heading', { name: 'Mia Member' })).toBeVisible();
-  await expect(page.getByRole('list', { name: 'Assigned items' })).toContainText('Invoice form');
+  await expect(page.locator('app-work')).toContainText('Invoice form');
   await snap(page, 'all their work');
 
   await page.getByRole('link', { name: 'My work' }).click();
   await expect(page.getByRole('heading', { name: 'My work' })).toBeVisible();
-  await expect(page.getByRole('list', { name: 'Assigned items' })).toContainText('Invoice PDF');
+  await expect(page.locator('app-work')).toContainText('Invoice PDF');
   await snap(page, 'my work');
 });
 
 test('a Viewer with nothing assigned sees an empty state', async ({ page }) => {
   await signIn(page, USERS.viewer);
   await page.getByRole('link', { name: 'My work' }).click();
-  await expect(page.getByText('Nothing assigned to you')).toBeVisible();
+  await expect(page.getByText('No matching work')).toBeVisible();
   await snap(page, 'empty my work');
 });
 

@@ -123,7 +123,9 @@ export class ProjectAccessService {
   /**
    * Resolves the caller's access to a project referenced by id or key.
    *
-   * Permissions: members get their role's access; system admins who are not
+   * Permissions: personal spaces are owner-only, checked before memberships
+   * or admin access; nobody else can resolve one. Ordinary project
+   * members get their role's access; system admins who are not
    * members get read-only access plus `ASSIGN_PMS`, and an
    * `ADMIN_CROSS_PROJECT_ACCESS` entry is written before anything is
    * returned; everyone else gets 404. Admins always hold `ASSIGN_PMS`.
@@ -147,6 +149,11 @@ export class ProjectAccessService {
       },
     });
     if (project === null) throw projectNotFound();
+    // Ownership is checked before memberships and the admin exception.
+    if (project.ownerId !== null) {
+      if (project.ownerId !== userId) throw projectNotFound();
+      return this.personalAccess(project, userId);
+    }
 
     const { members, ...row } = project;
     const settings = parseProjectSettings(row.settings);
@@ -177,6 +184,50 @@ export class ProjectAccessService {
   }
 
   /**
+   * Builds the owner's PM-like rights without adding any membership.
+   * @param project The personal project.
+   * @param userId Its owner.
+   * @returns Restricted personal access.
+   */
+  personalAccess(project: Project, userId: string): ProjectAccess {
+    const access = memberAccess(
+      project,
+      {
+        role: ProjectRole.PM,
+        visibility: Visibility.ALL,
+        allowedBucketIds: [],
+        teamMemberships: [],
+      },
+      userId,
+      false,
+    );
+    return {
+      ...access,
+      permissions: new Set(
+        [...access.permissions].filter(
+          (p) =>
+            !new Set<ProjectPermission>([
+              P.MANAGE_MEMBERS,
+              P.ASSIGN_PMS,
+              P.ASSIGN_OTHERS,
+              P.EXPORT_ADO,
+            ]).has(p),
+        ),
+      ),
+    };
+  }
+
+  /**
+   * Reads the caller's personal access only if the space already exists.
+   * @param auth The caller.
+   * @returns Its access or null; reading work does not create a space.
+   */
+  async ownPersonalAccess(auth: AuthContext): Promise<ProjectAccess | null> {
+    const project = await this.prisma.project.findUnique({ where: { ownerId: auth.user.id } });
+    return project === null ? null : this.personalAccess(project, auth.user.id);
+  }
+
+  /**
    * Resolves the caller's access to every project they are a member of and
    * that is not archived, for lists that span projects (the "all their
    * work" list, SPEC §6). Each access is built exactly as {@link resolve}
@@ -193,7 +244,7 @@ export class ProjectAccessService {
     const userId = auth.user.id;
     const isSystemAdmin = auth.user.systemRole === SystemRole.ADMIN;
     const rows = await this.prisma.projectMember.findMany({
-      where: { userId, project: { archivedAt: null } },
+      where: { userId, project: { archivedAt: null, ownerId: null } },
       include: { project: true, teamMemberships: { select: { teamId: true, role: true } } },
       orderBy: { project: { key: 'asc' } },
     });
@@ -222,6 +273,15 @@ export class ProjectAccessService {
     userIds: readonly string[],
   ): Promise<Map<string, ProjectAccess>> {
     if (userIds.length === 0) return new Map();
+    const personal = await db.project.findFirst({
+      where: { id: projectId, ownerId: { not: null }, owner: { isActive: true } },
+    });
+    if (personal !== null) {
+      const ownerId = personal.ownerId;
+      return ownerId !== null && userIds.includes(ownerId)
+        ? new Map([[ownerId, this.personalAccess(personal, ownerId)]])
+        : new Map();
+    }
     const rows = await db.projectMember.findMany({
       where: { projectId, userId: { in: [...userIds] }, user: { isActive: true } },
       include: {

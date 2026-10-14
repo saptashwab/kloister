@@ -85,9 +85,12 @@ import { ProjectTeamsComponent } from './project-teams';
                 <mat-label>Description</mat-label>
                 <textarea matInput formControlName="description"></textarea>
               </mat-form-field>
-              <mat-checkbox formControlName="membersCanAssignOthers">
-                Members can assign items to others
-              </mat-checkbox>
+              @if (project.ownerId === null) {
+                <mat-checkbox formControlName="membersCanAssignOthers">
+                  Members can assign items to others
+                </mat-checkbox>
+              }
+
               <button
                 mat-flat-button
                 type="submit"
@@ -95,9 +98,11 @@ import { ProjectTeamsComponent } from './project-teams';
               >
                 Save
               </button>
-              <button mat-button type="button" (click)="toggleArchived(project)">
-                {{ project.archivedAt ? 'Unarchive' : 'Archive' }}
-              </button>
+              @if (project.ownerId === null) {
+                <button mat-button type="button" (click)="toggleArchived(project)">
+                  {{ project.archivedAt ? 'Unarchive' : 'Archive' }}
+                </button>
+              }
             </form>
           } @else {
             <p>{{ project.description || 'No description.' }}</p>
@@ -109,171 +114,173 @@ import { ProjectTeamsComponent } from './project-teams';
         </mat-card-content>
       </mat-card>
 
-      <mat-card>
-        <mat-card-header><mat-card-title>Members</mat-card-title></mat-card-header>
-        <mat-card-content>
-          @if (canAddMembers()) {
-            <div class="row">
-              <mat-form-field>
-                <mat-label>Find user</mat-label>
-                <input matInput #search (keyup.enter)="searchCandidates(search.value)" />
-              </mat-form-field>
-              <button mat-button type="button" (click)="searchCandidates(search.value)">
-                Search
-              </button>
-              <mat-form-field>
-                <mat-label>User</mat-label>
-                <mat-select [value]="newUserId()" (valueChange)="newUserId.set($event)">
-                  @for (c of candidates(); track c.id) {
-                    <mat-option [value]="c.id">{{ c.displayName }} ({{ c.email }})</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-              @if (pmOnly()) {
-                <button
-                  mat-flat-button
-                  type="button"
-                  [disabled]="!newUserId()"
-                  (click)="addMember()"
-                >
-                  Add as Project Manager
-                </button>
-              } @else {
+      @if (project.ownerId === null) {
+        <mat-card>
+          <mat-card-header><mat-card-title>Members</mat-card-title></mat-card-header>
+          <mat-card-content>
+            @if (canAddMembers()) {
+              <div class="row">
                 <mat-form-field>
-                  <mat-label>Role</mat-label>
-                  <mat-select [value]="newRole()" (valueChange)="newRole.set($event)">
-                    @for (r of roles; track r) {
-                      <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
+                  <mat-label>Find user</mat-label>
+                  <input matInput #search (keyup.enter)="searchCandidates(search.value)" />
+                </mat-form-field>
+                <button mat-button type="button" (click)="searchCandidates(search.value)">
+                  Search
+                </button>
+                <mat-form-field>
+                  <mat-label>User</mat-label>
+                  <mat-select [value]="newUserId()" (valueChange)="newUserId.set($event)">
+                    @for (c of candidates(); track c.id) {
+                      <mat-option [value]="c.id">{{ c.displayName }} ({{ c.email }})</mat-option>
                     }
                   </mat-select>
                 </mat-form-field>
-                <button
-                  mat-flat-button
-                  type="button"
-                  [disabled]="!newUserId()"
-                  (click)="addMember()"
-                >
-                  Add
-                </button>
-              }
-            </div>
-          }
-
-          <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
-            <table class="data">
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Email</th>
-                  <th scope="col">Role</th>
-                  <th scope="col">Visibility</th>
-                  <th scope="col"><span class="visually-hidden">Actions</span></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (m of members(); track m.id) {
-                  <tr>
-                    <td>{{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}</td>
-                    <td>{{ m.email }}</td>
-                    @if (canEditMembers()) {
-                      <td>
-                        <mat-select
-                          [aria-label]="'Role of ' + m.displayName"
-                          [value]="m.role"
-                          (valueChange)="updateMember(m, { role: $event })"
-                        >
-                          @for (r of roles; track r) {
-                            <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
-                          }
-                        </mat-select>
-                      </td>
-                      <td>
-                        @if (isScoped(m)) {
-                          <mat-select
-                            [aria-label]="'Visibility of ' + m.displayName"
-                            [value]="m.visibility"
-                            (valueChange)="updateMember(m, { visibility: $event })"
-                          >
-                            <mat-option [value]="visibility.ALL">{{
-                              visibilityLabels.ALL
-                            }}</mat-option>
-                            <mat-option [value]="visibility.OWN">{{
-                              visibilityLabels.OWN
-                            }}</mat-option>
-                            <mat-option [value]="visibility.TEAMS">{{
-                              visibilityLabels.TEAMS
-                            }}</mat-option>
-                            <mat-option [value]="visibility.BUCKETS">{{
-                              visibilityLabels.BUCKETS
-                            }}</mat-option>
-                          </mat-select>
-                          @if (m.visibility === visibility.BUCKETS) {
-                            <mat-select
-                              multiple
-                              placeholder="Choose buckets"
-                              [aria-label]="'Buckets visible to ' + m.displayName"
-                              [value]="m.allowedBucketIds"
-                              (valueChange)="pendingBuckets.set(m.userId, $event)"
-                              (openedChange)="$event || saveBuckets(m)"
-                            >
-                              @for (b of buckets(); track b.id) {
-                                <mat-option [value]="b.id">{{ b.name }}</mat-option>
-                              }
-                            </mat-select>
-                          }
-                        } @else {
-                          {{ visibilityLabels.ALL }}
-                        }
-                      </td>
-                      <td class="actions">
-                        <button mat-button type="button" (click)="removeMember(m)">Remove</button>
-                      </td>
-                    } @else {
-                      <td>{{ roleLabels[m.role] }}</td>
-                      <td>
-                        {{ isScoped(m) ? visibilityLabels[m.visibility] : visibilityLabels.ALL }}
-                        @if (isScoped(m) && m.visibility === visibility.BUCKETS) {
-                          ({{ bucketNames(m) }})
-                        }
-                      </td>
-                      <td class="actions">
-                        @if (pmOnly()) {
-                          @if (m.role === projectRole.PM) {
-                            <button
-                              mat-button
-                              type="button"
-                              (click)="updateMember(m, { role: projectRole.MEMBER })"
-                            >
-                              Remove PM role
-                            </button>
-                            <button mat-button type="button" (click)="removeMember(m)">
-                              Remove
-                            </button>
-                          } @else {
-                            <button
-                              mat-button
-                              type="button"
-                              (click)="updateMember(m, { role: projectRole.PM })"
-                            >
-                              Make PM
-                            </button>
-                          }
-                        }
-                      </td>
-                    }
-                  </tr>
+                @if (pmOnly()) {
+                  <button
+                    mat-flat-button
+                    type="button"
+                    [disabled]="!newUserId()"
+                    (click)="addMember()"
+                  >
+                    Add as Project Manager
+                  </button>
+                } @else {
+                  <mat-form-field>
+                    <mat-label>Role</mat-label>
+                    <mat-select [value]="newRole()" (valueChange)="newRole.set($event)">
+                      @for (r of roles; track r) {
+                        <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                  <button
+                    mat-flat-button
+                    type="button"
+                    [disabled]="!newUserId()"
+                    (click)="addMember()"
+                  >
+                    Add
+                  </button>
                 }
-              </tbody>
-            </table>
-          </div>
-        </mat-card-content>
-      </mat-card>
+              </div>
+            }
 
-      <app-project-teams
-        [projectId]="project.id"
-        [members]="members()"
-        [canEdit]="canEditMembers()"
-      />
+            <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+              <table class="data">
+                <thead>
+                  <tr>
+                    <th scope="col">Name</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Visibility</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (m of members(); track m.id) {
+                    <tr>
+                      <td>{{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}</td>
+                      <td>{{ m.email }}</td>
+                      @if (canEditMembers()) {
+                        <td>
+                          <mat-select
+                            [aria-label]="'Role of ' + m.displayName"
+                            [value]="m.role"
+                            (valueChange)="updateMember(m, { role: $event })"
+                          >
+                            @for (r of roles; track r) {
+                              <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
+                            }
+                          </mat-select>
+                        </td>
+                        <td>
+                          @if (isScoped(m)) {
+                            <mat-select
+                              [aria-label]="'Visibility of ' + m.displayName"
+                              [value]="m.visibility"
+                              (valueChange)="updateMember(m, { visibility: $event })"
+                            >
+                              <mat-option [value]="visibility.ALL">{{
+                                visibilityLabels.ALL
+                              }}</mat-option>
+                              <mat-option [value]="visibility.OWN">{{
+                                visibilityLabels.OWN
+                              }}</mat-option>
+                              <mat-option [value]="visibility.TEAMS">{{
+                                visibilityLabels.TEAMS
+                              }}</mat-option>
+                              <mat-option [value]="visibility.BUCKETS">{{
+                                visibilityLabels.BUCKETS
+                              }}</mat-option>
+                            </mat-select>
+                            @if (m.visibility === visibility.BUCKETS) {
+                              <mat-select
+                                multiple
+                                placeholder="Choose buckets"
+                                [aria-label]="'Buckets visible to ' + m.displayName"
+                                [value]="m.allowedBucketIds"
+                                (valueChange)="pendingBuckets.set(m.userId, $event)"
+                                (openedChange)="$event || saveBuckets(m)"
+                              >
+                                @for (b of buckets(); track b.id) {
+                                  <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                                }
+                              </mat-select>
+                            }
+                          } @else {
+                            {{ visibilityLabels.ALL }}
+                          }
+                        </td>
+                        <td class="actions">
+                          <button mat-button type="button" (click)="removeMember(m)">Remove</button>
+                        </td>
+                      } @else {
+                        <td>{{ roleLabels[m.role] }}</td>
+                        <td>
+                          {{ isScoped(m) ? visibilityLabels[m.visibility] : visibilityLabels.ALL }}
+                          @if (isScoped(m) && m.visibility === visibility.BUCKETS) {
+                            ({{ bucketNames(m) }})
+                          }
+                        </td>
+                        <td class="actions">
+                          @if (pmOnly()) {
+                            @if (m.role === projectRole.PM) {
+                              <button
+                                mat-button
+                                type="button"
+                                (click)="updateMember(m, { role: projectRole.MEMBER })"
+                              >
+                                Remove PM role
+                              </button>
+                              <button mat-button type="button" (click)="removeMember(m)">
+                                Remove
+                              </button>
+                            } @else {
+                              <button
+                                mat-button
+                                type="button"
+                                (click)="updateMember(m, { role: projectRole.PM })"
+                              >
+                                Make PM
+                              </button>
+                            }
+                          }
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </mat-card-content>
+        </mat-card>
+
+        <app-project-teams
+          [projectId]="project.id"
+          [members]="members()"
+          [canEdit]="canEditMembers()"
+        />
+      }
 
       <app-project-board-settings
         [project]="project"
@@ -361,11 +368,16 @@ export class ProjectSettingsPage implements OnInit {
       // The project shell has usually loaded the project already; another
       // request would mean another audit entry for non-member admins.
       const known = this.ctx?.project();
-      const project = known?.key === this.key() ? known : await this.api.get(this.key());
+      const project =
+        known !== null &&
+        known !== undefined &&
+        (known.key === this.key() || (known.ownerId !== null && this.key() === 'personal'))
+          ? known
+          : await this.api.get(this.key());
       this.setProject(project);
       const [buckets] = await Promise.all([
         this.itemsApi.buckets(project.id),
-        this.loadMembers(project.id),
+        project.ownerId !== null ? Promise.resolve() : this.loadMembers(project.id),
       ]);
       this.buckets.set(buckets);
     });
@@ -433,7 +445,7 @@ export class ProjectSettingsPage implements OnInit {
       const saved = await this.api.update(project.id, {
         name,
         description,
-        settings: { membersCanAssignOthers },
+        ...(project.ownerId !== null ? {} : { settings: { membersCanAssignOthers } }),
       });
       // Saved: the form shows the stored values again.
       this.generalForm.markAsPristine();

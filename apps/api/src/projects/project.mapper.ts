@@ -18,7 +18,10 @@ import { parseProjectSettings } from './project-settings.js';
  * @returns The DTO.
  */
 export function toProjectDto(access: ProjectAccess, project: Project = access.project): ProjectDto {
-  return projectDto(project, access.role, access.visibility, access.isSystemAdmin, access.teams);
+  return {
+    ...projectDto(project, access.role, access.visibility, access.isSystemAdmin, access.teams),
+    myPermissions: [...access.permissions],
+  };
 }
 
 /**
@@ -64,6 +67,7 @@ function projectDto(
   return {
     id: project.id,
     key: project.key,
+    ownerId: project.ownerId,
     name: project.name,
     description: project.description,
     archivedAt: project.archivedAt?.toISOString() ?? null,

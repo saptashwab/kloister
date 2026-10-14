@@ -87,6 +87,12 @@ export const routes: Routes = [
       import('./pages/notifications/notifications').then((m) => m.NotificationsPage),
   },
   {
+    path: 'work',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/work/work').then((m) => m.WorkPage),
+  },
+  { path: 'personal', pathMatch: 'full', redirectTo: 'p/personal' },
+  {
     // "All their work" (SPEC §6); the sidebar's "My work" is the caller's own.
     path: 'people/:userId',
     canActivate: [authGuard],

@@ -61,7 +61,9 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
     @if (ctx.project(); as project) {
       <div class="k-page-head head">
         <div>
-          <div class="crumbs"><a routerLink="/">Projects</a> / {{ project.key }}</div>
+          <div class="crumbs">
+            <a routerLink="/">Projects</a> / {{ project.key ?? 'Private space' }}
+          </div>
           <h1>{{ project.name }}</h1>
         </div>
         <span class="spacer"></span>
@@ -81,7 +83,11 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
         @for (tab of tabs; track tab.path) {
           <a
             mat-tab-link
-            [routerLink]="tab.path === '' ? ['/p', project.key] : ['/p', project.key, tab.path]"
+            [routerLink]="
+              tab.path === ''
+                ? ['/p', project.key ?? 'personal']
+                : ['/p', project.key ?? 'personal', tab.path]
+            "
             [active]="activeTab() === tab.path"
             ><span class="tab"><app-icon [name]="tab.icon" />{{ tab.label }}</span></a
           >
@@ -199,8 +205,8 @@ export class ProjectShellPage {
       const onBacklog = this.activeTab() === 'backlog';
       await this.router.navigate(
         onBacklog
-          ? ['/p', project.key, 'backlog', 'items', item.number]
-          : ['/p', project.key, 'items', item.number],
+          ? ['/p', project.key ?? 'personal', 'backlog', 'items', item.number]
+          : ['/p', project.key ?? 'personal', 'items', item.number],
       );
     } catch (error) {
       this.toast.error(error);

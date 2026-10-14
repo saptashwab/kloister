@@ -33,6 +33,9 @@ describe('API security without a session (e2e)', () => {
   // Permission tests: every non-public route rejects anonymous callers.
   it.each([
     ['GET', '/api/v1/me'],
+    ['GET', '/api/v1/me/work'],
+    ['GET', '/api/v1/me/personal'],
+    ['POST', '/api/v1/me/personal'],
     ['PATCH', '/api/v1/me'],
     ['POST', '/api/v1/auth/logout'],
     ['POST', '/api/v1/auth/change-password'],

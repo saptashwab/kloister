@@ -9,7 +9,8 @@ import {
 } from '@kloister/shared';
 import type { AuthContext } from '../auth/auth-context.js';
 import { ApiException } from '../common/api-exception.js';
-import { fromDbDate } from '../common/dates.js';
+import { parseProjectSettings } from '../projects/project-settings.js';
+import { fromDbDate, toDbDate } from '../common/dates.js';
 import { toPage } from '../common/pagination.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -27,15 +28,24 @@ const WORK_SELECT = {
   status: true,
   priority: true,
   dueDate: true,
-  project: { select: { key: true, name: true } },
+  project: { select: { key: true, name: true, ownerId: true, settings: true } },
+  bucket: { select: { id: true, name: true } },
+  labels: { select: { label: true } },
+  createdById: true,
+  bucketId: true,
+  teamId: true,
+  assignees: { select: { userId: true } },
 } satisfies Prisma.WorkItemSelect;
 
 /** One row as read by {@link WORK_SELECT}. */
 type WorkRow = Prisma.WorkItemGetPayload<{ select: typeof WORK_SELECT }>;
 
 /**
- * "All their work" (SPEC §6): the items assigned to one person across every
- * project the caller is a member of, each project limited by the caller's
+ * My work and "all their work" (SPEC §6): items assigned to a person (and
+ * optionally created by them) across every readable membership project.
+ * Own work also includes the caller's personal tasks without assignments.
+ * Other people's personal spaces are never included. The ordinary
+ * projects are limited by the caller's
  * own visibility scope there.
  *
  * Authorization (SPEC §3.4): the caller's accesses come from
@@ -88,10 +98,37 @@ export class WorkService {
       if (shared === 0) throw personNotFound();
     }
 
+    const isMe = userId === auth.user.id;
+    if (isMe && query.source !== 'PROJECTS') {
+      const personal = await this.access.ownPersonalAccess(auth);
+      if (personal !== null) accesses.push(personal);
+    }
+    const selected = accesses.filter(
+      (a) =>
+        (query.projectId === undefined || a.project.id === query.projectId) &&
+        (query.source !== 'PERSONAL' || a.project.ownerId === auth.user.id),
+    );
     const empty: UserWorkDto = { user: person, items: [], nextCursor: null };
-    if (accesses.length === 0) return empty;
-    const where = this.items.scopedAcross(accesses, {
-      assignees: { some: { userId } },
+    if (selected.length === 0) return empty;
+    const personalIds = selected
+      .filter((a) => a.project.ownerId === auth.user.id)
+      .map((a) => a.project.id);
+    const where = this.items.scopedAcross(selected, {
+      OR: [
+        { assignees: { some: { userId } } },
+        ...(query.includeCreated === true ? [{ createdById: userId }] : []),
+        ...(isMe ? [{ projectId: { in: personalIds } }] : []),
+      ],
+      ...(query.type === undefined ? {} : { type: query.type }),
+      ...(query.labelId === undefined ? {} : { labels: { some: { labelId: query.labelId } } }),
+      ...(query.dueFrom === undefined && query.dueTo === undefined
+        ? {}
+        : {
+            dueDate: {
+              ...(query.dueFrom === undefined ? {} : { gte: toDbDate(query.dueFrom) }),
+              ...(query.dueTo === undefined ? {} : { lte: toDbDate(query.dueTo) }),
+            },
+          }),
       ...(query.includeDone === true ? {} : { status: { not: ItemStatus.DONE } }),
     });
     // Keyset paging on (due date, id) with undated items last. The rows after
@@ -124,7 +161,21 @@ export class WorkService {
       // One extra row tells whether another page follows.
       take: (query.limit ?? DEFAULT_PAGE_LIMIT) + 1,
     });
-    const page = toPage(rows, query, toWorkSummary);
+    const page = toPage(rows, query, (row) => {
+      const access = selected.find((a) => a.project.id === row.projectId);
+      return {
+        ...toWorkSummary(row),
+        canEdit:
+          access !== undefined &&
+          this.access.canEditItem(access, {
+            createdById: row.createdById,
+            bucketId: row.bucketId,
+            teamId: row.teamId,
+            assigneeIds: row.assignees.map((a) => a.userId),
+            hasChildren: false,
+          }),
+      };
+    });
     return { user: person, items: page.items, nextCursor: page.nextCursor };
   }
 }
@@ -139,10 +190,20 @@ function toWorkSummary(row: WorkRow): WorkSummaryDto {
   return {
     id: row.id,
     number: row.number,
-    key: `${row.project.key}-${row.number}`,
+    key: row.project.key === null ? `#${row.number}` : `${row.project.key}-${row.number}`,
     projectId: row.projectId,
     projectKey: row.project.key,
-    projectName: row.project.name,
+    projectName: row.project.ownerId === null ? row.project.name : 'Personal',
+    personal: row.project.ownerId !== null,
+    bucket: row.bucket,
+    labels: row.labels.map(({ label }) => ({
+      id: label.id,
+      name: label.name,
+      colour: label.colour,
+      projectId: label.projectId,
+    })),
+    labelStyle: parseProjectSettings(row.project.settings).labelStyle,
+    canEdit: false,
     type: row.type,
     title: row.title,
     status: row.status,

@@ -13,7 +13,7 @@ import { WorkService } from './work.service.js';
  * projects and their visibility scope in each; people the caller shares no
  * project with are 404 (admins may look up anyone). See {@link WorkService}.
  */
-@Controller('users')
+@Controller()
 export class WorkController {
   /**
    * Receives its collaborators through Nest dependency injection.
@@ -21,6 +21,17 @@ export class WorkController {
    * @param work The cross-project list.
    */
   constructor(private readonly work: WorkService) {}
+
+  /**
+   * Lists assigned/created project work and the caller's personal tasks.
+   * @param auth The caller.
+   * @param query Filters and pagination.
+   * @returns The caller and permitted work.
+   */
+  @Get('me/work')
+  mine(@CurrentAuth() auth: AuthContext, @Query() query: WorkQueryDto): Promise<UserWorkDto> {
+    return this.work.listForUser(auth, auth.user.id, query);
+  }
 
   /**
    * Lists the open items (or all, with `includeDone=true`) assigned to a
@@ -31,7 +42,7 @@ export class WorkController {
    * @param query Pagination and filters.
    * @returns The person and one page of their items.
    */
-  @Get(':userId/work')
+  @Get('users/:userId/work')
   list(
     @CurrentAuth() auth: AuthContext,
     @Param('userId', ParseUUIDPipe) userId: string,

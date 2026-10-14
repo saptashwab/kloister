@@ -284,10 +284,15 @@ test('an admin sees the disk usage and changes the attachment limits', async ({ 
   await expect(folders).toContainText(E2E_SERVER_DIR);
   await expect(page.getByRole('list', { name: 'Disk' })).toContainText('free of');
   await page.getByRole('spinbutton', { name: 'Largest file (MB)' }).fill('30');
+  await page.getByRole('spinbutton', { name: 'Personal space per user (MB)' }).fill('768');
   await page.getByRole('button', { name: 'Save limits' }).click();
   await toast(page, 'Attachment limits saved');
+  await expect(page.getByRole('spinbutton', { name: 'Personal space per user (MB)' })).toHaveValue(
+    '768',
+  );
   await snap(page, 'storage with disk usage');
   await page.getByRole('spinbutton', { name: 'Largest file (MB)' }).fill('25');
+  await page.getByRole('spinbutton', { name: 'Personal space per user (MB)' }).fill('1024');
   await page.getByRole('button', { name: 'Save limits' }).click();
   await toast(page, 'Attachment limits saved');
 });
