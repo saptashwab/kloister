@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, signal } from '@angular/core';
+import { Component, computed, DestroyRef, effect, inject, input, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
@@ -9,9 +9,11 @@ import { filter, firstValueFrom, map } from 'rxjs';
 import { errorMessage } from '../../core/api';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
+import { Shortcuts } from '../../core/shortcuts';
 import { Skeleton } from '../../ui/feedback';
 import { Icon, type IconName } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
+import { dialogMotion } from '../../ui/motion';
 import { NewItemDialog, type NewItemData } from './new-item-dialog';
 
 /**
@@ -29,7 +31,7 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
   providers: [ProjectContext],
   styles: `
     .head {
-      padding: 14px var(--k-gutter) 0;
+      padding: var(--k-size-14px) var(--k-gutter) 0;
     }
     .crumbs a {
       color: inherit;
@@ -39,17 +41,17 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
       text-decoration: underline;
     }
     nav {
-      padding: 0 calc(var(--k-gutter) - 8px);
-      border-bottom: 1px solid var(--k-border);
+      padding: 0 calc(var(--k-gutter) - var(--k-space-2));
+      border-bottom: var(--k-line) solid var(--k-border);
       --mat-tab-header-divider-height: 0;
     }
     .tab {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: var(--k-space-2);
     }
     .archived {
-      margin: 12px var(--k-gutter) 0;
+      margin: var(--k-space-3) var(--k-gutter) 0;
     }
     .missing {
       padding: var(--k-space-6) var(--k-gutter);
@@ -63,6 +65,9 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
           <h1>{{ project.name }}</h1>
         </div>
         <span class="spacer"></span>
+        <button type="button" class="k-chip" (click)="shortcuts.open()" aria-label="Search or jump">
+          <app-icon name="search" />Search or jump <kbd>/</kbd>
+        </button>
         @if (canCreate()) {
           <button mat-flat-button type="button" (click)="newItem()">
             <app-icon name="plus" />New item
@@ -96,6 +101,8 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
   `,
 })
 export class ProjectShellPage {
+  /** Lazy command palette shared with the app shell. */
+  protected readonly shortcuts = inject(Shortcuts);
   /** Shared state of the project, provided here for the pages below. */
   protected readonly ctx = inject(ProjectContext);
   private readonly items = inject(ItemsApiService);
@@ -144,6 +151,11 @@ export class ProjectShellPage {
    * Opens the project whenever the key in the URL changes.
    */
   constructor() {
+    inject(Shortcuts).register((key) => {
+      if (key !== 'c' || !this.canCreate() || document.querySelector('.d-panel')) return false;
+      void this.newItem();
+      return true;
+    }, inject(DestroyRef));
     let previous: string | undefined;
     effect(() => {
       const key = this.key();
@@ -170,7 +182,13 @@ export class ProjectShellPage {
     if (project === null) return;
     const ref = this.dialog.open<NewItemDialog, NewItemData, CreateItemRequest | null>(
       NewItemDialog,
-      { data: { buckets: this.ctx.buckets() }, width: '460px', maxWidth: 'calc(100vw - 32px)' },
+      {
+        data: { buckets: this.ctx.buckets() },
+        width: 'var(--k-size-460px)',
+        maxWidth: 'calc(100vw - var(--k-space-8))',
+        enterAnimationDuration: dialogMotion(),
+        exitAnimationDuration: dialogMotion(),
+      },
     );
     const request = await firstValueFrom(ref.afterClosed());
     if (!request) return;

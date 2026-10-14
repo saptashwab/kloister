@@ -11,6 +11,11 @@ import {
   viewChild,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import {
+  CdkConnectedOverlay,
+  CdkOverlayOrigin,
+  type ConnectedPosition,
+} from '@angular/cdk/overlay';
 import { DomSanitizer } from '@angular/platform-browser';
 import { INLINE_IMAGE_TYPES, type InlineImageDto, ITEM_DESCRIPTION_MAX } from '@kloister/shared';
 import {
@@ -72,7 +77,7 @@ let nextId = 0;
  */
 @Component({
   selector: 'app-rich-text-editor',
-  imports: [MatButtonModule, Icon],
+  imports: [MatButtonModule, Icon, CdkConnectedOverlay, CdkOverlayOrigin],
   host: { class: 'k-rte' },
   template: `
     <div class="tools" role="toolbar" [attr.aria-label]="label() + ' formatting'">
@@ -139,20 +144,37 @@ let nextId = 0;
         (drop)="drop($event)"
         (blur)="closeMention()"
       ></div>
-      @if (mention(); as m) {
-        <ul class="k-popover mention-list" role="listbox" [id]="ids.list" aria-label="People">
-          @for (p of m.options; track p.id; let i = $index) {
-            <li
-              role="option"
-              [id]="ids.list + '-' + i"
-              [attr.aria-selected]="i === m.active"
-              (mousedown)="$event.preventDefault(); choose(p)"
-            >
-              {{ p.name }}
-            </li>
-          }
-        </ul>
-      }
+      <span
+        class="k-caret-origin"
+        cdkOverlayOrigin
+        #caret="cdkOverlayOrigin"
+        [style.left.px]="caretPosition().x"
+        [style.top.px]="caretPosition().y"
+        aria-hidden="true"
+      ></span>
+      <ng-template
+        cdkConnectedOverlay
+        [cdkConnectedOverlayOrigin]="caret"
+        [cdkConnectedOverlayOpen]="mention() !== null"
+        [cdkConnectedOverlayPositions]="mentionPositions"
+        [cdkConnectedOverlayPush]="true"
+        [cdkConnectedOverlayViewportMargin]="8"
+      >
+        @if (mention(); as m) {
+          <ul class="k-popover mention-list" role="listbox" [id]="ids.list" aria-label="People">
+            @for (p of m.options; track p.id; let i = $index) {
+              <li
+                role="option"
+                [id]="ids.list + '-' + i"
+                [attr.aria-selected]="i === m.active"
+                (mousedown)="$event.preventDefault(); choose(p)"
+              >
+                {{ p.name }}
+              </li>
+            }
+          </ul>
+        }
+      </ng-template>
     </div>
     @if (uploading() > 0) {
       <p class="hint" role="status">
@@ -216,6 +238,13 @@ export class RichTextEditor {
   protected readonly imageCount = signal(0);
   /** The mention being typed, while the listbox is open. */
   protected readonly mention = signal<MentionState | null>(null);
+  /** Caret coordinates relative to the editor wrapper. */
+  protected readonly caretPosition = signal({ x: 0, y: 0 });
+  /** Prefer below the caret, falling back above when space is short. */
+  protected readonly mentionPositions: ConnectedPosition[] = [
+    { originX: 'start', originY: 'bottom', overlayX: 'start', overlayY: 'top' },
+    { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom' },
+  ];
   /** Accepted image types, for the file picker. */
   protected readonly imageTypes = INLINE_IMAGE_TYPES.join(',');
   /** Element ids of this instance. */
@@ -237,6 +266,13 @@ export class RichTextEditor {
    * being edited.
    */
   constructor() {
+    afterRenderEffect(() => {
+      const mention = this.mention();
+      if (mention)
+        document
+          .getElementById(`${this.ids.list}-${mention.active}`)
+          ?.scrollIntoView({ block: 'nearest' });
+    });
     afterRenderEffect(() => {
       const html = this.html();
       untracked(() => {
@@ -333,6 +369,8 @@ export class RichTextEditor {
    * @param event The key event; navigation keys of an open listbox are skipped.
    */
   protected trackMention(event?: KeyboardEvent): void {
+    // Escape must not reopen the list on keyup after keydown dismissed it.
+    if (event?.key === 'Escape') return;
     if (
       event !== undefined &&
       this.mention() !== null &&
@@ -360,6 +398,13 @@ export class RichTextEditor {
       return;
     }
     const active = Math.min(this.mention()?.active ?? 0, options.length - 1);
+    const range = selection.getRangeAt(0).cloneRange();
+    // A range over the preceding character gives a rectangle even when
+    // collapsed caret ranges are empty at a line break.
+    range.setStart(node, Math.max(found.start, selection.anchorOffset - 1));
+    const rect = range.getBoundingClientRect();
+    const wrap = this.area().nativeElement.parentElement?.getBoundingClientRect();
+    if (wrap) this.caretPosition.set({ x: rect.right - wrap.left, y: rect.bottom - wrap.top });
     this.mention.set({ node, start: found.start, options, active });
   }
 

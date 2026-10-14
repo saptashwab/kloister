@@ -24,6 +24,8 @@ import { ProjectsNav } from '../../core/projects-nav';
 import { SessionStore } from '../../core/session.store';
 import { required } from '../../core/validators';
 
+import { EmptyState, Skeleton } from '../../ui/feedback';
+
 /**
  * Projects list (SPEC §6), the landing page after sign-in.
  *
@@ -36,6 +38,8 @@ import { required } from '../../core/validators';
   selector: 'app-projects',
   host: { class: 'k-page' },
   imports: [
+    EmptyState,
+    Skeleton,
     ReactiveFormsModule,
     RouterLink,
     MatButtonModule,
@@ -112,40 +116,47 @@ import { required } from '../../core/validators';
       <p class="k-alert" role="alert">{{ error() }}</p>
     }
 
-    <div class="k-panel k-table-scroll">
-      <table class="data">
-        <thead>
-          <tr>
-            <th scope="col">Key</th>
-            <th scope="col">Name</th>
-            <th scope="col">Your role</th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (project of projects(); track project.id) {
+    @if (loading()) {
+      <app-skeleton label="Loading the list" />
+    } @else {
+      <div class="k-panel k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+        <table class="data">
+          <thead>
             <tr>
-              <td>
-                <a class="k-key" [routerLink]="['/p', project.key]">{{ project.key }}</a>
-              </td>
-              <td>{{ project.name }}</td>
-              <td>{{ project.myRole ? roleLabels[project.myRole] : 'Not a member' }}</td>
-              <td>{{ project.archivedAt ? 'Archived' : 'Active' }}</td>
+              <th scope="col">Key</th>
+              <th scope="col">Name</th>
+              <th scope="col">Your role</th>
+              <th scope="col">Status</th>
             </tr>
-          } @empty {
-            <tr>
-              <td colspan="4">
-                {{
-                  scope() === 'all'
-                    ? 'No projects yet.'
-                    : 'You are not a member of any project yet.'
-                }}
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            @for (project of projects(); track project.id) {
+              <tr>
+                <td>
+                  <a class="k-key" [routerLink]="['/p', project.key]">{{ project.key }}</a>
+                </td>
+                <td>{{ project.name }}</td>
+                <td>{{ project.myRole ? roleLabels[project.myRole] : 'Not a member' }}</td>
+                <td>{{ project.archivedAt ? 'Archived' : 'Active' }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="4">
+                  <app-empty-state
+                    [title]="
+                      scope() === 'all'
+                        ? 'No projects yet.'
+                        : 'You are not a member of any project yet.'
+                    "
+                    text="An admin can create a project and add its project managers."
+                  />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
     @if (nextCursor()) {
       <button mat-button type="button" (click)="loadMore()">Load more</button>
     }
@@ -172,6 +183,8 @@ export class ProjectsPage implements OnInit {
   protected readonly pmOptions = signal<UserDto[]>([]);
   /** Last error message, if any. */
   protected readonly error = signal('');
+  /** True while the list is being replaced. */
+  protected readonly loading = signal(true);
   /** True while a create request is in flight. */
   protected readonly busy = signal(false);
 
@@ -269,11 +282,13 @@ export class ProjectsPage implements OnInit {
    * @returns Resolves once loaded.
    */
   private async reload(): Promise<void> {
+    this.loading.set(true);
     await this.run(async () => {
       const page = await this.api.list(this.filter());
       this.projects.set(page.items);
       this.nextCursor.set(page.nextCursor);
     });
+    this.loading.set(false);
   }
 
   /**

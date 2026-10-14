@@ -56,38 +56,38 @@ import { SessionStore } from '../../core/session.store';
     :host {
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      padding: 14px var(--k-gutter) 32px;
+      gap: var(--k-space-3);
+      padding: var(--k-size-14px) var(--k-gutter) var(--k-space-8);
     }
     .filters mat-form-field {
-      width: 170px;
+      width: var(--k-size-170px);
     }
     .bulk {
       position: sticky;
       top: 0;
       z-index: 2;
-      padding: 8px 14px;
-      border: 1px solid var(--k-primary-line);
+      padding: var(--k-space-2) var(--k-size-14px);
+      border: var(--k-line) solid var(--k-primary-line);
       border-radius: var(--k-radius-md);
       background: var(--k-primary-soft);
       color: var(--k-primary-ink);
     }
     .bulk mat-form-field {
-      width: 170px;
+      width: var(--k-size-170px);
     }
     .tree {
-      border: 1px solid var(--k-border);
+      border: var(--k-line) solid var(--k-border);
       border-radius: var(--k-radius-lg);
       background: var(--k-surface);
     }
     table.data td {
-      padding: 4px 10px;
+      padding: var(--k-space-1) var(--k-size-10px);
     }
     .item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      min-height: 36px;
+      gap: var(--k-space-2);
+      min-height: var(--k-control-height);
     }
     .item a {
       color: var(--k-text);
@@ -99,8 +99,8 @@ import { SessionStore } from '../../core/session.store';
     .toggle {
       display: inline-grid;
       place-items: center;
-      width: 24px;
-      height: 24px;
+      width: var(--k-space-6);
+      height: var(--k-space-6);
       padding: 0;
       border: 0;
       border-radius: var(--k-radius-sm);
@@ -116,7 +116,7 @@ import { SessionStore } from '../../core/session.store';
     }
     .spacer-24 {
       display: inline-block;
-      width: 24px;
+      width: var(--k-space-6);
     }
     .ghost {
       color: var(--k-muted);
@@ -232,7 +232,7 @@ import { SessionStore } from '../../core/session.store';
         text="Items created on the board or with “New item” appear here as a tree of Epics, Features, Stories and Tasks."
       />
     } @else {
-      <div class="tree k-table-scroll">
+      <div class="tree k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
         <table class="data">
           <thead>
             <tr>

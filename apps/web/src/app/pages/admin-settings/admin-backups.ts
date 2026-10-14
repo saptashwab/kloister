@@ -102,7 +102,7 @@ const POLL_MS = 2000;
         @if (status.runs.length === 0) {
           <app-empty-state title="No backups yet" text="Run one now or wait for the schedule." />
         } @else {
-          <div class="k-table-scroll">
+          <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
             <table class="data" aria-labelledby="runs-title">
               <thead>
                 <tr>
@@ -149,7 +149,7 @@ const POLL_MS = 2000;
         @if (status.files.length === 0) {
           <app-empty-state title="No backup files" text="Backups appear here once one has run." />
         } @else {
-          <div class="k-table-scroll">
+          <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
             <table class="data" aria-labelledby="files-title">
               <thead>
                 <tr>

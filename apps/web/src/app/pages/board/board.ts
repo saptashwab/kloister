@@ -1,6 +1,8 @@
 import { CdkDrag, type CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
 import {
   Component,
+  DestroyRef,
+  ElementRef,
   computed,
   effect,
   forwardRef,
@@ -39,6 +41,7 @@ import { ItemsApiService } from '../../core/items-api.service';
 import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
 import { ProjectContext } from '../../core/project-context';
 import { SessionStore } from '../../core/session.store';
+import { Shortcuts } from '../../core/shortcuts';
 import { Avatar, PERSON_FILTER, type PersonFilter } from '../../ui/avatar';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
@@ -86,30 +89,29 @@ const QUICK_PEOPLE = 6;
     :host {
       display: flex;
       flex-direction: column;
-      gap: 14px;
-      padding: 14px var(--k-gutter) 0;
+      gap: var(--k-size-14px);
+      padding: var(--k-size-14px) var(--k-gutter) 0;
     }
     .toolbar {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 8px;
+      gap: var(--k-space-2);
     }
     .search {
       display: flex;
       align-items: center;
-      gap: 8px;
-      height: 32px;
-      padding: 0 10px;
-      border: 1px solid var(--k-border);
+      gap: var(--k-space-2);
+      height: var(--k-space-8);
+      padding: 0 var(--k-size-10px);
+      border: var(--k-line) solid var(--k-border);
       border-radius: var(--k-radius-control);
       background: var(--k-surface);
       color: var(--k-muted);
     }
     .search input {
-      width: 170px;
+      width: var(--k-size-170px);
       border: 0;
-      outline: 0;
       background: transparent;
       color: var(--k-text);
       font: inherit;
@@ -120,26 +122,26 @@ const QUICK_PEOPLE = 6;
     }
     .columns {
       display: flex;
-      gap: 16px;
+      gap: var(--k-space-4);
       align-items: flex-start;
       overflow-x: auto;
-      padding-bottom: 32px;
+      padding-bottom: var(--k-space-8);
     }
     .column {
-      flex: 0 0 288px;
+      flex: 0 0 var(--k-size-288px);
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: var(--k-size-10px);
       box-sizing: border-box;
-      padding: 10px;
+      padding: var(--k-size-10px);
       border-radius: var(--k-radius-lg);
       background: var(--k-sunken);
     }
     .column h2 {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 2px 4px;
+      gap: var(--k-space-2);
+      padding: var(--k-focus-width) var(--k-space-1);
       font-size: var(--k-body-sm);
       font-weight: 700;
     }
@@ -149,16 +151,16 @@ const QUICK_PEOPLE = 6;
     .list {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      min-height: 48px;
+      gap: var(--k-size-10px);
+      min-height: var(--k-size-48px);
     }
     .cdk-drag-preview {
       box-shadow: var(--k-lift);
-      transform: rotate(2deg);
+      rotate: var(--k-drag-tilt);
     }
     .cdk-drag-placeholder {
       opacity: 1;
-      border: 2px dashed var(--k-primary-line);
+      border: var(--k-focus-width) dashed var(--k-primary-line);
       background: var(--k-primary-soft);
       box-shadow: none;
     }
@@ -169,9 +171,12 @@ const QUICK_PEOPLE = 6;
     .list.cdk-drop-list-dragging .cdk-drag:not(.cdk-drag-placeholder) {
       transition: transform var(--k-motion) ease;
     }
+    .list.cdk-drop-list-dragging app-item-card {
+      content-visibility: visible;
+    }
     .check {
       display: inline-block;
-      width: 20px;
+      width: var(--k-size-20px);
       color: var(--k-primary);
     }
   `,
@@ -615,6 +620,33 @@ export class BoardPage implements OnInit, PersonFilter {
    * Applies `?sprint=` to the sprint filter whenever it changes.
    */
   constructor() {
+    const element = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+    const shortcuts = inject(Shortcuts);
+    shortcuts.register((key) => {
+      if (document.querySelector('.d-panel')) return false;
+      const links = [...element.querySelectorAll<HTMLAnchorElement>('app-item-card a.title')];
+      if (key === 'j' || key === 'k') {
+        const current = links.findIndex((link) => link === document.activeElement);
+        const next =
+          links[
+            current < 0
+              ? key === 'j'
+                ? 0
+                : links.length - 1
+              : Math.max(0, Math.min(links.length - 1, current + (key === 'j' ? 1 : -1)))
+          ];
+        next?.focus();
+        next?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        return next !== undefined;
+      }
+      const selected = links.find((link) => link === document.activeElement);
+      if (selected && ['m', 'a', 'l'].includes(key)) {
+        shortcuts.field.set(key === 'm' ? 'Bucket' : key === 'a' ? 'Assignees' : 'Labels');
+        selected.click();
+        return true;
+      }
+      return false;
+    }, inject(DestroyRef));
     effect(() => {
       // Leaving the sprint board (no `?sprint=`) clears the sprint filter too.
       const sprint = this.sprint() ?? '';

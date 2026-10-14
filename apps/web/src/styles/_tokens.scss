@@ -151,9 +151,58 @@
 
   /* Motion (DESIGN §13); reduced-motion sets it to 0s. */
   --k-motion: 160ms;
+  --k-drag-tilt: 2deg;
 
   /* Layout. */
   --k-sidebar-width: 232px;
+  --k-sidebar-rail: 72px;
+  --k-command-width: 560px;
+  --k-label-row-width: 560px;
+  --k-label-preview-width: 120px;
+  --k-control-height: 36px;
+  --k-target: 24px;
+  --k-line: 1px;
+  --k-focus-width: 2px;
+  --k-mention-width: 220px;
+  --k-mention-height: 240px;
+  --k-card-estimate: 160px;
+  --k-size-460px: 460px;
+  /* Shared lengths for controls, metadata and responsive panels. */
+  --k-size-0_65625rem: 0.65625rem;
+  --k-size-0_6875rem: 0.6875rem;
+  --k-size-10px: 10px;
+  --k-size-116px: 116px;
+  --k-size-11px: 11px;
+  --k-size-120px: 120px;
+  --k-size-140px: 140px;
+  --k-size-14px: 14px;
+  --k-size-170px: 170px;
+  --k-size-18px: 18px;
+  --k-size-1_125rem: 1.125rem;
+  --k-size-1_5rem: 1.5rem;
+  --k-size-1rem: 1rem;
+  --k-size-200px: 200px;
+  --k-size-20px: 20px;
+  --k-size-22px: 22px;
+  --k-size-280px: 280px;
+  --k-size-288px: 288px;
+  --k-size-28px: 28px;
+  --k-size-30px: 30px;
+  --k-size-320px: 320px;
+  --k-size-34px: 34px;
+  --k-size-3px: 3px;
+  --k-size-40px: 40px;
+  --k-size-420px: 420px;
+  --k-size-48px: 48px;
+  --k-size-56px: 56px;
+  --k-size-5px: 5px;
+  --k-size-640px: 640px;
+  --k-size-6px: 6px;
+  --k-size-7px: 7px;
+  --k-size-880px: 880px;
+  --k-size-96px: 96px;
+  --k-size-999px: 999px;
+  --k-size-9px: 9px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -169,6 +218,7 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --k-motion: 0s;
+    --k-drag-tilt: 0deg;
   }
 }
 

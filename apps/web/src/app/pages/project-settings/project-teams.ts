@@ -101,39 +101,41 @@ import { ProjectsApiService } from '../../core/projects-api.service';
                 <button mat-button type="button" (click)="deleteTeam(team)">Delete</button>
               }
             </h3>
-            <table class="data">
-              <tbody>
-                @for (m of team.members; track m.userId) {
-                  <tr>
-                    <td>{{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}</td>
-                    @if (canEdit()) {
-                      <td>
-                        <mat-select
-                          [aria-label]="'Team role of ' + m.displayName"
-                          [value]="m.role"
-                          (valueChange)="setRole(team, m.userId, $event)"
-                        >
-                          @for (r of rolesFor(m.userId); track r) {
-                            <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
-                          }
-                        </mat-select>
-                      </td>
-                      <td class="actions">
-                        <button mat-button type="button" (click)="removeFromTeam(team, m.userId)">
-                          Remove
-                        </button>
-                      </td>
-                    } @else {
-                      <td>{{ roleLabels[m.role] }}</td>
-                    }
-                  </tr>
-                } @empty {
-                  <tr>
-                    <td>No members yet.</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+            <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+              <table class="data">
+                <tbody>
+                  @for (m of team.members; track m.userId) {
+                    <tr>
+                      <td>{{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}</td>
+                      @if (canEdit()) {
+                        <td>
+                          <mat-select
+                            [aria-label]="'Team role of ' + m.displayName"
+                            [value]="m.role"
+                            (valueChange)="setRole(team, m.userId, $event)"
+                          >
+                            @for (r of rolesFor(m.userId); track r) {
+                              <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
+                            }
+                          </mat-select>
+                        </td>
+                        <td class="actions">
+                          <button mat-button type="button" (click)="removeFromTeam(team, m.userId)">
+                            Remove
+                          </button>
+                        </td>
+                      } @else {
+                        <td>{{ roleLabels[m.role] }}</td>
+                      }
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td>No members yet.</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
           </section>
         } @empty {
           <p>No teams.</p>

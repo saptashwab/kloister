@@ -25,6 +25,8 @@ import { required } from '../../core/validators';
 /** Close-dialog choice: leave unfinished items in the closed sprint. */
 const KEEP = 'keep';
 
+import { EmptyState, Skeleton } from '../../ui/feedback';
+
 /**
  * Sprints (SPEC §6): list, create and edit, set active, open the sprint
  * board (the board filtered to one sprint), and close a sprint with the
@@ -40,6 +42,8 @@ const KEEP = 'keep';
   selector: 'app-sprints',
   host: { class: 'k-page' },
   imports: [
+    EmptyState,
+    Skeleton,
     ReactiveFormsModule,
     RouterLink,
     MatButtonModule,
@@ -117,52 +121,63 @@ const KEEP = 'keep';
       </mat-card>
     }
 
-    <table class="data">
-      <thead>
-        <tr>
-          <th scope="col">Sprint</th>
-          <th scope="col">Dates</th>
-          <th scope="col">State</th>
-          <th scope="col">Items</th>
-          <th scope="col"><span class="visually-hidden">Actions</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (s of ctx.sprints(); track s.id) {
-          <tr>
-            <td>{{ s.name }}</td>
-            <td>{{ s.startDate }} – {{ s.endDate }}</td>
-            <td>{{ stateLabels[s.state] }}</td>
-            <td>{{ itemCount(s.id) }}</td>
-            <td class="actions">
-              <a mat-button [routerLink]="['/p', key()]" [queryParams]="{ sprint: s.id }"
-                >Sprint board</a
-              >
-              @if (canManage()) {
-                @if (s.state !== closed) {
-                  <button mat-button type="button" (click)="edit(s)">Edit</button>
-                }
-                @if (s.state === planned) {
-                  <button mat-button type="button" (click)="start(s)">Set active</button>
-                }
-                @if (s.state !== closed) {
-                  <button mat-button type="button" (click)="openClose(s)">Close</button>
-                }
-                <button mat-button type="button" (click)="remove(s)">Delete</button>
-              }
-            </td>
-          </tr>
-        } @empty {
-          <tr>
-            <td colspan="5" class="muted">
-              No sprints yet. Plan a few weeks of work at a time{{
-                canManage() ? ' with the form above' : ''
-              }}.
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
+    @if (!ctx.loaded()) {
+      <app-skeleton label="Loading the list" />
+    } @else {
+      <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+        <table class="data">
+          <thead>
+            <tr>
+              <th scope="col">Sprint</th>
+              <th scope="col">Dates</th>
+              <th scope="col">State</th>
+              <th scope="col">Items</th>
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (s of ctx.sprints(); track s.id) {
+              <tr>
+                <td>{{ s.name }}</td>
+                <td>{{ s.startDate }} – {{ s.endDate }}</td>
+                <td>{{ stateLabels[s.state] }}</td>
+                <td>{{ itemCount(s.id) }}</td>
+                <td class="actions">
+                  <a mat-button [routerLink]="['/p', key()]" [queryParams]="{ sprint: s.id }"
+                    >Sprint board</a
+                  >
+                  @if (canManage()) {
+                    @if (s.state !== closed) {
+                      <button mat-button type="button" (click)="edit(s)">Edit</button>
+                    }
+                    @if (s.state === planned) {
+                      <button mat-button type="button" (click)="start(s)">Set active</button>
+                    }
+                    @if (s.state !== closed) {
+                      <button mat-button type="button" (click)="openClose(s)">Close</button>
+                    }
+                    <button mat-button type="button" (click)="remove(s)">Delete</button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5">
+                  <app-empty-state
+                    title="No sprints yet"
+                    [text]="
+                      canManage()
+                        ? 'Plan a few weeks of work at a time with the form above.'
+                        : 'A PM or Lead can plan the next sprint.'
+                    "
+                  />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
   `,
 })
 export class SprintsPage implements OnInit {

@@ -27,7 +27,9 @@ import { SessionStore } from '../../core/session.store';
   ],
   template: `
     <mat-card class="auth-card">
-      <mat-card-header><mat-card-title>Change password</mat-card-title></mat-card-header>
+      <mat-card-header
+        ><mat-card-title><h1>Change password</h1></mat-card-title></mat-card-header
+      >
       <mat-card-content>
         @if (forced()) {
           <p>You signed in with a temporary password. Choose a new one to continue.</p>

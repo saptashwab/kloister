@@ -55,6 +55,16 @@ describe('ItemChecklist', () => {
     expect(checklist.lines().map((l) => l.id)).toEqual(['a', 'c', 'b']);
   });
 
+  it('offers keyboard buttons using the same reorder endpoint', async () => {
+    const { api, root, fixture } = await render(true);
+    root.querySelector<HTMLButtonElement>('[aria-label="Move up: Line b"]')?.click();
+    await settle(fixture);
+    expect(api.moveChecklistLine).toHaveBeenCalledWith('p1', 'i1', 'b', null);
+    expect(root.querySelector<HTMLButtonElement>('[aria-label="Move up: Line b"]')?.disabled).toBe(
+      true,
+    );
+  });
+
   it('puts the lines back when the API refuses a reorder', async () => {
     const { api, checklist, root, fixture } = await render(true);
     api.moveChecklistLine.mockRejectedValue(

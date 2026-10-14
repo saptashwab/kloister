@@ -19,6 +19,8 @@ interface IssuedPassword {
   password: string;
 }
 
+import { EmptyState, Skeleton } from '../../ui/feedback';
+
 /**
  * Admin user management: create users, promote/demote, deactivate/reactivate
  * and reset passwords (SPEC §3.1, §6). Temporary passwords are shown once and
@@ -30,6 +32,8 @@ interface IssuedPassword {
   selector: 'app-admin-users',
   host: { class: 'k-page' },
   imports: [
+    EmptyState,
+    Skeleton,
     DatePipe,
     ReactiveFormsModule,
     MatButtonModule,
@@ -92,52 +96,75 @@ interface IssuedPassword {
       <p class="error" role="alert">{{ error() }}</p>
     }
 
-    <table class="data">
-      <thead>
-        <tr>
-          <th scope="col">Email</th>
-          <th scope="col">Name</th>
-          <th scope="col">Role</th>
-          <th scope="col">Status</th>
-          <th scope="col">Last sign-in</th>
-          <th scope="col"><span class="visually-hidden">Actions</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (user of users(); track user.id) {
-          <tr>
-            <td>{{ user.email }}</td>
-            <td>{{ user.displayName }}</td>
-            <td>{{ user.systemRole === roles.ADMIN ? 'Admin' : 'User' }}</td>
-            <td>{{ user.isActive ? 'Active' : 'Deactivated' }}</td>
-            <td>{{ user.lastLoginAt ? (user.lastLoginAt | date: 'short') : 'Never' }}</td>
-            <td class="actions">
-              @if (user.systemRole === roles.ADMIN) {
-                <button mat-button type="button" (click)="update(user, { systemRole: roles.USER })">
-                  Make user
-                </button>
-              } @else {
-                <button
-                  mat-button
-                  type="button"
-                  (click)="update(user, { systemRole: roles.ADMIN })"
-                >
-                  Make admin
-                </button>
-              }
-              <button mat-button type="button" (click)="update(user, { isActive: !user.isActive })">
-                {{ user.isActive ? 'Deactivate' : 'Reactivate' }}
-              </button>
-              @if (user.id !== store.user()?.id) {
-                <button mat-button type="button" (click)="resetPassword(user)">
-                  Reset password
-                </button>
-              }
-            </td>
-          </tr>
-        }
-      </tbody>
-    </table>
+    @if (loading()) {
+      <app-skeleton label="Loading the list" />
+    } @else {
+      <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+        <table class="data">
+          <thead>
+            <tr>
+              <th scope="col">Email</th>
+              <th scope="col">Name</th>
+              <th scope="col">Role</th>
+              <th scope="col">Status</th>
+              <th scope="col">Last sign-in</th>
+              <th scope="col"><span class="visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (user of users(); track user.id) {
+              <tr>
+                <td>{{ user.email }}</td>
+                <td>{{ user.displayName }}</td>
+                <td>{{ user.systemRole === roles.ADMIN ? 'Admin' : 'User' }}</td>
+                <td>{{ user.isActive ? 'Active' : 'Deactivated' }}</td>
+                <td>{{ user.lastLoginAt ? (user.lastLoginAt | date: 'short') : 'Never' }}</td>
+                <td class="actions">
+                  @if (user.systemRole === roles.ADMIN) {
+                    <button
+                      mat-button
+                      type="button"
+                      (click)="update(user, { systemRole: roles.USER })"
+                    >
+                      Make user
+                    </button>
+                  } @else {
+                    <button
+                      mat-button
+                      type="button"
+                      (click)="update(user, { systemRole: roles.ADMIN })"
+                    >
+                      Make admin
+                    </button>
+                  }
+                  <button
+                    mat-button
+                    type="button"
+                    (click)="update(user, { isActive: !user.isActive })"
+                  >
+                    {{ user.isActive ? 'Deactivate' : 'Reactivate' }}
+                  </button>
+                  @if (user.id !== store.user()?.id) {
+                    <button mat-button type="button" (click)="resetPassword(user)">
+                      Reset password
+                    </button>
+                  }
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="6">
+                  <app-empty-state
+                    title="No users match"
+                    text="Try another search or create a user with the form above."
+                  />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
     @if (nextCursor()) {
       <button mat-button type="button" (click)="loadMore()">Load more</button>
     }
@@ -159,6 +186,8 @@ export class AdminUsersPage implements OnInit {
   protected readonly issued = signal<IssuedPassword | null>(null);
   /** Last error message, if any. */
   protected readonly error = signal('');
+  /** True while the list is being replaced. */
+  protected readonly loading = signal(true);
   /** True while a create request is in flight. */
   protected readonly busy = signal(false);
 
@@ -185,12 +214,14 @@ export class AdminUsersPage implements OnInit {
    * @returns Resolves once loaded.
    */
   protected async reload(query: string): Promise<void> {
+    this.loading.set(true);
     this.query = query.trim();
     await this.run(async () => {
       const page = await this.api.listUsers(this.query, undefined);
       this.users.set(page.items);
       this.nextCursor.set(page.nextCursor);
     });
+    this.loading.set(false);
   }
 
   /**

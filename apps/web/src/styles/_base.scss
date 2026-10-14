@@ -28,17 +28,28 @@ a {
 
 /* One visible focus ring for everything focusable (DESIGN §13). */
 :focus-visible {
-  outline: 2px solid var(--k-primary);
-  outline-offset: 2px;
+  outline: var(--k-focus-width) solid var(--k-primary);
+  outline-offset: var(--k-focus-width);
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
+}
+
+.k-action,
+.nav-link,
+.k-chip,
+.k-icon-btn {
+  transition:
+    background-color var(--k-motion) ease,
+    color var(--k-motion) ease,
+    border-color var(--k-motion) ease;
 }
 
 kbd,
@@ -49,9 +60,9 @@ kbd,
 
 kbd {
   min-width: 1.4em;
-  padding: 1px 6px;
-  border: 1px solid var(--k-border-strong);
-  border-bottom-width: 2px;
+  padding: var(--k-line) var(--k-size-6px);
+  border: var(--k-line) solid var(--k-border-strong);
+  border-bottom-width: var(--k-focus-width);
   border-radius: var(--k-radius-sm);
   background: var(--k-surface);
   text-align: center;
@@ -59,8 +70,8 @@ kbd {
 
 .visually-hidden {
   position: absolute;
-  width: 1px;
-  height: 1px;
+  width: var(--k-line);
+  height: var(--k-line);
   overflow: hidden;
   clip: rect(0 0 0 0);
   white-space: nowrap;
@@ -111,7 +122,7 @@ kbd {
 
 .secret {
   font-family: var(--k-font-mono);
-  font-size: 1.125rem;
+  font-size: var(--k-size-1_125rem);
   user-select: all;
 }
 
@@ -146,12 +157,12 @@ kbd {
   flex-direction: column;
   gap: var(--k-space-3);
   padding: var(--k-space-4) var(--k-space-6) var(--k-space-6);
-  border: 1px solid var(--k-border);
+  border: var(--k-line) solid var(--k-border);
   border-radius: var(--k-radius-lg);
   background: var(--k-surface);
 
   > h2 {
-    font-size: 1rem;
+    font-size: var(--k-size-1rem);
     font-weight: 600;
   }
 
@@ -166,8 +177,11 @@ mat-card {
 }
 
 .auth-card {
-  max-width: 420px;
-  margin: 48px auto;
+  h1 {
+    font-size: var(--k-title);
+  }
+  max-width: var(--k-size-420px);
+  margin: var(--k-size-48px) auto;
 
   form {
     display: flex;
@@ -191,7 +205,7 @@ table.data {
   td {
     padding: var(--k-space-2) var(--k-space-3);
     text-align: left;
-    border-bottom: 1px solid var(--k-border);
+    border-bottom: var(--k-line) solid var(--k-border);
     vertical-align: middle;
   }
 
@@ -206,6 +220,8 @@ table.data {
 
 /* Wide tables scroll inside their own box at narrow widths. */
 .k-table-scroll {
+  position: relative;
+  box-sizing: border-box;
   overflow-x: auto;
 }
 
@@ -213,9 +229,9 @@ table.data {
 .quick-add {
   box-sizing: border-box;
   width: 100%;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px dashed var(--k-border-strong);
+  min-height: var(--k-control-height);
+  padding: var(--k-size-6px) var(--k-size-10px);
+  border: var(--k-line) dashed var(--k-border-strong);
   border-radius: var(--k-radius-control);
   background: transparent;
   color: inherit;
@@ -230,7 +246,43 @@ table.data {
     border-style: solid;
     border-color: var(--k-primary);
     background: var(--k-surface);
-    outline: none;
+  }
+}
+
+/* Reflow without shrinking text: tables scroll in their own named regions. */
+.k-page,
+.k-panel,
+mat-card,
+mat-card-content,
+mat-tab-nav-panel {
+  min-width: 0;
+}
+.row > mat-form-field,
+.k-fields > mat-form-field {
+  max-width: 100%;
+  min-width: 0;
+}
+.k-page-head > div,
+.k-facts div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+table.data td {
+  overflow-wrap: anywhere;
+}
+.k-table-scroll {
+  max-width: 100%;
+  padding: var(--k-space-1);
+}
+:focus-visible {
+  scroll-margin-block: var(--k-space-6);
+}
+.mat-mdc-dialog-surface {
+  background: var(--k-surface);
+}
+@media (max-width: 599px) {
+  .k-panel {
+    padding: var(--k-space-4);
   }
 }
 
@@ -243,4 +295,41 @@ ul.plain {
 /* Cards inside a page are spaced by the page's gap. */
 .k-page > mat-card {
   margin-bottom: 0;
+}
+
+/* Shared overlay shell; detail presentation loads with its route. */
+.drawer-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  background: var(--k-scrim);
+}
+
+/* The host only groups the scrim and the panel. */
+app-item-drawer {
+  display: contents;
+}
+app-item-drawer .add-ref.mat-mdc-select {
+  max-width: var(--k-size-320px);
+  color: var(--k-muted);
+}
+app-item-drawer .refs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+}
+
+.d-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  box-sizing: border-box;
+  width: min(var(--k-size-640px), 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--k-surface);
+  border-left: var(--k-line) solid var(--k-border);
+  box-shadow: var(--k-drawer-shadow);
 }

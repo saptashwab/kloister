@@ -17,6 +17,7 @@ import { ItemDrawer } from './item-drawer';
 interface DrawerInternals {
   save(change: object): Promise<void>;
   remove(): Promise<void>;
+  reorderCard(value: string): Promise<void>;
 }
 
 const epic: ItemRefDto = { id: 'i1', number: 1, key: 'KLO-1', type: 'EPIC', title: 'Hidden epic' };
@@ -65,6 +66,7 @@ describe('ItemDrawer', () => {
       children: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
       activity: vi.fn().mockResolvedValue({ items: [activity], nextCursor: null }),
       update: vi.fn(),
+      move: vi.fn(),
       remove: vi.fn().mockResolvedValue(undefined),
     };
     const dialogs = { confirm: vi.fn().mockResolvedValue(true) };
@@ -166,6 +168,35 @@ describe('ItemDrawer', () => {
     await settle(fixture);
     expect(itemsApi.update).toHaveBeenCalledWith('p1', 'i4', { title: 'New title' });
     expect(root.querySelector('h1')?.textContent).toContain('New title');
+  });
+
+  it('offers a non-drag card order control and undoes with its previous neighbour', async () => {
+    const item = makeItem(4, { position: 2 });
+    const before = makeItem(5, { position: 1 });
+    const { drawer, itemsApi, show, root } = await render(item, [before]);
+    itemsApi.move.mockResolvedValue({ ...item, position: 0 });
+    expect(root.querySelector('mat-select[aria-label="Position in bucket"]')).not.toBeNull();
+    await drawer.reorderCard('none');
+    expect(itemsApi.move).toHaveBeenCalledWith('p1', 'i4', { bucketId: 'b1', afterId: null });
+    await show.mock.calls[0]?.[1]?.();
+    expect(itemsApi.move).toHaveBeenLastCalledWith('p1', 'i4', { bucketId: 'b1', afterId: 'i5' });
+  });
+
+  it('does not replace another item when a card-order Undo finishes', async () => {
+    const original = makeItem(4);
+    const other = makeItem(5, { title: 'Another item' });
+    const { drawer, itemsApi, fixture, show, root } = await render(original, [other]);
+    itemsApi.move
+      .mockResolvedValueOnce({ ...original, position: 0 })
+      .mockResolvedValueOnce(original);
+    await drawer.reorderCard('none');
+    itemsApi.get.mockResolvedValue(other);
+    fixture.componentRef.setInput('number', '5');
+    await settle(fixture);
+    await show.mock.calls[0]?.[1]?.();
+    await settle(fixture);
+    expect(itemsApi.move).toHaveBeenLastCalledWith('p1', 'i4', { bucketId: 'b1', afterId: null });
+    expect(root.querySelector('h1')?.textContent).toContain('Another item');
   });
 
   it('shows the bucket the server chose after a status change', async () => {

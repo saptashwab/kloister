@@ -7,6 +7,8 @@ import { AuditAction, type AuditEntryDto } from '@kloister/shared';
 import { AdminApiService } from '../../core/admin-api.service';
 import { errorMessage } from '../../core/api';
 
+import { EmptyState, Skeleton } from '../../ui/feedback';
+
 /**
  * Audit log viewer (SPEC §6 Admin), newest first, filterable by action.
  *
@@ -15,7 +17,15 @@ import { errorMessage } from '../../core/api';
 @Component({
   selector: 'app-admin-audit',
   host: { class: 'k-page' },
-  imports: [DatePipe, JsonPipe, MatButtonModule, MatFormFieldModule, MatSelectModule],
+  imports: [
+    EmptyState,
+    Skeleton,
+    DatePipe,
+    JsonPipe,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatSelectModule,
+  ],
   template: `
     <header class="k-page-head"><h1>Audit log</h1></header>
     <mat-form-field>
@@ -32,36 +42,45 @@ import { errorMessage } from '../../core/api';
       <p class="error" role="alert">{{ error() }}</p>
     }
 
-    <div class="k-panel k-table-scroll">
-      <table class="data">
-        <thead>
-          <tr>
-            <th scope="col">Time</th>
-            <th scope="col">Actor</th>
-            <th scope="col">Action</th>
-            <th scope="col">Entity</th>
-            <th scope="col">Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (entry of entries(); track entry.id) {
+    @if (loading()) {
+      <app-skeleton label="Loading the list" />
+    } @else {
+      <div class="k-panel k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+        <table class="data">
+          <thead>
             <tr>
-              <td>{{ entry.createdAt | date: 'medium' }}</td>
-              <td>{{ entry.actorEmail ?? '—' }}</td>
-              <td>{{ entry.action }}</td>
-              <td>{{ entry.entityType }} {{ entry.entityId ?? '' }}</td>
-              <td>
-                <code>{{ entry.meta | json }}</code>
-              </td>
+              <th scope="col">Time</th>
+              <th scope="col">Actor</th>
+              <th scope="col">Action</th>
+              <th scope="col">Entity</th>
+              <th scope="col">Details</th>
             </tr>
-          } @empty {
-            <tr>
-              <td colspan="5" class="muted">No entries match.</td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            @for (entry of entries(); track entry.id) {
+              <tr>
+                <td>{{ entry.createdAt | date: 'medium' }}</td>
+                <td>{{ entry.actorEmail ?? '—' }}</td>
+                <td>{{ entry.action }}</td>
+                <td>{{ entry.entityType }} {{ entry.entityId ?? '' }}</td>
+                <td>
+                  <code>{{ entry.meta | json }}</code>
+                </td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="5">
+                  <app-empty-state
+                    title="No entries match"
+                    text="Choose another action to see its history."
+                  />
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
     @if (nextCursor()) {
       <button mat-button type="button" (click)="loadMore()">Load more</button>
     }
@@ -80,6 +99,8 @@ export class AdminAuditPage implements OnInit {
   protected readonly nextCursor = signal<string | null>(null);
   /** Last error message, if any. */
   protected readonly error = signal('');
+  /** True while the list is being replaced. */
+  protected readonly loading = signal(true);
 
   /**
    * Loads the first page.
@@ -116,6 +137,7 @@ export class AdminAuditPage implements OnInit {
    * @returns Resolves once loaded.
    */
   private async load(cursor: string | undefined): Promise<void> {
+    this.loading.set(true);
     this.error.set('');
     try {
       const page = await this.api.listAudit({ action: this.action(), cursor });
@@ -123,6 +145,8 @@ export class AdminAuditPage implements OnInit {
       this.nextCursor.set(page.nextCursor);
     } catch (error) {
       this.error.set(errorMessage(error));
+    } finally {
+      this.loading.set(false);
     }
   }
 }

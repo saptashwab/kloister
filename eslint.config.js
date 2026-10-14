@@ -13,10 +13,21 @@ import prettier from 'eslint-config-prettier';
 import jsdoc from 'eslint-plugin-jsdoc';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import { existsSync, readFileSync } from 'node:fs';
+
+// Honor local Git exclusions without naming private files in tracked config.
+const excludePath = new URL('./.git/info/exclude', import.meta.url);
+const localExcludes = existsSync(excludePath)
+  ? readFileSync(excludePath, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'))
+  : [];
 
 export default tseslint.config(
   {
     ignores: [
+      ...localExcludes,
       '**/node_modules/',
       '**/dist/',
       '**/coverage/',

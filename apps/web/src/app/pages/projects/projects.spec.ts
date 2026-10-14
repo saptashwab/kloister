@@ -4,6 +4,7 @@ import type { Page, ProjectDto, UserDto } from '@kloister/shared';
 import { AdminApiService } from '../../core/admin-api.service';
 import { type ProjectListFilter, ProjectsApiService } from '../../core/projects-api.service';
 import { SessionStore } from '../../core/session.store';
+import { settle } from '../../../testing/fixtures';
 import { ProjectsPage } from './projects';
 
 const project: ProjectDto = {
@@ -36,7 +37,7 @@ describe('ProjectsPage', () => {
     }).compileComponents();
     TestBed.inject(SessionStore).set({ systemRole } as UserDto);
     const fixture = TestBed.createComponent(ProjectsPage);
-    await fixture.whenStable();
+    await settle(fixture);
     return fixture.nativeElement as HTMLElement;
   }
 

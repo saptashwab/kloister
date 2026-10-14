@@ -1,7 +1,9 @@
 import {
   afterNextRender,
+  afterRenderEffect,
   Component,
   computed,
+  DestroyRef,
   effect,
   type ElementRef,
   inject,
@@ -9,7 +11,9 @@ import {
   signal,
   untracked,
   viewChild,
+  ViewEncapsulation,
 } from '@angular/core';
+import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
@@ -39,6 +43,7 @@ import { PRIORITY_LABELS, SPRINT_STATE_LABELS, TYPE_LABELS } from '../../core/la
 import { ProjectContext } from '../../core/project-context';
 import { forDisplay, type Mentionable } from '../../core/rich-text';
 import { SessionStore } from '../../core/session.store';
+import { Shortcuts } from '../../core/shortcuts';
 import { Avatar, PERSON_FILTER, StaticAvatar } from '../../ui/avatar';
 import { Dialogs } from '../../ui/dialogs';
 import { Skeleton } from '../../ui/feedback';
@@ -89,7 +94,10 @@ const FIELD_NAMES: Record<string, string> = {
  */
 @Component({
   selector: 'app-item-drawer',
+  styleUrl: '../../../styles/_drawer.scss',
+  encapsulation: ViewEncapsulation.None,
   imports: [
+    CdkTrapFocus,
     MatMenuModule,
     MatSelectModule,
     Avatar,
@@ -114,7 +122,16 @@ const FIELD_NAMES: Record<string, string> = {
   },
   template: `
     <div class="drawer-scrim" aria-hidden="true" (click)="close()"></div>
-    <div #panel class="d-panel" role="complementary" aria-label="Item details" tabindex="-1">
+    <div
+      #panel
+      class="d-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Item details"
+      tabindex="-1"
+      cdkTrapFocus
+      [cdkTrapFocusAutoCapture]="true"
+    >
       <div class="d-top">
         <nav class="crumbs" aria-label="Parents">
           @if (detail(); as d) {
@@ -243,6 +260,23 @@ const FIELD_NAMES: Record<string, string> = {
           </div>
 
           <dl class="fields">
+            @if (canMove() && d.bucketId) {
+              <dt>Board order</dt>
+              <dd>
+                <mat-select
+                  aria-label="Position in bucket"
+                  [value]="predecessor()"
+                  (valueChange)="reorderCard($event)"
+                >
+                  <mat-option [value]="none">At the top</mat-option>
+                  @for (card of bucketCards(); track card.id) {
+                    <mat-option [value]="card.id"
+                      >After {{ card.key }} · {{ card.title }}</mat-option
+                    >
+                  }
+                </mat-select>
+              </dd>
+            }
             <dt>Assignees</dt>
             <dd>
               @if (canEdit()) {
@@ -628,6 +662,23 @@ const FIELD_NAMES: Record<string, string> = {
   `,
 })
 export class ItemDrawer {
+  /** Other visible cards in the current bucket, for a non-drag ordering path. */
+  protected readonly bucketCards = computed(() => {
+    const detail = this.detail();
+    return this.ctx
+      .items()
+      .filter((item) => item.bucketId === detail?.bucketId && item.id !== detail?.id)
+      .sort((a, b) => a.position - b.position);
+  });
+  /** Visible predecessor of this card, or the top option. */
+  protected readonly predecessor = computed(() => {
+    const position = this.detail()?.position ?? 0;
+    return (
+      this.bucketCards()
+        .filter((item) => item.position < position)
+        .at(-1)?.id ?? NONE
+    );
+  });
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
   private readonly api = inject(ItemsApiService);
@@ -814,6 +865,31 @@ export class ItemDrawer {
    * and moves focus into the drawer when it opens.
    */
   constructor() {
+    const shortcuts = inject(Shortcuts);
+    shortcuts.register((key) => {
+      const name =
+        key === 'm' ? 'Bucket' : key === 'a' ? 'Assignees' : key === 'l' ? 'Labels' : null;
+      const control = name
+        ? this.panel().nativeElement.querySelector<HTMLElement>(`mat-select[aria-label="${name}"]`)
+        : null;
+      if (!control) return false;
+      control.focus();
+      control.querySelector<HTMLElement>('.mat-mdc-select-trigger')?.click();
+      return true;
+    }, inject(DestroyRef));
+    afterRenderEffect(() => {
+      const detail = this.detail();
+      const field = shortcuts.field();
+      if (!detail || !field) return;
+      untracked(() => {
+        shortcuts.field.set(null);
+        const control = this.panel().nativeElement.querySelector<HTMLElement>(
+          `mat-select[aria-label="${field}"]`,
+        );
+        control?.focus();
+        control?.querySelector<HTMLElement>('.mat-mdc-select-trigger')?.click();
+      });
+    });
     effect(() => {
       const projectId = this.projectId();
       const number = this.number();
@@ -970,6 +1046,39 @@ export class ItemDrawer {
       () => this.api.move(this.projectId(), d.id, { bucketId }),
       `${d.key} moved ${name}`,
     );
+  }
+
+  /**
+   * Places this card after a visible neighbour, with an inverse move for Undo.
+   *
+   * @param value Neighbour id or the top option.
+   * @returns Resolves when the API answers.
+   */
+  protected async reorderCard(value: string): Promise<void> {
+    const detail = this.detail();
+    if (!detail?.bucketId || !this.canMove()) return;
+    const before = this.predecessor();
+    const projectId = this.projectId();
+    const run = this.loadRun;
+    await this.apply(async () => {
+      const updated = await this.api.move(projectId, detail.id, {
+        bucketId: detail.bucketId,
+        afterId: this.orNull(value),
+      });
+      this.toast.show(`${detail.key} reordered`, async () => {
+        const restored = await this.api.move(projectId, detail.id, {
+          bucketId: detail.bucketId,
+          afterId: this.orNull(before),
+        });
+        if (this.ctx.project()?.id !== projectId) return;
+        this.ctx.upsert(restored);
+        if (this.loadRun === run) {
+          this.detail.set(restored);
+          this.version.update((version) => version + 1);
+        }
+      });
+      return updated;
+    });
   }
 
   /**
@@ -1143,10 +1252,11 @@ export class ItemDrawer {
    */
   private async apply(change: () => Promise<WorkItemDetailDto>, message?: string): Promise<void> {
     const run = this.loadRun;
+    const projectId = this.projectId();
     const before = this.detail();
     try {
       const updated = await change();
-      this.ctx.upsert(updated);
+      if (this.ctx.project()?.id === projectId) this.ctx.upsert(updated);
       // Another item was opened meanwhile: keep showing that one.
       if (run !== this.loadRun) return;
       this.detail.set(updated);

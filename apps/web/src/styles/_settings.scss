@@ -17,8 +17,8 @@
   gap: 0 var(--k-space-4);
 
   .mat-mdc-form-field {
-    flex: 1 1 220px;
-    max-width: 320px;
+    flex: 1 1 var(--k-mention-width);
+    max-width: var(--k-size-320px);
   }
 }
 
@@ -33,16 +33,18 @@
 /* Cards of a radio choice, such as the UI font (one per option). */
 .k-choices {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--k-mention-width)), 1fr));
   gap: var(--k-space-2);
 }
 
 .k-choice {
+  min-width: 0;
+  overflow-wrap: anywhere;
   display: flex;
   flex-direction: column;
   gap: var(--k-space-1);
   padding: var(--k-space-3);
-  border: 1px solid var(--k-border);
+  border: var(--k-line) solid var(--k-border);
   border-radius: var(--k-radius-md);
   background: var(--k-surface);
   cursor: pointer;
@@ -65,7 +67,7 @@
   }
 
   .sample {
-    font-size: 1.125rem;
+    font-size: var(--k-size-1_125rem);
     line-height: 1.3;
   }
 
@@ -82,13 +84,13 @@
   align-items: center;
   gap: var(--k-space-3);
   padding: var(--k-space-3);
-  border: 1px solid var(--k-border);
+  border: var(--k-line) solid var(--k-border);
   border-radius: var(--k-radius-md);
 
   .what {
     display: flex;
     flex-direction: column;
-    flex: 1 1 200px;
+    flex: 1 1 var(--k-size-200px);
     min-width: 0;
   }
 
@@ -102,8 +104,8 @@
 /* A hidden file input opened by a button. */
 .k-file-input {
   position: absolute;
-  width: 1px;
-  height: 1px;
+  width: var(--k-line);
+  height: var(--k-line);
   opacity: 0;
   pointer-events: none;
 }
@@ -119,7 +121,7 @@
 
   li {
     display: grid;
-    grid-template-columns: minmax(120px, 1fr) auto;
+    grid-template-columns: minmax(var(--k-size-120px), 1fr) auto;
     gap: var(--k-space-1) var(--k-space-3);
     align-items: baseline;
   }
@@ -142,7 +144,7 @@
 
   .bar {
     grid-column: 1 / -1;
-    height: 8px;
+    height: var(--k-space-2);
     border-radius: var(--k-radius-full);
     background: var(--k-sunken);
     overflow: hidden;
@@ -173,14 +175,19 @@
   }
 
   dd {
+    overflow-wrap: anywhere;
     margin: 0;
     font-weight: 600;
   }
 }
 
-/* Tables scroll inside their panel at narrow widths. */
-.k-table-scroll {
-  overflow-x: auto;
+@media (max-width: 599px) {
+  .k-usage li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .k-usage .size {
+    overflow-wrap: anywhere;
+  }
 }
 
 /* One settings tab: its panels stacked. */

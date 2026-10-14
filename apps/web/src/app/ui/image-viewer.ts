@@ -11,6 +11,7 @@ import {
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { imagesIn, type ViewerImage } from '../core/rich-text';
 import { Icon } from './icon';
+import { dialogMotion } from './motion';
 
 /** What the viewer shows. */
 export interface ImageViewerData {
@@ -111,6 +112,8 @@ export class ImageViewer {
     this.dialog.open<ImageViewerDialog, ImageViewerData>(ImageViewerDialog, {
       data: { images, index: Math.min(Math.max(index, 0), images.length - 1) },
       panelClass: 'k-image-viewer',
+      enterAnimationDuration: dialogMotion(),
+      exitAnimationDuration: dialogMotion(),
       maxWidth: 'calc(100vw - 32px)',
       maxHeight: 'calc(100vh - 32px)',
     });

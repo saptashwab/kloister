@@ -5,16 +5,16 @@
 
 .skip {
   position: absolute;
-  left: -999px;
-  top: 8px;
+  left: calc(-1 * var(--k-size-999px));
+  top: var(--k-space-2);
   z-index: 100;
-  padding: 8px 12px;
+  padding: var(--k-space-2) var(--k-space-3);
   border-radius: var(--k-radius-control);
   background: var(--k-primary);
   color: var(--k-on-primary);
 
   &:focus {
-    left: 8px;
+    left: var(--k-space-2);
   }
 }
 
@@ -32,20 +32,20 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--k-focus-width);
   padding: var(--k-space-4) var(--k-space-3);
   background: var(--k-sidebar);
-  border-right: 1px solid var(--k-border);
+  border-right: var(--k-line) solid var(--k-border);
 
   .brand {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 4px 8px 16px;
+    gap: var(--k-size-10px);
+    padding: var(--k-space-1) var(--k-space-2) var(--k-space-4);
 
     h1 {
       flex: 1;
-      font-size: 1rem;
+      font-size: var(--k-size-1rem);
       font-weight: 700;
     }
   }
@@ -53,8 +53,8 @@
   .mark {
     display: inline-grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: var(--k-size-28px);
+    height: var(--k-size-28px);
     border-radius: var(--k-radius-control);
     background: var(--k-primary);
     color: var(--k-on-primary);
@@ -68,9 +68,9 @@
 .nav-link {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 36px;
-  padding: 0 10px;
+  gap: var(--k-size-10px);
+  min-height: var(--k-control-height);
+  padding: 0 var(--k-size-10px);
   border-radius: var(--k-radius-control);
   color: var(--k-muted);
   font-weight: 500;
@@ -90,14 +90,14 @@
   &.project .key {
     display: inline-grid;
     place-items: center;
-    min-width: 30px;
-    height: 20px;
-    padding: 0 4px;
-    border-radius: 5px;
+    min-width: var(--k-size-30px);
+    height: var(--k-size-20px);
+    padding: 0 var(--k-space-1);
+    border-radius: var(--k-size-5px);
     background: var(--k-sunken);
     color: var(--k-muted);
     font-family: var(--k-font-mono);
-    font-size: 0.65625rem;
+    font-size: var(--k-size-0_65625rem);
   }
 
   &.project.active .key {
@@ -113,8 +113,8 @@
 }
 
 .nav-section {
-  padding: 18px 10px 6px;
-  font-size: 0.6875rem;
+  padding: var(--k-size-18px) var(--k-size-10px) var(--k-size-6px);
+  font-size: var(--k-size-0_6875rem);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -122,7 +122,7 @@
 }
 
 .nav-empty {
-  padding: 4px 10px;
+  padding: var(--k-space-1) var(--k-size-10px);
   font-size: var(--k-small);
   color: var(--k-muted);
 }
@@ -130,11 +130,11 @@
 .me {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--k-size-10px);
   margin-top: var(--k-space-3);
-  padding: 10px;
+  padding: var(--k-size-10px);
   border: 0;
-  border-top: 1px solid var(--k-border);
+  border-top: var(--k-line) solid var(--k-border);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -174,7 +174,10 @@
   main {
     flex: 1;
     min-width: 0;
-    outline: none;
+    &:focus-visible {
+      outline: var(--k-focus-width) solid var(--k-primary);
+      outline-offset: calc(-1 * var(--k-focus-width));
+    }
   }
 }
 
@@ -211,22 +214,58 @@
 .k-logo {
   flex: none;
   width: auto;
-  max-width: 120px;
-  height: 28px;
+  max-width: var(--k-size-120px);
+  height: var(--k-size-28px);
   object-fit: contain;
 
   &.lg {
-    max-width: 240px;
-    height: 56px;
+    max-width: var(--k-mention-height);
+    height: var(--k-size-56px);
   }
 }
 
-@media (max-width: 899px) {
+@media (min-width: 600px) and (max-width: 1023px) {
+  .sidebar {
+    flex-basis: var(--k-sidebar-rail);
+    padding-inline: var(--k-space-2);
+    .brand {
+      padding-inline: var(--k-space-2);
+    }
+    .brand h1,
+    .nav-section,
+    .nav-empty,
+    .who,
+    .project .name {
+      display: none;
+    }
+    .nav-text {
+      position: absolute;
+      width: var(--k-line);
+      height: var(--k-line);
+      overflow: hidden;
+      clip-path: inset(50%);
+    }
+    .nav-link,
+    .me {
+      justify-content: center;
+      padding-inline: var(--k-space-1);
+    }
+    .k-badge {
+      position: absolute;
+      margin-left: var(--k-space-6);
+    }
+    .k-logo {
+      max-width: var(--k-control-height);
+    }
+  }
+}
+
+@media (max-width: 599px) {
   .sidebar {
     position: fixed;
     left: 0;
     z-index: 30;
-    width: min(280px, 86vw);
+    width: min(var(--k-size-280px), 86vw);
     transform: translateX(-100%);
     /* Hidden from focus and screen readers while closed, after sliding out. */
     visibility: hidden;
@@ -259,7 +298,7 @@
     align-items: center;
     gap: var(--k-space-2);
     padding: var(--k-space-2) var(--k-space-3);
-    border-bottom: 1px solid var(--k-border);
+    border-bottom: var(--k-line) solid var(--k-border);
     background: var(--k-sidebar);
 
     .topbar-title {

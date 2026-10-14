@@ -328,7 +328,8 @@ the full set and a command palette arrive in M6.5 (SPEC §10).
 | `Esc`   | Close the drawer or a menu |
 
 A `?` dialog lists them. Every drag-and-drop action also has a keyboard path (the menus above, and keyboard
-dragging from the Angular CDK).
+ordering controls). The help dialog has an **Enable single-key shortcuts** switch, saved on this browser;
+turning it off leaves the Search or jump and Keyboard shortcuts buttons available (WCAG 2.1.4).
 
 ## 13. Accessibility (WCAG 2.2 AA)
 
@@ -367,8 +368,6 @@ docs/DECISIONS.md:
   list responses carry no dependencies.
 - The quick person filter reuses the board's Assignee chip ("Assignee: Mia Member") plus "Clear filters" instead
   of a separate removable person chip (section 9).
-- The sidebar does not yet collapse to icons at tablet width, and the drawer does not yet trap focus (sections 7
-  and 13); both are part of the M6.5 polish pass.
 
 M5 adds:
 
@@ -376,7 +375,6 @@ M5 adds:
   sits in the top bar (section 7).
 - Editable descriptions and notes have Image and View images buttons next to the formatting buttons, so images can
   be added and viewed full size without a mouse (section 10).
-- The `@mention` listbox opens under the editing area, not at the caret; M6.5 moves it to the caret.
 
 M6 adds:
 
@@ -392,3 +390,34 @@ Planned for M6.7 (SPEC §3.6, §6):
 - The sidebar's project list starts with "Personal", the signed-in user's private personal space.
 - My work gets a list view grouped by due date and a board view with the four statuses as columns; cards there show
   a project chip ("Personal" for personal tasks) and their bucket as a small tag.
+
+M6.5 resolves and adds:
+
+- The sidebar now collapses to a 72 px icon rail at 600–1023 px and becomes a menu below 600 px. Names remain
+  available to screen readers; project keys are the rail's project markers. Search and shortcut help also have
+  sidebar entry points, and the project header has Search or jump.
+- The item drawer is a modal dialog with a CDK focus trap and focus return, replacing its earlier complementary
+  landmark. Its **Board order** field and checklist up/down buttons are non-drag alternatives for ordering;
+  bucket, status, sprint and assignee fields cover the other board drops. These controls use existing permission
+  capabilities and endpoints. The canvas does not show the Board order field or checklist ordering buttons.
+- Mentions now use a CDK overlay anchored to the caret, falling back above it near the viewport edge.
+- Label rows have a fixed maximum width and aligned preview/actions; at phone width the preview occupies a
+  second row so the name stays editable. Font samples wrap rather than shrinking text.
+- Default-theme editing previews for its admin editor even with a personal theme, then restores their personal
+  preference on save, cancel or leaving the tab. Theme swatches have one tab stop per group and wrap with arrows;
+  the native custom-colour input is separately labelled.
+- Search in the lazy command palette covers project names and screens, and exact project-item keys jump through
+  the usual guarded routes. J/K moves actual focus through visible board cards; Enter uses the card link. Single
+  characters are ignored in editors, during composition, and while an overlay is open, and can be disabled.
+- Long boards retain variable-height cards and all keyboard links. Offscreen card painting is deferred with
+  `content-visibility`; focused and dragged cards render fully. This preserves label wrapping and existing drag
+  semantics without a fixed-height virtual list. A 1,000-card fixture records frame timings in the browser report.
+- Done titles and unselected person-filter avatars keep full opacity so their text retains its AA contrast.
+  The selected avatar's primary ring and the named Assignee chip carry the selection; this differs from the
+  mockup's 80 % Done-title opacity and 45 % fade on the other avatars.
+- Older list screens now use the shared empty/loading presentation. Wide tables scroll inside named keyboard
+  regions, with hidden text contained there; sign-in and password screens have real headings. Dialog entry and
+  exit use the motion token; reduced motion removes transitions, animations and drag tilt.
+- Drawer details, settings presentation and command-dialog styles load with their lazy screens to keep the
+  unchanged initial bundle budget. These changes resolve the deferred tablet rail, drawer focus trap and
+  caret-mention differences above; the blocked-status and person-chip differences remain.

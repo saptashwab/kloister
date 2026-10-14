@@ -23,33 +23,39 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
   host: { class: 'card', '[class.done]': 'done()' },
   styles: `
     :host {
+      content-visibility: auto;
+      contain-intrinsic-size: auto var(--k-card-estimate);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      border: 1px solid var(--k-border);
+      border: var(--k-line) solid var(--k-border);
       border-radius: var(--k-radius-md);
       background: var(--k-surface);
       box-shadow: var(--k-rest);
       cursor: pointer;
     }
+    :host:focus-within,
+    :host(.cdk-drag-preview) {
+      content-visibility: visible;
+    }
     :host(.done) .title {
       color: var(--k-muted);
     }
     .cover {
-      height: 6px;
+      height: var(--k-size-6px);
     }
     .body {
       display: flex;
       flex-direction: column;
-      gap: 9px;
-      padding: 12px;
+      gap: var(--k-size-9px);
+      padding: var(--k-space-3);
     }
     .meta,
     .foot {
       display: flex;
       align-items: center;
-      gap: 8px;
-      min-height: 22px;
+      gap: var(--k-space-2);
+      min-height: var(--k-size-22px);
     }
     .title {
       display: -webkit-box;
@@ -68,25 +74,25 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
     .labels {
       display: flex;
       flex-wrap: wrap;
-      gap: 5px;
+      gap: var(--k-size-5px);
     }
     .check {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: var(--k-size-6px);
       font-size: var(--k-small);
       color: var(--k-muted);
     }
     .bar {
-      width: 34px;
-      height: 4px;
-      border-radius: 2px;
+      width: var(--k-size-34px);
+      height: var(--k-space-1);
+      border-radius: var(--k-focus-width);
       overflow: hidden;
       background: var(--k-border);
     }
     .bar span {
       display: block;
-      height: 4px;
+      height: var(--k-space-1);
       background: var(--k-primary);
     }
     .bar span.full {

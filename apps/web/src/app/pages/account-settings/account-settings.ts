@@ -13,6 +13,7 @@ import { required } from '../../core/validators';
 import { Icon } from '../../ui/icon';
 import { ThemePicker } from '../../ui/theme-picker';
 import { ToastService } from '../../ui/toast.service';
+import { SettingsStyles } from '../../ui/settings-styles';
 
 /**
  * The signed-in user's own settings (SPEC §6 user settings): display name,
@@ -26,6 +27,7 @@ import { ToastService } from '../../ui/toast.service';
   selector: 'app-account-settings',
   host: { class: 'k-page' },
   imports: [
+    SettingsStyles,
     ReactiveFormsModule,
     MatButtonModule,
     MatFormFieldModule,
@@ -36,6 +38,7 @@ import { ToastService } from '../../ui/toast.service';
     ThemePicker,
   ],
   template: `
+    <app-settings-styles />
     <header class="k-page-head"><h1>Settings and theme</h1></header>
 
     <section class="k-panel" aria-labelledby="profile-title">

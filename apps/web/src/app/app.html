@@ -1,7 +1,7 @@
 @if (user(); as me) {
   <a class="skip" href="#main">Skip to content</a>
   <div class="shell" [class.nav-open]="navOpen()">
-    <nav class="sidebar" aria-label="Main">
+    <nav class="sidebar" aria-label="Main" tabindex="-1" (keydown)="navKey($event)">
       <div class="brand">
         @if (theme.logoUrl(); as logo) {
           <img class="k-logo" [src]="logo" alt="" />
@@ -21,7 +21,7 @@
       </div>
 
       <a class="nav-link" [routerLink]="['/people', me.id]" routerLinkActive="active">
-        <app-icon name="work" [size]="18" />My work
+        <app-icon name="work" [size]="18" /><span class="nav-text">My work</span>
       </a>
       <a
         class="nav-link"
@@ -29,7 +29,7 @@
         routerLinkActive="active"
         [attr.aria-label]="bellLabel()"
       >
-        <app-icon name="bell" [size]="18" />Notifications
+        <app-icon name="bell" [size]="18" /><span class="nav-text">Notifications</span>
         @if (notifications.unread() > 0) {
           <span class="k-badge" aria-hidden="true">{{ unreadText() }}</span>
         }
@@ -40,7 +40,7 @@
         routerLinkActive="active"
         [routerLinkActiveOptions]="{ exact: true }"
       >
-        <app-icon name="folder" [size]="18" />All projects
+        <app-icon name="folder" [size]="18" /><span class="nav-text">All projects</span>
       </a>
 
       <div class="nav-section" id="nav-projects">Projects</div>
@@ -52,6 +52,8 @@
               [class.active]="currentKey() === p.key"
               [attr.aria-current]="currentKey() === p.key ? 'page' : null"
               [routerLink]="['/p', p.key]"
+              [attr.aria-label]="p.key + ' ' + p.name"
+              [title]="p.key + ' ' + p.name"
             >
               <span class="key">{{ p.key }}</span
               ><span class="name">{{ p.name }}</span>
@@ -65,17 +67,35 @@
       @if (store.isAdmin()) {
         <div class="nav-section">Admin</div>
         <a class="nav-link" routerLink="/admin/users" routerLinkActive="active">
-          <app-icon name="users" [size]="18" />Users
+          <app-icon name="users" [size]="18" /><span class="nav-text">Users</span>
         </a>
         <a class="nav-link" routerLink="/admin/settings" routerLinkActive="active">
-          <app-icon name="settings" [size]="18" />Settings
+          <app-icon name="settings" [size]="18" /><span class="nav-text">Settings</span>
         </a>
         <a class="nav-link" routerLink="/admin/audit" routerLinkActive="active">
-          <app-icon name="audit" [size]="18" />Audit log
+          <app-icon name="audit" [size]="18" /><span class="nav-text">Audit log</span>
         </a>
       }
 
       <span class="spacer"></span>
+      <button
+        type="button"
+        class="nav-link k-action"
+        aria-label="Search or jump"
+        title="Search or jump (/)"
+        (click)="shortcuts.open()"
+      >
+        <app-icon name="search" /><span class="nav-text">Search or jump <kbd>/</kbd></span>
+      </button>
+      <button
+        type="button"
+        class="nav-link k-action"
+        aria-label="Keyboard shortcuts"
+        title="Keyboard shortcuts (?)"
+        (click)="shortcuts.open(true)"
+      >
+        <span aria-hidden="true">?</span><span class="nav-text">Keyboard shortcuts</span>
+      </button>
       <button
         type="button"
         class="me"
@@ -105,7 +125,7 @@
     </nav>
     <div class="scrim" aria-hidden="true" (click)="closeNav()"></div>
 
-    <div class="content">
+    <div class="content" [attr.inert]="navOpen() ? '' : null">
       <header class="topbar">
         <button
           #openNavButton
@@ -119,6 +139,14 @@
         </button>
         <span class="topbar-title">{{ title() }}</span>
         <span class="spacer"></span>
+        <button
+          class="k-icon-btn"
+          type="button"
+          aria-label="Search or jump"
+          (click)="shortcuts.open()"
+        >
+          <app-icon name="search" />
+        </button>
         <a class="k-icon-btn bell" routerLink="/notifications" [attr.aria-label]="bellLabel()">
           <app-icon name="bell" [size]="20" />
           @if (notifications.unread() > 0) {

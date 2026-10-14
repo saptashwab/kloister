@@ -363,4 +363,29 @@ describe('AdminBrandingPage', () => {
     await settle(fixture);
     expect(api.saveDefaultTheme).toHaveBeenCalledWith({ ...DEFAULT_THEME, primary: '#0F766E' });
   });
+
+  it('previews for an admin with a personal theme and restores it on cancel and exit', async () => {
+    const { fixture, root } = await render(AdminBrandingPage, brandingApi());
+    const theme = TestBed.inject(ThemeService);
+    const own = { ...DEFAULT_THEME, primary: '#C2410C' };
+    theme.setUserTheme(own);
+    root
+      .querySelector<HTMLButtonElement>(
+        '[aria-label="Default theme Primary colour"] [aria-label="Teal"]',
+      )
+      ?.click();
+    await settle(fixture);
+    expect(theme.theme().primary).toBe('#0F766E');
+    button(root, 'Cancel').click();
+    await settle(fixture);
+    expect(theme.theme()).toEqual(own);
+    root
+      .querySelector<HTMLButtonElement>(
+        '[aria-label="Default theme Primary colour"] [aria-label="Teal"]',
+      )
+      ?.click();
+    await settle(fixture);
+    fixture.destroy();
+    expect(theme.theme()).toEqual(own);
+  });
 });

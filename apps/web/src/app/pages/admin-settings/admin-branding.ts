@@ -411,8 +411,8 @@ export class AdminBrandingPage implements OnInit, OnDestroy {
    */
   protected editTheme(theme: ThemeDto): void {
     this.themeDraft.set(theme);
-    // Only people without their own theme see the default.
-    if (this.theme.userTheme() === null) this.theme.previewTheme(theme);
+    // Preview the draft for its editor too, restoring their preference on exit.
+    this.theme.previewTheme(theme);
   }
 
   /**

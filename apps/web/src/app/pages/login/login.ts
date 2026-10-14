@@ -24,7 +24,9 @@ import { AuthService } from '../../core/auth.service';
   ],
   template: `
     <mat-card class="auth-card">
-      <mat-card-header><mat-card-title>Sign in</mat-card-title></mat-card-header>
+      <mat-card-header
+        ><mat-card-title><h1>Sign in</h1></mat-card-title></mat-card-header
+      >
       <mat-card-content>
         <form [formGroup]="form" (ngSubmit)="submit()">
           <mat-form-field>

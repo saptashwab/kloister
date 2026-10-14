@@ -61,20 +61,20 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
     .labels-card {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: var(--k-space-4);
     }
     .style-options {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 10px;
-      margin-top: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(var(--k-size-200px), 1fr));
+      gap: var(--k-size-10px);
+      margin-top: var(--k-space-2);
     }
     .style-option {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      padding: 12px;
-      border: 1px solid var(--k-border);
+      gap: var(--k-size-6px);
+      padding: var(--k-space-3);
+      border: var(--k-line) solid var(--k-border);
       border-radius: var(--k-radius-md);
       cursor: pointer;
     }
@@ -94,48 +94,70 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 6px;
+      gap: var(--k-size-6px);
     }
     .label-list li {
-      display: flex;
+      display: grid;
+      width: min(100%, var(--k-label-row-width));
+      grid-template-columns: var(--k-target) minmax(0, 1fr) var(--k-label-preview-width) var(
+          --k-target
+        );
       align-items: center;
-      gap: 10px;
-      padding: 4px 0;
+      gap: var(--k-size-10px);
+      padding: var(--k-space-1) 0;
     }
     .label-list .quick-add {
-      max-width: 240px;
+      min-width: 0;
+      max-width: none;
       margin: 0;
+    }
+    .label-list app-label-pill {
+      min-width: 0;
+      overflow: hidden;
+    }
+    @media (max-width: 599px) {
+      .label-list li {
+        grid-template-columns: var(--k-target) minmax(0, 1fr) var(--k-target);
+      }
+      .label-list app-label-pill {
+        grid-column: 2;
+        grid-row: 2;
+      }
+      .label-list .k-icon-btn {
+        grid-column: 3;
+        grid-row: 1;
+      }
     }
     .swatch {
       flex: none;
-      width: 28px;
-      height: 28px;
+      width: var(--k-size-28px);
+      height: var(--k-size-28px);
       padding: 0;
-      border: 2px solid var(--k-surface);
+      border: var(--k-focus-width) solid var(--k-surface);
       border-radius: 50%;
-      box-shadow: 0 0 0 1px var(--k-border-strong);
+      box-shadow: 0 0 0 var(--k-line) var(--k-border-strong);
       cursor: pointer;
     }
     .swatch.on {
-      box-shadow: 0 0 0 2px var(--k-primary);
+      box-shadow: 0 0 0 var(--k-focus-width) var(--k-primary);
     }
     .swatch.small {
-      width: 16px;
-      height: 16px;
-      margin-right: 8px;
+      width: var(--k-space-4);
+      height: var(--k-space-4);
+      margin-right: var(--k-space-2);
       vertical-align: middle;
     }
     .custom {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 8px;
-      padding: 8px 16px;
+      gap: var(--k-space-2);
+      padding: var(--k-space-2) var(--k-space-4);
       font-size: var(--k-body-sm);
     }
     .custom-input {
-      width: 36px;
-      height: 28px;
+      width: var(--k-control-height);
+      height: var(--k-size-28px);
       padding: 0;
       border: 0;
       background: transparent;
@@ -150,77 +172,84 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
       <mat-card-header><mat-card-title>Buckets</mat-card-title></mat-card-header>
       <mat-card-content>
         <p>Moving a card into a bucket can set its status.</p>
-        <table class="data">
-          <thead>
-            <tr>
-              <th scope="col">Bucket</th>
-              <th scope="col">When a card enters</th>
-              <th scope="col"><span class="visually-hidden">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Tracked by object: rows are rebuilt from the stored values after a refusal. -->
-            @for (b of buckets(); track b; let first = $first, last = $last) {
+        <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+          <table class="data">
+            <thead>
               <tr>
-                @if (canManageBoard()) {
-                  <td>
-                    <input
-                      class="quick-add"
-                      [value]="b.name"
-                      [attr.maxlength]="nameMax"
-                      [attr.aria-label]="'Name of ' + b.name"
-                      (change)="renameBucket(b, $any($event.target))"
-                    />
-                  </td>
-                  <td>
-                    <div class="row">
-                      <mat-select
-                        [aria-label]="'Rule of ' + b.name"
-                        [value]="b.onEnterMode"
-                        (valueChange)="setRule(b, $event, b.onEnterStatus)"
-                      >
-                        @for (r of rules; track r) {
-                          <mat-option [value]="r">{{ ruleLabels[r] }}</mat-option>
-                        }
-                      </mat-select>
-                      @if (b.onEnterMode !== none) {
+                <th scope="col">Bucket</th>
+                <th scope="col">When a card enters</th>
+                <th scope="col"><span class="visually-hidden">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- Tracked by object: rows are rebuilt from the stored values after a refusal. -->
+              @for (b of buckets(); track b; let first = $first, last = $last) {
+                <tr>
+                  @if (canManageBoard()) {
+                    <td>
+                      <input
+                        class="quick-add"
+                        [value]="b.name"
+                        [attr.maxlength]="nameMax"
+                        [attr.aria-label]="'Name of ' + b.name"
+                        (change)="renameBucket(b, $any($event.target))"
+                      />
+                    </td>
+                    <td>
+                      <div class="row">
                         <mat-select
-                          [aria-label]="'Status set by ' + b.name"
-                          [value]="b.onEnterStatus"
-                          (valueChange)="setRule(b, b.onEnterMode, $event)"
+                          [aria-label]="'Rule of ' + b.name"
+                          [value]="b.onEnterMode"
+                          (valueChange)="setRule(b, $event, b.onEnterStatus)"
                         >
-                          @for (s of statuses; track s) {
-                            <mat-option [value]="s">{{ statusLabels[s] }}</mat-option>
+                          @for (r of rules; track r) {
+                            <mat-option [value]="r">{{ ruleLabels[r] }}</mat-option>
                           }
                         </mat-select>
-                      }
-                    </div>
-                  </td>
-                  <td class="actions">
-                    <button mat-button type="button" [disabled]="first" (click)="moveBucket(b, -1)">
-                      Up
-                    </button>
-                    <button mat-button type="button" [disabled]="last" (click)="moveBucket(b, 1)">
-                      Down
-                    </button>
-                    <button
-                      mat-button
-                      type="button"
-                      [disabled]="buckets().length < 2"
-                      (click)="deleting.set(b)"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                } @else {
-                  <td>{{ b.name }}</td>
-                  <td>{{ describeRule(b) }}</td>
-                  <td></td>
-                }
-              </tr>
-            }
-          </tbody>
-        </table>
+                        @if (b.onEnterMode !== none) {
+                          <mat-select
+                            [aria-label]="'Status set by ' + b.name"
+                            [value]="b.onEnterStatus"
+                            (valueChange)="setRule(b, b.onEnterMode, $event)"
+                          >
+                            @for (s of statuses; track s) {
+                              <mat-option [value]="s">{{ statusLabels[s] }}</mat-option>
+                            }
+                          </mat-select>
+                        }
+                      </div>
+                    </td>
+                    <td class="actions">
+                      <button
+                        mat-button
+                        type="button"
+                        [disabled]="first"
+                        (click)="moveBucket(b, -1)"
+                      >
+                        Up
+                      </button>
+                      <button mat-button type="button" [disabled]="last" (click)="moveBucket(b, 1)">
+                        Down
+                      </button>
+                      <button
+                        mat-button
+                        type="button"
+                        [disabled]="buckets().length < 2"
+                        (click)="deleting.set(b)"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  } @else {
+                    <td>{{ b.name }}</td>
+                    <td>{{ describeRule(b) }}</td>
+                    <td></td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
 
         @if (deleting(); as b) {
           <div class="row" role="group" [attr.aria-label]="'Delete ' + b.name">

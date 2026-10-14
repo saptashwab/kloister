@@ -15,6 +15,24 @@ class Host {
 }
 
 describe('ThemePicker', () => {
+  it('keeps one tab stop per swatch group and wraps arrow selection', async () => {
+    const fixture = TestBed.createComponent(Host);
+    await settle(fixture);
+    const root = fixture.nativeElement as HTMLElement;
+    const group = root.querySelector('[aria-label="Test theme Primary colour"]')!;
+    const radios = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.filter((r) => r.tabIndex === 0)).toHaveLength(1);
+    radios[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    await settle(fixture);
+    expect(radios.at(-1)?.getAttribute('aria-checked')).toBe('true');
+    expect(radios.filter((r) => r.tabIndex === 0)).toHaveLength(1);
+    radios.at(-1)?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    await settle(fixture);
+    expect(radios[0]?.getAttribute('aria-checked')).toBe('true');
+    fixture.componentInstance.theme.set({ ...DEFAULT_THEME, primary: '#ABCDEF' });
+    await settle(fixture);
+    expect(radios.filter((r) => r.tabIndex === 0)).toHaveLength(1);
+  });
   it('picks mode, swatches and custom colours, and explains the shown shades', async () => {
     const fixture = TestBed.createComponent(Host);
     await settle(fixture);

@@ -23,6 +23,8 @@ export const ICONS = {
   close: 'M6 6l12 12M18 6 6 18',
   link: 'M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1',
   chevronDown: 'M6 9l6 6 6-6',
+  up: 'M6 15l6-6 6 6',
+  down: 'M6 9l6 6 6-6',
   chevronRight: 'M9 6l6 6-6 6',
   check: 'M5 12l5 5 9-10',
   calendar: 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4',

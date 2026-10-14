@@ -10,6 +10,7 @@ import {
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { firstValueFrom } from 'rxjs';
+import { dialogMotion } from './motion';
 
 /** What a confirm dialog asks. */
 export interface ConfirmOptions {
@@ -128,6 +129,8 @@ export class Dialogs {
   async confirm(options: ConfirmOptions): Promise<boolean> {
     const ref = this.dialog.open<ConfirmDialog, ConfirmOptions, boolean>(ConfirmDialog, {
       data: options,
+      enterAnimationDuration: dialogMotion(),
+      exitAnimationDuration: dialogMotion(),
       width: '440px',
       maxWidth: 'calc(100vw - 32px)',
       autoFocus: 'first-tabbable',
@@ -144,6 +147,8 @@ export class Dialogs {
   async prompt(options: PromptOptions): Promise<string | null> {
     const ref = this.dialog.open<PromptDialog, PromptOptions, string | null>(PromptDialog, {
       data: options,
+      enterAnimationDuration: dialogMotion(),
+      exitAnimationDuration: dialogMotion(),
       width: '440px',
       maxWidth: 'calc(100vw - 32px)',
     });

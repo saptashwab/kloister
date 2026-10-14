@@ -49,16 +49,16 @@ const MODES: readonly { value: ThemeMode; name: string }[] = [
       gap: var(--k-space-2);
     }
     .swatch {
-      width: 28px;
-      height: 28px;
+      width: var(--k-size-28px);
+      height: var(--k-size-28px);
       padding: 0;
-      border: 2px solid var(--k-surface);
+      border: var(--k-focus-width) solid var(--k-surface);
       border-radius: var(--k-radius-full);
-      box-shadow: 0 0 0 1px var(--k-border-strong);
+      box-shadow: 0 0 0 var(--k-line) var(--k-border-strong);
       cursor: pointer;
     }
     .swatch.on {
-      box-shadow: 0 0 0 2px var(--k-text);
+      box-shadow: 0 0 0 var(--k-focus-width) var(--k-text);
     }
     .custom {
       display: inline-flex;
@@ -67,10 +67,10 @@ const MODES: readonly { value: ThemeMode; name: string }[] = [
       font-size: var(--k-body-sm);
     }
     .custom input {
-      width: 36px;
-      height: 28px;
+      width: var(--k-control-height);
+      height: var(--k-size-28px);
       padding: 0;
-      border: 1px solid var(--k-control-border);
+      border: var(--k-line) solid var(--k-control-border);
       border-radius: var(--k-radius-sm);
       background: none;
     }
@@ -108,18 +108,20 @@ const MODES: readonly { value: ThemeMode; name: string }[] = [
               [style.background]="s.hex"
               [attr.aria-checked]="value()[role.key] === s.hex"
               [attr.aria-label]="s.name"
+              [attr.tabindex]="tabStop(role.key, s.hex) ? 0 : -1"
+              (keydown)="navigate(role.key, $event)"
               (click)="setColour(role.key, s.hex)"
             ></button>
           }
-          <label class="custom">
-            <input
-              type="color"
-              [value]="value()[role.key].toLowerCase()"
-              (change)="pickCustom(role.key, $event)"
-            />
-            Custom {{ role.name.toLowerCase() }}
-          </label>
         </div>
+        <label class="custom">
+          <input
+            type="color"
+            [value]="value()[role.key].toLowerCase()"
+            (change)="pickCustom(role.key, $event)"
+          />
+          Custom {{ role.name.toLowerCase() }}
+        </label>
         <p class="note" aria-live="polite">{{ noteFor(role.key) }}</p>
       </fieldset>
     }
@@ -164,6 +166,46 @@ export class ThemePicker {
    */
   protected setColour(role: 'primary' | 'accent', hex: string): void {
     this.set(role === 'primary' ? { primary: hex } : { accent: hex });
+  }
+
+  /**
+   * Keeps exactly one curated swatch in the tab order, even with a custom colour.
+   *
+   * @param role Colour being edited.
+   * @param hex Swatch value.
+   * @returns True for the selected swatch, or the first for a custom value.
+   */
+  protected tabStop(role: 'primary' | 'accent', hex: string): boolean {
+    const selected = this.swatches.find((s) => s.hex === this.value()[role]);
+    return hex === (selected ?? this.swatches[0])?.hex;
+  }
+
+  /**
+   * Implements the ARIA radio arrow-key pattern with wraparound and Home/End.
+   *
+   * @param role Colour being edited.
+   * @param event Radio's keyboard event.
+   */
+  protected navigate(role: 'primary' | 'accent', event: KeyboardEvent): void {
+    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key))
+      return;
+    const target = event.currentTarget as HTMLElement;
+    const radios = [
+      ...(target.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? []),
+    ];
+    const current = radios.indexOf(target as HTMLButtonElement);
+    const index =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? radios.length - 1
+          : (current + (['ArrowRight', 'ArrowDown'].includes(event.key) ? 1 : -1) + radios.length) %
+            radios.length;
+    const swatch = this.swatches[index];
+    if (!swatch) return;
+    event.preventDefault();
+    this.setColour(role, swatch.hex);
+    radios[index]?.focus();
   }
 
   /**

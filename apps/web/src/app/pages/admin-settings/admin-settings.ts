@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { MatTabsModule } from '@angular/material/tabs';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { SettingsStyles } from '../../ui/settings-styles';
 
 /** The admin settings tabs (SPEC §6 Admin). */
 const TABS: readonly { path: string; name: string }[] = [
@@ -21,8 +22,9 @@ const TABS: readonly { path: string; name: string }[] = [
 @Component({
   selector: 'app-admin-settings',
   host: { class: 'k-page' },
-  imports: [MatTabsModule, RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [MatTabsModule, RouterLink, RouterLinkActive, RouterOutlet, SettingsStyles],
   template: `
+    <app-settings-styles />
     <header class="k-page-head"><h1>Settings</h1></header>
     <nav mat-tab-nav-bar class="k-settings-tabs" aria-label="Settings sections" [tabPanel]="panel">
       @for (tab of tabs; track tab.path) {

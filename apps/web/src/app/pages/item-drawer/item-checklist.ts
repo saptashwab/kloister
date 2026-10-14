@@ -32,12 +32,12 @@ import { Icon } from '../../ui/icon';
     :host {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: var(--k-space-2);
     }
     .head {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: var(--k-size-10px);
     }
     h2 {
       font-size: var(--k-body-sm);
@@ -45,14 +45,14 @@ import { Icon } from '../../ui/icon';
     }
     .progress {
       flex: 1;
-      height: 6px;
-      border-radius: 3px;
+      height: var(--k-size-6px);
+      border-radius: var(--k-size-3px);
       overflow: hidden;
       background: var(--k-sunken);
     }
     .progress span {
       display: block;
-      height: 6px;
+      height: var(--k-size-6px);
       background: var(--k-primary);
     }
     .progress span.full {
@@ -66,8 +66,8 @@ import { Icon } from '../../ui/icon';
     li {
       display: flex;
       align-items: center;
-      gap: 4px;
-      min-height: 40px;
+      gap: var(--k-space-1);
+      min-height: var(--k-size-40px);
       border-radius: var(--k-radius-control);
       background: var(--k-surface);
     }
@@ -78,8 +78,8 @@ import { Icon } from '../../ui/icon';
     .text {
       flex: 1;
       min-width: 0;
-      padding: 6px 4px;
-      border: 1px solid transparent;
+      padding: var(--k-size-6px) var(--k-space-1);
+      border: var(--k-line) solid transparent;
       border-radius: var(--k-radius-sm);
       background: transparent;
       color: inherit;
@@ -132,6 +132,24 @@ import { Icon } from '../../ui/icon';
               [attr.aria-label]="'Checklist line ' + line.text"
               (change)="rename(line, $any($event.target))"
             />
+            <button
+              type="button"
+              class="k-icon-btn sm"
+              [disabled]="$first"
+              [attr.aria-label]="'Move up: ' + line.text"
+              (click)="moveLine($index, -1)"
+            >
+              <app-icon name="up" />
+            </button>
+            <button
+              type="button"
+              class="k-icon-btn sm"
+              [disabled]="$last"
+              [attr.aria-label]="'Move down: ' + line.text"
+              (click)="moveLine($index, 1)"
+            >
+              <app-icon name="down" />
+            </button>
             <button
               type="button"
               class="k-icon-btn sm"
@@ -268,14 +286,26 @@ export class ItemChecklist {
    * @returns Resolves once saved.
    */
   protected async reorder(event: CdkDragDrop<unknown>): Promise<void> {
-    if (event.previousIndex === event.currentIndex) return;
+    await this.moveLine(event.previousIndex, event.currentIndex - event.previousIndex);
+  }
+
+  /**
+   * Reorders a checklist line with buttons or a drop, using the same API path.
+   *
+   * @param index Current line index.
+   * @param step Offset in the checklist.
+   * @returns Resolves when the change is accepted or rolled back.
+   */
+  protected async moveLine(index: number, step: number): Promise<void> {
+    const target = index + step;
+    if (!this.canEdit() || !step || target < 0 || target >= this.lines().length) return;
     const lines = [...this.lines()];
-    const line = lines[event.previousIndex];
+    const line = lines[index];
     if (line === undefined) return;
-    moveItemInArray(lines, event.previousIndex, event.currentIndex);
+    moveItemInArray(lines, index, target);
     const previous = this.lines();
     this.lines.set(lines);
-    const afterId = lines[event.currentIndex - 1]?.id ?? null;
+    const afterId = lines[target - 1]?.id ?? null;
     const ok = await this.run(async () => {
       await this.api.moveChecklistLine(this.projectId(), this.itemId(), line.id, afterId);
     });

@@ -159,109 +159,113 @@ import { ProjectTeamsComponent } from './project-teams';
             </div>
           }
 
-          <table class="data">
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Email</th>
-                <th scope="col">Role</th>
-                <th scope="col">Visibility</th>
-                <th scope="col"><span class="visually-hidden">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (m of members(); track m.id) {
+          <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+            <table class="data">
+              <thead>
                 <tr>
-                  <td>{{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}</td>
-                  <td>{{ m.email }}</td>
-                  @if (canEditMembers()) {
-                    <td>
-                      <mat-select
-                        [aria-label]="'Role of ' + m.displayName"
-                        [value]="m.role"
-                        (valueChange)="updateMember(m, { role: $event })"
-                      >
-                        @for (r of roles; track r) {
-                          <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
-                        }
-                      </mat-select>
-                    </td>
-                    <td>
-                      @if (isScoped(m)) {
-                        <mat-select
-                          [aria-label]="'Visibility of ' + m.displayName"
-                          [value]="m.visibility"
-                          (valueChange)="updateMember(m, { visibility: $event })"
-                        >
-                          <mat-option [value]="visibility.ALL">{{
-                            visibilityLabels.ALL
-                          }}</mat-option>
-                          <mat-option [value]="visibility.OWN">{{
-                            visibilityLabels.OWN
-                          }}</mat-option>
-                          <mat-option [value]="visibility.TEAMS">{{
-                            visibilityLabels.TEAMS
-                          }}</mat-option>
-                          <mat-option [value]="visibility.BUCKETS">{{
-                            visibilityLabels.BUCKETS
-                          }}</mat-option>
-                        </mat-select>
-                        @if (m.visibility === visibility.BUCKETS) {
-                          <mat-select
-                            multiple
-                            placeholder="Choose buckets"
-                            [aria-label]="'Buckets visible to ' + m.displayName"
-                            [value]="m.allowedBucketIds"
-                            (valueChange)="pendingBuckets.set(m.userId, $event)"
-                            (openedChange)="$event || saveBuckets(m)"
-                          >
-                            @for (b of buckets(); track b.id) {
-                              <mat-option [value]="b.id">{{ b.name }}</mat-option>
-                            }
-                          </mat-select>
-                        }
-                      } @else {
-                        {{ visibilityLabels.ALL }}
-                      }
-                    </td>
-                    <td class="actions">
-                      <button mat-button type="button" (click)="removeMember(m)">Remove</button>
-                    </td>
-                  } @else {
-                    <td>{{ roleLabels[m.role] }}</td>
-                    <td>
-                      {{ isScoped(m) ? visibilityLabels[m.visibility] : visibilityLabels.ALL }}
-                      @if (isScoped(m) && m.visibility === visibility.BUCKETS) {
-                        ({{ bucketNames(m) }})
-                      }
-                    </td>
-                    <td class="actions">
-                      @if (pmOnly()) {
-                        @if (m.role === projectRole.PM) {
-                          <button
-                            mat-button
-                            type="button"
-                            (click)="updateMember(m, { role: projectRole.MEMBER })"
-                          >
-                            Remove PM role
-                          </button>
-                          <button mat-button type="button" (click)="removeMember(m)">Remove</button>
-                        } @else {
-                          <button
-                            mat-button
-                            type="button"
-                            (click)="updateMember(m, { role: projectRole.PM })"
-                          >
-                            Make PM
-                          </button>
-                        }
-                      }
-                    </td>
-                  }
+                  <th scope="col">Name</th>
+                  <th scope="col">Email</th>
+                  <th scope="col">Role</th>
+                  <th scope="col">Visibility</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
                 </tr>
-              }
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                @for (m of members(); track m.id) {
+                  <tr>
+                    <td>{{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}</td>
+                    <td>{{ m.email }}</td>
+                    @if (canEditMembers()) {
+                      <td>
+                        <mat-select
+                          [aria-label]="'Role of ' + m.displayName"
+                          [value]="m.role"
+                          (valueChange)="updateMember(m, { role: $event })"
+                        >
+                          @for (r of roles; track r) {
+                            <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
+                          }
+                        </mat-select>
+                      </td>
+                      <td>
+                        @if (isScoped(m)) {
+                          <mat-select
+                            [aria-label]="'Visibility of ' + m.displayName"
+                            [value]="m.visibility"
+                            (valueChange)="updateMember(m, { visibility: $event })"
+                          >
+                            <mat-option [value]="visibility.ALL">{{
+                              visibilityLabels.ALL
+                            }}</mat-option>
+                            <mat-option [value]="visibility.OWN">{{
+                              visibilityLabels.OWN
+                            }}</mat-option>
+                            <mat-option [value]="visibility.TEAMS">{{
+                              visibilityLabels.TEAMS
+                            }}</mat-option>
+                            <mat-option [value]="visibility.BUCKETS">{{
+                              visibilityLabels.BUCKETS
+                            }}</mat-option>
+                          </mat-select>
+                          @if (m.visibility === visibility.BUCKETS) {
+                            <mat-select
+                              multiple
+                              placeholder="Choose buckets"
+                              [aria-label]="'Buckets visible to ' + m.displayName"
+                              [value]="m.allowedBucketIds"
+                              (valueChange)="pendingBuckets.set(m.userId, $event)"
+                              (openedChange)="$event || saveBuckets(m)"
+                            >
+                              @for (b of buckets(); track b.id) {
+                                <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                              }
+                            </mat-select>
+                          }
+                        } @else {
+                          {{ visibilityLabels.ALL }}
+                        }
+                      </td>
+                      <td class="actions">
+                        <button mat-button type="button" (click)="removeMember(m)">Remove</button>
+                      </td>
+                    } @else {
+                      <td>{{ roleLabels[m.role] }}</td>
+                      <td>
+                        {{ isScoped(m) ? visibilityLabels[m.visibility] : visibilityLabels.ALL }}
+                        @if (isScoped(m) && m.visibility === visibility.BUCKETS) {
+                          ({{ bucketNames(m) }})
+                        }
+                      </td>
+                      <td class="actions">
+                        @if (pmOnly()) {
+                          @if (m.role === projectRole.PM) {
+                            <button
+                              mat-button
+                              type="button"
+                              (click)="updateMember(m, { role: projectRole.MEMBER })"
+                            >
+                              Remove PM role
+                            </button>
+                            <button mat-button type="button" (click)="removeMember(m)">
+                              Remove
+                            </button>
+                          } @else {
+                            <button
+                              mat-button
+                              type="button"
+                              (click)="updateMember(m, { role: projectRole.PM })"
+                            >
+                              Make PM
+                            </button>
+                          }
+                        }
+                      </td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
         </mat-card-content>
       </mat-card>
 

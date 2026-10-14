@@ -18,6 +18,7 @@ import { NotificationsStore } from './core/notifications.store';
 import { ProjectsNav } from './core/projects-nav';
 import { SessionStore } from './core/session.store';
 import { ThemeService } from './core/theme.service';
+import { Shortcuts } from './core/shortcuts';
 import { StaticAvatar } from './ui/avatar';
 import { Icon } from './ui/icon';
 
@@ -52,6 +53,8 @@ import { Icon } from './ui/icon';
   templateUrl: './app.html',
 })
 export class App {
+  /** Lazy search and keyboard reference entry points. */
+  protected readonly shortcuts = inject(Shortcuts);
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
 
@@ -150,6 +153,28 @@ export class App {
     if (!this.navOpen()) return;
     this.navOpen.set(false);
     this.openNavButton()?.nativeElement.focus();
+  }
+
+  /**
+   * Contains Tab in the phone menu; focus returns through closeNav.
+   *
+   * @param event The menu's keyboard event.
+   */
+  protected navKey(event: KeyboardEvent): void {
+    if (!this.navOpen() || event.key !== 'Tab') return;
+    const nav = event.currentTarget as HTMLElement;
+    const controls = [...nav.querySelectorAll<HTMLElement>('a[href],button')].filter(
+      (control) => control.getClientRects().length > 0,
+    );
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first?.focus();
+    }
   }
 
   /**

@@ -104,7 +104,6 @@ const POSITIONS: ConnectedPosition[] = [
       cdkOverlayOrigin
       #origin="cdkOverlayOrigin"
       [class.active]="isActive()"
-      [class.faded]="toggle() && filter?.active() !== null && !isActive()"
       [style]="vars()"
       [attr.aria-label]="name()"
       [attr.aria-pressed]="toggle() ? isActive() : null"

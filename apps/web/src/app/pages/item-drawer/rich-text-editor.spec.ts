@@ -11,7 +11,7 @@ interface EditorInternals {
   link(): Promise<void>;
   submit(): void;
   paste(event: unknown): void;
-  trackMention(): void;
+  trackMention(event?: KeyboardEvent): void;
   keydown(event: KeyboardEvent): void;
 }
 
@@ -58,6 +58,11 @@ describe('RichTextEditor', () => {
    * @param area The editing area.
    */
   function caretAtEnd(area: HTMLElement): void {
+    // jsdom has no layout; supply a known caret rectangle to check anchoring.
+    Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ right: 80, bottom: 40 }),
+    });
     const walker = document.createTreeWalker(area, NodeFilter.SHOW_TEXT);
     let last: Text | null = null;
     while (walker.nextNode()) last = walker.currentNode as Text;
@@ -144,15 +149,33 @@ describe('RichTextEditor', () => {
     caretAtEnd(area);
     editor.trackMention();
     await settle(fixture);
-    const options = [...root.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim());
+    const list = document.getElementById(area.getAttribute('aria-controls') ?? '')!;
+    const options = [...list.querySelectorAll('[role="option"]')].map((o) => o.textContent?.trim());
     expect(options).toEqual(['Mia Member']);
     expect(area.getAttribute('aria-expanded')).toBe('true');
+    expect((root.querySelector('.k-caret-origin') as HTMLElement).style.left).toBe('80px');
     editor.keydown(new KeyboardEvent('keydown', { key: 'Enter' }));
     await settle(fixture);
     const mention = area.querySelector('span[data-mention="u2"]');
     expect(mention?.textContent).toBe('@Mia Member');
     expect(area.textContent).not.toContain('@Mi @');
-    expect(root.querySelector('[role="listbox"]')).toBeNull();
+    expect(document.getElementById(list.id)).toBeNull();
+  });
+
+  it('keeps the mention popup closed on Escape keyup', async () => {
+    const { area, editor, fixture } = await render({
+      html: '',
+      mentionables: [{ id: 'u2', name: 'Mia' }],
+    });
+    area.textContent = 'Hi @Mi';
+    caretAtEnd(area);
+    editor.trackMention();
+    await settle(fixture);
+    expect(area.getAttribute('aria-expanded')).toBe('true');
+    editor.keydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+    editor.trackMention(new KeyboardEvent('keyup', { key: 'Escape' }));
+    await settle(fixture);
+    expect(area.getAttribute('aria-expanded')).toBeNull();
   });
 
   it('as a composer, ignores empty notes and clears after posting', async () => {
