@@ -113,6 +113,47 @@ function adjust(start: Rgb, against: string, towards: Rgb): string {
   return toHex(towards);
 }
 
+/**
+ * Mixes two hex colours (exported form of the label helpers' mix).
+ *
+ * @param a First colour.
+ * @param b Second colour.
+ * @param amount Share of `b`, 0 to 1.
+ * @returns The mix as `#RRGGBB`; `a` unchanged when either is not a hex colour.
+ */
+export function mixHex(a: string, b: string, amount: number): string {
+  const x = parseHex(a);
+  const y = parseHex(b);
+  if (x === null || y === null) return a;
+  return toHex(mix(x, y, amount));
+}
+
+/**
+ * Steps a colour towards black or white until it reaches a contrast ratio
+ * against a fixed colour (DESIGN §4.3, used for theme colours too). A colour
+ * that already reaches it is returned unchanged.
+ *
+ * @param hex The colour to adjust.
+ * @param against The fixed colour (a background, or a text colour).
+ * @param towards Darken (`black`) or lighten (`white`).
+ * @param min The ratio to reach; WCAG AA text by default.
+ * @returns The first step that reaches it, as `#RRGGBB`.
+ */
+export function towardsContrast(
+  hex: string,
+  against: string,
+  towards: 'black' | 'white',
+  min = MIN_CONTRAST,
+): string {
+  const rgb = parseHex(hex) ?? [107, 114, 128];
+  const target: Rgb = towards === 'black' ? [0, 0, 0] : [255, 255, 255];
+  for (let step = 0; step <= 40; step++) {
+    const candidate = toHex(mix(rgb, target, step * 0.025));
+    if (contrastRatio(candidate, against) >= min) return candidate;
+  }
+  return toHex(target);
+}
+
 /** Colours of one label pill. */
 export interface LabelColours {
   /** Fill. */

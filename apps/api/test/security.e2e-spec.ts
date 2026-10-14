@@ -105,6 +105,29 @@ describe('API security without a session (e2e)', () => {
     ['GET', '/api/v1/notifications/unread-count'],
     ['POST', '/api/v1/notifications/read-all'],
     ['POST', `/api/v1/notifications/${SOME_ID}/read`],
+    ['GET', '/api/v1/me/theme'],
+    ['PUT', '/api/v1/me/theme'],
+    ['DELETE', '/api/v1/me/theme'],
+    ['GET', '/api/v1/admin/settings/security'],
+    ['PUT', '/api/v1/admin/settings/security'],
+    ['GET', '/api/v1/admin/settings/storage'],
+    ['PUT', '/api/v1/admin/settings/storage'],
+    ['GET', '/api/v1/admin/settings/storage/usage'],
+    ['GET', '/api/v1/admin/settings/logs'],
+    ['PUT', '/api/v1/admin/settings/logs'],
+    ['GET', '/api/v1/admin/settings/theme'],
+    ['PUT', '/api/v1/admin/settings/theme'],
+    ['GET', '/api/v1/admin/settings/branding'],
+    ['PUT', '/api/v1/admin/settings/branding'],
+    ['PUT', '/api/v1/admin/settings/branding/logo'],
+    ['DELETE', '/api/v1/admin/settings/branding/logo'],
+    ['PUT', '/api/v1/admin/settings/branding/fonts/regular'],
+    ['DELETE', '/api/v1/admin/settings/branding/fonts/bold'],
+    ['PUT', '/api/v1/admin/settings/branding/fonts/bold'],
+    ['DELETE', '/api/v1/admin/settings/branding/fonts/regular'],
+    ['GET', '/api/v1/admin/backups'],
+    ['PUT', '/api/v1/admin/backups/settings'],
+    ['POST', '/api/v1/admin/backups/run'],
   ] as const)('%s %s returns 401 without a session', async (method, url) => {
     const res = await app.inject({ method, url, headers: CSRF, payload: {} });
     expect(res.statusCode).toBe(401);
@@ -129,6 +152,29 @@ describe('API security without a session (e2e)', () => {
     const noSession = await app.inject({ ...upload, headers: { ...headers, ...CSRF } });
     expect(noSession.statusCode).toBe(401);
     expect(errorOf(noSession).code).toBe(ErrorCode.UNAUTHENTICATED);
+  });
+
+  // Branding uploads are admin-only and refused the same way, before any of
+  // the file is read.
+  it.each([
+    '/api/v1/admin/settings/branding/logo',
+    '/api/v1/admin/settings/branding/fonts/regular',
+  ])('refuses branding uploads to %s without the CSRF header or a session', async (url) => {
+    const upload = { method: 'PUT' as const, url, payload: Buffer.from('wOF2') };
+    const headers = { 'content-type': UPLOAD_CONTENT_TYPE, [FILE_NAME_HEADER]: 'a.woff2' };
+    const noCsrf = await app.inject({ ...upload, headers });
+    expect(noCsrf.statusCode).toBe(403);
+    expect(errorOf(noCsrf).code).toBe(ErrorCode.CSRF_HEADER_MISSING);
+    const noSession = await app.inject({ ...upload, headers: { ...headers, ...CSRF } });
+    expect(noSession.statusCode).toBe(401);
+  });
+
+  // The public branding routes need no session but only serve what pages
+  // draw: an unknown font weight is a 404 before anything is read.
+  it('answers unknown public branding files with 404 without a session', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/v1/branding/fonts/italic' });
+    expect(res.statusCode).toBe(404);
+    expect(errorOf(res).code).toBe(ErrorCode.NOT_FOUND);
   });
 
   it('requires the CSRF header on state-changing requests, even public ones', async () => {

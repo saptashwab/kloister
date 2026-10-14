@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -40,10 +40,49 @@ export const PASSWORD = 'seeded-password-1';
  */
 export const ATTACHMENTS_DIR = mkdtempSync(join(tmpdir(), 'kloister-db-attachments-'));
 
+/** Branding folder of this test run (logo and font uploads). */
+export const BRANDING_DIR = mkdtempSync(join(tmpdir(), 'kloister-db-branding-'));
+
+/** Backups folder of this test run. */
+export const BACKUP_DIR = mkdtempSync(join(tmpdir(), 'kloister-db-backups-'));
+
+/**
+ * Folder of the fake pg_dump. Creating `fail` in it makes the next dump fail;
+ * creating `slow` makes it take a second.
+ */
+export const FAKE_PG_DUMP_DIR = mkdtempSync(join(tmpdir(), 'kloister-db-pgdump-'));
+
+/**
+ * A stand-in for pg_dump (a POSIX shell script, as on the CI runner), so no
+ * database test depends on the runner's pg_dump matching the Postgres
+ * server version. It writes a small file to the `--file=` target, records
+ * its environment and arguments next to it, and fails or waits on request.
+ */
+export const FAKE_PG_DUMP = join(FAKE_PG_DUMP_DIR, 'pg_dump');
+writeFileSync(
+  FAKE_PG_DUMP,
+  [
+    '#!/bin/sh',
+    `dir='${FAKE_PG_DUMP_DIR}'`,
+    'out=""',
+    'for arg in "$@"; do case "$arg" in --file=*) out="${arg#--file=}";; esac; done',
+    'printf "%s\\n" "$@" > "$dir/args"',
+    'env > "$dir/env"',
+    'if [ -f "$dir/slow" ]; then sleep 1; fi',
+    // A failing dump leaves half a file behind, which the app must remove.
+    'if [ -f "$dir/fail" ]; then printf "PGDMP half" > "$out"; echo "pg_dump: error: simulated failure" >&2; exit 2; fi',
+    'printf "PGDMP fake dump of %s\\n" "$PGDATABASE" > "$out"',
+    '',
+  ].join('\n'),
+  { mode: 0o755 },
+);
+
 /**
  * Boots the full app. The login rate limit is raised so suites that sign in
  * many times from the same address are not throttled; the limiter itself is
- * covered by the database-free e2e tests. Uploads go to {@link ATTACHMENTS_DIR}.
+ * covered by the database-free e2e tests. Uploads go to {@link ATTACHMENTS_DIR},
+ * branding files to {@link BRANDING_DIR}, backups to {@link BACKUP_DIR} via
+ * {@link FAKE_PG_DUMP}; logs are silenced.
  *
  * @returns The app and its Prisma client.
  */
@@ -51,6 +90,10 @@ export async function startApp(): Promise<{ app: NestFastifyApplication; prisma:
   process.env['APP_NAME'] = TEST_APP_NAME;
   process.env['LOGIN_RATE_LIMIT'] = '10000';
   process.env['ATTACHMENTS_DIR'] = ATTACHMENTS_DIR;
+  process.env['BRANDING_DIR'] = BRANDING_DIR;
+  process.env['BACKUP_DIR'] = BACKUP_DIR;
+  process.env['PG_DUMP_PATH'] = FAKE_PG_DUMP;
+  process.env['LOG_LEVEL'] = 'silent';
   const app = await createApp({ logger: false });
   await app.getHttpAdapter().getInstance().ready();
   return { app, prisma: app.get(PrismaService) };
@@ -386,6 +429,7 @@ export async function storedFileExists(projectId: string, storedName: string): P
  * @param sid Session token.
  * @param bytes File content.
  * @param name File name.
+ * @param method POST, or PUT for branding files.
  * @returns The response.
  */
 export async function upload(
@@ -394,9 +438,10 @@ export async function upload(
   sid: string,
   bytes: Buffer,
   name = 'file.gif',
+  method: 'POST' | 'PUT' = 'POST',
 ): Promise<Res> {
   return app.inject({
-    method: 'POST',
+    method,
     url,
     headers: {
       [CSRF_HEADER]: CSRF_HEADER_VALUE,

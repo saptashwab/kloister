@@ -1,4 +1,4 @@
-import { AuditAction, ErrorCode } from '@kloister/shared';
+import { AuditAction, ErrorCode, ThemeMode } from '@kloister/shared';
 import {
   fakeAudit,
   fakePrisma,
@@ -10,6 +10,7 @@ import type { AuthContext } from '../auth/auth-context.js';
 import type { PasswordService } from '../auth/password.service.js';
 import { SessionService } from '../auth/session.service.js';
 import type { ApiException } from '../common/api-exception.js';
+import { userTheme } from './user.mapper.js';
 import { UsersService } from './users.service.js';
 
 const passwords = {
@@ -205,6 +206,42 @@ describe('UsersService', () => {
       expect(audit.records[0]).toMatchObject({
         action: AuditAction.ADMIN_BOOTSTRAPPED,
         actorId: null,
+      });
+    });
+  });
+
+  describe('own theme (SPEC §6 user settings)', () => {
+    it('stores a theme with upper-case colours and clears it for "use default"', async () => {
+      const { fake, audit, service } = setup();
+      const me: AuthContext = { user: makeUser({ id: TARGET_ID }), sessionId: 's' };
+      await expect(
+        service.setMyTheme(me, { mode: ThemeMode.DARK, primary: '#0f766e', accent: '#be185d' }),
+      ).resolves.toEqual({
+        theme: { mode: ThemeMode.DARK, primary: '#0F766E', accent: '#BE185D' },
+      });
+      expect(fake.user.update).toHaveBeenLastCalledWith({
+        where: { id: TARGET_ID },
+        data: { themePrefs: { mode: 'DARK', primary: '#0F766E', accent: '#BE185D' } },
+      });
+      await expect(service.setMyTheme(me, null)).resolves.toEqual({ theme: null });
+      expect(fake.user.update).toHaveBeenLastCalledWith({
+        where: { id: TARGET_ID },
+        data: { themePrefs: {} },
+      });
+      // A personal look, not an audited change.
+      expect(audit.records).toHaveLength(0);
+    });
+
+    it('reads only a complete, valid stored theme', () => {
+      expect(userTheme({})).toBeNull();
+      expect(userTheme(null)).toBeNull();
+      expect(userTheme({ mode: 'DARK', primary: '#0F766E' })).toBeNull();
+      expect(userTheme({ mode: 'NEON', primary: '#0F766E', accent: '#0F766E' })).toBeNull();
+      expect(userTheme({ mode: 'LIGHT', primary: 'red', accent: '#0F766E' })).toBeNull();
+      expect(userTheme({ mode: 'LIGHT', primary: '#0f766e', accent: '#0F766E' })).toEqual({
+        mode: 'LIGHT',
+        primary: '#0F766E',
+        accent: '#0F766E',
       });
     });
   });

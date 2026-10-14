@@ -54,6 +54,18 @@ export const AuditAction = {
   SPRINT_DELETED: 'SPRINT_DELETED',
   /** An admin opened or read a project they are not a member of (SPEC §3.1). */
   ADMIN_CROSS_PROJECT_ACCESS: 'ADMIN_CROSS_PROJECT_ACCESS',
+  /** An admin saved an app setting; `meta.key` names it, `meta.value` holds the new value. */
+  SETTINGS_UPDATED: 'SETTINGS_UPDATED',
+  /** An admin uploaded the logo or a font file (`meta.file`). */
+  BRANDING_FILE_UPLOADED: 'BRANDING_FILE_UPLOADED',
+  /** An admin removed the logo or a font file (`meta.file`). */
+  BRANDING_FILE_REMOVED: 'BRANDING_FILE_REMOVED',
+  /** An admin asked for a backup now; the result follows as its own entry. */
+  BACKUP_REQUESTED: 'BACKUP_REQUESTED',
+  /** A backup finished (`meta`: trigger, file, size, times, pruned files). */
+  BACKUP_SUCCEEDED: 'BACKUP_SUCCEEDED',
+  /** A backup failed (`meta`: trigger, times, error). */
+  BACKUP_FAILED: 'BACKUP_FAILED',
 } as const;
 
 /** One of the {@link AuditAction} values. */

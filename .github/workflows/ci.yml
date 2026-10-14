@@ -115,12 +115,16 @@ jobs:
         run: npm run test:e2e -w @kloister/web
 
       # The HTML report holds a screenshot of every test and a trace of each
-      # failure; open the run's Summary page to download it.
+      # failure; open the run's Summary page to download it. The API's own
+      # log files from the browser tests (LOG_DIR in playwright.config.ts)
+      # go with it, since the API logs to files rather than to the console.
       - name: Upload the browser-test report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: e2e-report
-          path: apps/web/e2e/report/
+          path: |
+            apps/web/e2e/report/
+            /tmp/kloister-e2e-server/logs/
           retention-days: 14
           if-no-files-found: ignore

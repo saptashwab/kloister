@@ -4,7 +4,7 @@ import { settle } from '../../../testing/fixtures';
 import { AnnotationsApiService } from '../../core/annotations-api.service';
 import { Dialogs } from '../../ui/dialogs';
 import { ToastService } from '../../ui/toast.service';
-import { formatSize, ItemAttachments } from './item-attachments';
+import { ItemAttachments } from './item-attachments';
 
 /** The protected members the tests drive directly. */
 interface Internals {
@@ -33,15 +33,6 @@ function file(id: string, name: string, canDelete = true): AttachmentDto {
     can: { edit: false, delete: canDelete },
   };
 }
-
-describe('formatSize', () => {
-  it('uses bytes, KB and MB', () => {
-    expect(formatSize(1)).toBe('1 byte');
-    expect(formatSize(820)).toBe('820 bytes');
-    expect(formatSize(14540)).toBe('14.2 KB');
-    expect(formatSize(3.1 * 1024 * 1024)).toBe('3.1 MB');
-  });
-});
 
 describe('ItemAttachments', () => {
   async function render(canAdd: boolean, rows: AttachmentDto[] = [file('a1', 'plan.pdf')]) {

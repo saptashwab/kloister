@@ -2,6 +2,18 @@ import { loadConfig } from './app-config.js';
 
 describe('loadConfig', () => {
   const base = { DATABASE_URL: 'postgresql://db' };
+  /** A complete server environment. */
+  const production = {
+    ...base,
+    NODE_ENV: 'production',
+    APP_NAME: 'tracker',
+    ATTACHMENTS_DIR: '/srv/tracker/data/attachments',
+    APP_DIR: '/srv/tracker',
+    BRANDING_DIR: '/srv/tracker/data/branding',
+    BACKUP_DIR: '/srv/tracker/backups/postgres',
+    PG_DUMP_PATH: '/usr/pgsql-18/bin/pg_dump',
+    LOG_DIR: '/srv/tracker/logs',
+  };
 
   it('applies defaults', () => {
     const config = loadConfig(base);
@@ -22,13 +34,28 @@ describe('loadConfig', () => {
 
   it('requires APP_NAME in production so the cookie path is never silently "/"', () => {
     expect(() => loadConfig({ ...base, NODE_ENV: 'production' })).toThrow(/APP_NAME/);
-    const production = {
-      ...base,
-      NODE_ENV: 'production',
-      APP_NAME: 'tracker',
-      ATTACHMENTS_DIR: '/srv/tracker/data/attachments',
-    };
     expect(loadConfig(production).cookiePath).toBe('/tracker/');
+  });
+
+  it('requires every server folder and pg_dump in production, with development fallbacks', () => {
+    expect(loadConfig(production)).toMatchObject({
+      appName: 'tracker',
+      appDir: '/srv/tracker',
+      brandingDir: '/srv/tracker/data/branding',
+      backupsDir: '/srv/tracker/backups/postgres',
+      pgDumpPath: '/usr/pgsql-18/bin/pg_dump',
+      logDir: '/srv/tracker/logs',
+    });
+    for (const name of ['APP_DIR', 'BRANDING_DIR', 'BACKUP_DIR', 'PG_DUMP_PATH', 'LOG_DIR']) {
+      expect(() => loadConfig({ ...production, [name]: '' })).toThrow(new RegExp(name));
+      expect(() => loadConfig({ ...base, [name]: 'relative/path' })).toThrow(new RegExp(name));
+    }
+    const dev = loadConfig(base);
+    expect(dev.brandingDir).toMatch(/kloister-dev-branding$/);
+    expect(dev.backupsDir).toMatch(/kloister-dev-backups$/);
+    expect(dev.pgDumpPath).toBe('pg_dump');
+    expect(dev.logDir).toBeNull();
+    expect(dev.appDir).toBe(process.cwd());
   });
 
   it('requires an absolute ATTACHMENTS_DIR in production, with a temporary folder in development', () => {
@@ -45,6 +72,12 @@ describe('loadConfig', () => {
   it('rejects an APP_NAME that is not a safe path segment', () => {
     expect(() => loadConfig({ ...base, APP_NAME: '../etc' })).toThrow(/APP_NAME/);
     expect(() => loadConfig({ ...base, APP_NAME: 'Has Space' })).toThrow(/APP_NAME/);
+  });
+
+  it('reads LOG_LEVEL, defaulting to info', () => {
+    expect(loadConfig(base).logLevel).toBe('info');
+    expect(loadConfig({ ...base, LOG_LEVEL: 'warn' }).logLevel).toBe('warn');
+    expect(() => loadConfig({ ...base, LOG_LEVEL: 'loud' })).toThrow(/LOG_LEVEL/);
   });
 
   it('requires DATABASE_URL', () => {

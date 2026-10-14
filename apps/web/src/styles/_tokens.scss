@@ -1,7 +1,8 @@
 /*
  * Design tokens (docs/DESIGN.md §2). Every colour, size and shadow the app
  * uses is a `--k-*` custom property defined here; components refer to the
- * tokens only. Admin and user theming (M6) overrides these properties, and
+ * tokens only. Admin and user theming (core/theme.ts) overrides the primary
+ * and accent groups and the UI font at run time, and
  * Angular Material is mapped onto them in _material.scss, so changing the
  * look means changing values here.
  */
@@ -77,6 +78,7 @@
   --k-primary-line: #a5b4fc;
   --k-primary-ink: #3730a3;
   --k-accent: var(--k-primary);
+  --k-on-accent: var(--k-on-primary);
   --k-warn-soft: #fff1e6;
   --k-warn-ink: #a14a08;
   --k-danger-soft: #fdecec;
@@ -113,7 +115,7 @@
   --k-priority-3: #2563eb;
   --k-priority-4: #6b7280;
 
-  /* Type (DESIGN §2.2). The UI font is an admin setting from M6. */
+  /* Type (DESIGN §2.2). The UI font is the admin's choice (core/theme.ts). */
   --k-font: Figtree, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --k-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --k-display: 1.75rem;

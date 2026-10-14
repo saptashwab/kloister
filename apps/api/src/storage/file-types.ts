@@ -1,4 +1,4 @@
-import type { InlineImageType } from '@kloister/shared';
+import type { FontType, InlineImageType } from '@kloister/shared';
 
 /** How many leading bytes {@link sniffType} needs. */
 export const SNIFF_BYTES = 16;
@@ -24,6 +24,26 @@ export function sniffType(head: Uint8Array): InlineImageType | 'application/pdf'
   if (ascii(0, 'GIF87a') || ascii(0, 'GIF89a')) return 'image/gif';
   if (ascii(0, 'RIFF') && ascii(8, 'WEBP')) return 'image/webp';
   if (ascii(0, '%PDF-')) return 'application/pdf';
+  return null;
+}
+
+/**
+ * Detects a font file from its first bytes (docs/DESIGN.md §6 upload rule):
+ * WOFF2 (`wOF2`), WOFF (`wOFF`), TrueType (version 1.0 or `true`) and
+ * OpenType with CFF outlines (`OTTO`). Font collections and anything else
+ * are refused.
+ *
+ * @param head The first bytes of the file.
+ * @returns The font type, or null when it is not a supported font.
+ */
+export function sniffFont(head: Uint8Array): FontType | null {
+  const ascii = (text: string): boolean => [...text].every((c, i) => head[i] === c.charCodeAt(0));
+  if (ascii('wOF2')) return 'font/woff2';
+  if (ascii('wOFF')) return 'font/woff';
+  if (ascii('OTTO')) return 'font/otf';
+  if ((head[0] === 0 && head[1] === 1 && head[2] === 0 && head[3] === 0) || ascii('true')) {
+    return 'font/ttf';
+  }
   return null;
 }
 

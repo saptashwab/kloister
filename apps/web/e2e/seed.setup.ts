@@ -1,8 +1,9 @@
 import { execFile } from 'node:child_process';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { test as setup } from '@playwright/test';
-import { E2E_PASSWORD, PROJECT_KEY, USERS } from './support';
+import { E2E_PASSWORD, E2E_PG_DUMP, PROJECT_KEY, USERS } from './support';
 
 // Seeds the empty CI database the browser tests run against: the first
 // admin through the real create-admin CLI (as install.sh will), then users,
@@ -87,6 +88,20 @@ function day(days: number): string {
 }
 
 setup('seed users, project and items', async () => {
+  // The stand-in pg_dump for the backups screen: it writes a small file to
+  // the --file= target, as pg_dump -Fc would write the dump.
+  await mkdir(dirname(E2E_PG_DUMP), { recursive: true });
+  await writeFile(
+    E2E_PG_DUMP,
+    [
+      '#!/bin/sh',
+      'for arg in "$@"; do case "$arg" in --file=*) out="${arg#--file=}";; esac; done',
+      'printf "PGDMP stand-in dump of %s\\n" "$PGDATABASE" > "$out"',
+      '',
+    ].join('\n'),
+    { mode: 0o755 },
+  );
+
   // Relative to this config's folder, not to wherever the runner started.
   const configFile = setup.info().config.configFile ?? '';
   const apiDir = resolve(dirname(configFile), '../../api');

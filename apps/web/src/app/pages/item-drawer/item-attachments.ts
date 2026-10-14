@@ -7,18 +7,7 @@ import { errorMessage } from '../../core/api';
 import { Dialogs } from '../../ui/dialogs';
 import { Icon } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
-
-/**
- * A file size for people: bytes, KB or MB with one decimal.
- *
- * @param bytes Size in bytes.
- * @returns E.g. "820 bytes", "14.2 KB", "3.1 MB".
- */
-export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} ${bytes === 1 ? 'byte' : 'bytes'}`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+import { formatSize } from '../../core/format';
 
 /**
  * An item's attachments in the drawer (SPEC §6, DESIGN §10): the list with

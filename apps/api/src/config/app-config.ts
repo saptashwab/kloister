@@ -33,6 +33,23 @@ export class AppConfig {
    * root).
    */
   readonly attachmentsDir: string;
+  /** The app name (`APP_NAME`), or empty in local development. Backup files are named after it. */
+  readonly appName: string;
+  /** The app's folder (`/app/<app_name>`), whose disk usage admins see (SPEC §6 storage). */
+  readonly appDir: string;
+  /** Absolute directory for the uploaded logo and font files, outside the web root. */
+  readonly brandingDir: string;
+  /** Absolute directory for database backups (SPEC §9.1 `backups/postgres`). */
+  readonly backupsDir: string;
+  /** The `pg_dump` binary; an absolute path on servers (`/usr/pgsql-<ver>/bin/pg_dump`). */
+  readonly pgDumpPath: string;
+  /**
+   * Absolute directory holding `backend/` and `backups/` log folders (SPEC
+   * §9.1 `logs/`), or null to log to standard output (local development).
+   */
+  readonly logDir: string | null;
+  /** Lowest pino level written (`LOG_LEVEL`, default `info`). */
+  readonly logLevel: LogLevel;
 
   /**
    * Wraps already-validated values; build instances with {@link loadConfig}.
@@ -48,6 +65,13 @@ export class AppConfig {
     loginRateLimit: number;
     loginRateWindowMs: number;
     attachmentsDir: string;
+    appName: string;
+    appDir: string;
+    brandingDir: string;
+    backupsDir: string;
+    pgDumpPath: string;
+    logDir: string | null;
+    logLevel: LogLevel;
   }) {
     this.databaseUrl = values.databaseUrl;
     this.host = values.host;
@@ -57,8 +81,21 @@ export class AppConfig {
     this.loginRateLimit = values.loginRateLimit;
     this.loginRateWindowMs = values.loginRateWindowMs;
     this.attachmentsDir = values.attachmentsDir;
+    this.appName = values.appName;
+    this.appDir = values.appDir;
+    this.brandingDir = values.brandingDir;
+    this.backupsDir = values.backupsDir;
+    this.pgDumpPath = values.pgDumpPath;
+    this.logDir = values.logDir;
+    this.logLevel = values.logLevel;
   }
 }
+
+/** Log levels accepted in `LOG_LEVEL`, most to least severe, plus `silent`. */
+export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
+
+/** One of the {@link LOG_LEVELS}. */
+export type LogLevel = (typeof LOG_LEVELS)[number];
 
 /** Same rule install.sh applies to APP_NAME: it becomes a URL path segment and a Unix user name. */
 const APP_NAME_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -78,6 +115,41 @@ function positiveInt(name: string, raw: string | undefined, fallback: number): n
     throw new Error(`${name} must be a positive integer, got "${raw}"`);
   }
   return value;
+}
+
+/**
+ * Parses `LOG_LEVEL`.
+ *
+ * @param raw Raw value, or undefined when unset.
+ * @returns The level; `info` when unset.
+ */
+function logLevel(raw: string | undefined): LogLevel {
+  if (raw === undefined || raw === '') return 'info';
+  const level = LOG_LEVELS.find((l) => l === raw);
+  if (level === undefined) {
+    throw new Error(`LOG_LEVEL must be one of ${LOG_LEVELS.join(', ')}, got "${raw}"`);
+  }
+  return level;
+}
+
+/**
+ * Reads an absolute folder (or file) path. Servers must set it (install.sh
+ * writes it to `kloister.env`); only local development falls back.
+ *
+ * @param env Environment to read.
+ * @param name Variable name.
+ * @param fallback Value used in development when unset, or null for none.
+ * @returns The path, or the fallback.
+ */
+function serverPath(env: NodeJS.ProcessEnv, name: string, fallback: string | null): string | null {
+  const value = env[name] ?? '';
+  if (value === '' && env['NODE_ENV'] === 'production') {
+    throw new Error(`${name} must be set when NODE_ENV=production`);
+  }
+  if (value !== '' && !isAbsolute(value)) {
+    throw new Error(`${name} must be an absolute path, got "${value}"`);
+  }
+  return value === '' ? fallback : value;
 }
 
 /**
@@ -131,5 +203,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       positiveInt('LOGIN_RATE_WINDOW_SECONDS', env['LOGIN_RATE_WINDOW_SECONDS'], 60) * 1000,
     attachmentsDir:
       attachmentsDir === '' ? join(tmpdir(), 'kloister-dev-attachments') : attachmentsDir,
+    appName,
+    // Development falls back to the working folder and temporary folders,
+    // so nothing lands in a real server path by accident.
+    appDir: serverPath(env, 'APP_DIR', process.cwd()) ?? process.cwd(),
+    brandingDir:
+      serverPath(env, 'BRANDING_DIR', join(tmpdir(), 'kloister-dev-branding')) ?? tmpdir(),
+    backupsDir: serverPath(env, 'BACKUP_DIR', join(tmpdir(), 'kloister-dev-backups')) ?? tmpdir(),
+    // A bare `pg_dump` is looked up on PATH; servers name the PGDG binary
+    // of the cluster's major version, since pg_dump refuses newer servers.
+    pgDumpPath: serverPath(env, 'PG_DUMP_PATH', null) ?? 'pg_dump',
+    logDir: serverPath(env, 'LOG_DIR', null),
+    logLevel: logLevel(env['LOG_LEVEL']),
   });
 }

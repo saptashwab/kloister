@@ -198,6 +198,27 @@
     align-items: center;
     gap: var(--k-space-2);
   }
+
+  .bare-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--k-space-3);
+  }
+}
+
+/* The admin's logo (SPEC §6): scaled to fit, never stretched or cropped. */
+.k-logo {
+  flex: none;
+  width: auto;
+  max-width: 120px;
+  height: 28px;
+  object-fit: contain;
+
+  &.lg {
+    max-width: 240px;
+    height: 56px;
+  }
 }
 
 @media (max-width: 899px) {

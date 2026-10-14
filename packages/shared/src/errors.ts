@@ -22,8 +22,10 @@ export const ErrorCode = {
   FILE_TOO_LARGE: 'FILE_TOO_LARGE',
   /** An upload would take the project over its storage quota (409). */
   QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
-  /** An inline image is not PNG, JPEG, GIF or WebP by content (415). */
+  /** An upload is not of an accepted type by content (415): an inline image or logo that is not PNG, JPEG, GIF or WebP, or a font that is not WOFF2, WOFF, TTF or OTF. */
   UNSUPPORTED_FILE_TYPE: 'UNSUPPORTED_FILE_TYPE',
+  /** A backup is already running (409). */
+  BACKUP_RUNNING: 'BACKUP_RUNNING',
   INTERNAL: 'INTERNAL',
 } as const;
 

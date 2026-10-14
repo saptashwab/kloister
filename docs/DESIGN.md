@@ -377,3 +377,12 @@ M5 adds:
 - Editable descriptions and notes have Image and View images buttons next to the formatting buttons, so images can
   be added and viewed full size without a mouse (section 10).
 - The `@mention` listbox opens under the editing area, not at the caret; M6.5 moves it to the caret.
+
+M6 adds:
+
+- Themes have a third mode, "Same as the device", which follows the operating system (the M4.5 behaviour) and is
+  the default. A chosen primary or accent colour is shown as chosen only where it reaches the contrast in section 2.1;
+  otherwise a darker (light mode) or lighter (dark mode) shade is shown, and the picker names it. The built-in indigo
+  keeps the designed tokens above.
+- The user menu's "Settings and theme" opens a settings page rather than a theme submenu (section 7).
+- Admin settings are one page with tabs (Branding, Security, Storage, Backups, Logs) under the sidebar's Settings link.

@@ -33,6 +33,48 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/admin-users/admin-users').then((m) => m.AdminUsersPage),
   },
   {
+    // Admin settings (SPEC §6 Admin), one tab per section.
+    path: 'admin/settings',
+    canActivate: [authGuard, adminGuard],
+    loadComponent: () =>
+      import('./pages/admin-settings/admin-settings').then((m) => m.AdminSettingsPage),
+    children: [
+      {
+        path: 'branding',
+        loadComponent: () =>
+          import('./pages/admin-settings/admin-branding').then((m) => m.AdminBrandingPage),
+      },
+      {
+        path: 'security',
+        loadComponent: () =>
+          import('./pages/admin-settings/admin-security').then((m) => m.AdminSecurityPage),
+      },
+      {
+        path: 'storage',
+        loadComponent: () =>
+          import('./pages/admin-settings/admin-storage').then((m) => m.AdminStoragePage),
+      },
+      {
+        path: 'backups',
+        loadComponent: () =>
+          import('./pages/admin-settings/admin-backups').then((m) => m.AdminBackupsPage),
+      },
+      {
+        path: 'logs',
+        loadComponent: () =>
+          import('./pages/admin-settings/admin-logs').then((m) => m.AdminLogsPage),
+      },
+      { path: '', pathMatch: 'full', redirectTo: 'branding' },
+    ],
+  },
+  {
+    // The signed-in user's own settings and theme (SPEC §6 user settings).
+    path: 'settings',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./pages/account-settings/account-settings').then((m) => m.AccountSettingsPage),
+  },
+  {
     path: 'admin/audit',
     canActivate: [authGuard, adminGuard],
     loadComponent: () => import('./pages/admin-audit/admin-audit').then((m) => m.AdminAuditPage),

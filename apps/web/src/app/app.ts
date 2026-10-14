@@ -17,6 +17,7 @@ import { AuthService } from './core/auth.service';
 import { NotificationsStore } from './core/notifications.store';
 import { ProjectsNav } from './core/projects-nav';
 import { SessionStore } from './core/session.store';
+import { ThemeService } from './core/theme.service';
 import { StaticAvatar } from './ui/avatar';
 import { Icon } from './ui/icon';
 
@@ -29,9 +30,10 @@ import { Icon } from './ui/icon';
  * unread notification count, polled every 60 seconds while signed in
  * (SPEC §6).
  *
- * The name is a placeholder; from M6 it comes from the admin branding
- * settings so no product or employer name is baked into the build. Admin
- * links are only hidden from non-admins here; the API enforces access.
+ * The name and logo come from the admin's branding, and the signed-in
+ * user's own theme is loaded at sign-in (SPEC §6), so no product or
+ * employer branding is baked into the build. Admin links are only hidden
+ * from non-admins here; the API enforces access.
  */
 @Component({
   imports: [
@@ -59,8 +61,10 @@ export class App {
   protected readonly nav = inject(ProjectsNav);
   /** The unread notification count for the bell. */
   protected readonly notifications = inject(NotificationsStore);
-  /** App name shown in the sidebar. */
-  protected readonly title = signal('Kloister');
+  /** The admin's branding and the theme in effect. */
+  protected readonly theme = inject(ThemeService);
+  /** App name from the admin's branding, shown in the sidebar and sign-in page. */
+  protected readonly title = this.theme.appName;
   /** The account menu opens above its button. */
   protected readonly menuPosition: ConnectedPosition[] = [
     { originX: 'start', originY: 'top', overlayX: 'start', overlayY: 'bottom', offsetY: -6 },
@@ -104,9 +108,10 @@ export class App {
   );
 
   /**
-   * Loads the project switcher and starts the notification polling when
-   * someone signs in (stopping it when they sign out), and closes the narrow
-   * sidebar after every navigation.
+   * Loads the project switcher and the user's own theme and starts the
+   * notification polling when someone signs in (stopping it and returning
+   * to the default theme when they sign out), and closes the narrow sidebar
+   * after every navigation.
    */
   constructor() {
     effect(() => {
@@ -115,9 +120,11 @@ export class App {
         if (id === undefined) {
           this.nav.clear();
           this.notifications.stop();
+          this.theme.setUserTheme(null);
         } else {
           void this.nav.refresh();
           this.notifications.start();
+          void this.theme.loadUserTheme();
         }
       });
     });

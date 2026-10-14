@@ -1,4 +1,6 @@
+import { join } from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
+import { E2E_PG_DUMP, E2E_SERVER_DIR } from './support';
 
 /**
  * Browser tests of the web app against the real API and a real database.
@@ -45,7 +47,17 @@ export default defineConfig({
       timeout: 60_000,
       stdout: 'pipe',
       // Every test signs in through the login form; lift the per-IP limit.
-      env: { LOGIN_RATE_LIMIT: '1000' },
+      // The server folders live in one temporary folder; backups use a
+      // stand-in pg_dump written by the seed step.
+      env: {
+        LOGIN_RATE_LIMIT: '1000',
+        APP_DIR: E2E_SERVER_DIR,
+        ATTACHMENTS_DIR: join(E2E_SERVER_DIR, 'data', 'attachments'),
+        BRANDING_DIR: join(E2E_SERVER_DIR, 'data', 'branding'),
+        BACKUP_DIR: join(E2E_SERVER_DIR, 'backups', 'postgres'),
+        LOG_DIR: join(E2E_SERVER_DIR, 'logs'),
+        PG_DUMP_PATH: E2E_PG_DUMP,
+      },
     },
     {
       command: 'npx ng serve --port 4200',

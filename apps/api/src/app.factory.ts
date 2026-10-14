@@ -9,6 +9,7 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { UuidParamCasePipe } from './common/uuid.js';
 import { createValidationPipe } from './common/validation.js';
 import { loadConfig } from './config/app-config.js';
+import { LogFiles, PinoNestLogger } from './logging/log-files.js';
 
 /**
  * Builds the Fastify adapter. `trustProxy` comes from configuration so that
@@ -63,11 +64,15 @@ export async function createApp(
   options: NestApplicationOptions = {},
 ): Promise<NestFastifyApplication> {
   const config = loadConfig();
+  // Unless the caller chose a logger (tests pass `false`), messages are held
+  // until the pino backend log exists, then written there (SPEC §2).
+  const usePino = options.logger === undefined;
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     createAdapter(config.trustProxy),
-    options,
+    usePino ? { ...options, bufferLogs: true } : options,
   );
+  if (usePino) app.useLogger(new PinoNestLogger(app.get(LogFiles).backend));
   await configureApp(app);
   await app.init();
   return app;

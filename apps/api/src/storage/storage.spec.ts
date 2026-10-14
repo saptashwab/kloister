@@ -6,7 +6,13 @@ import { ErrorCode } from '@kloister/shared';
 import { makeConfig } from '../../test/support/fakes.js';
 import { ApiException } from '../common/api-exception.js';
 import { FileStoreService } from './file-store.service.js';
-import { cleanFileName, contentDisposition, isInlineImageType, sniffType } from './file-types.js';
+import {
+  cleanFileName,
+  contentDisposition,
+  isInlineImageType,
+  sniffFont,
+  sniffType,
+} from './file-types.js';
 
 /** Minimal file heads of each recognised type. */
 const HEADS = {
@@ -39,6 +45,24 @@ describe('sniffType (SPEC §5: checked by content, never SVG)', () => {
     expect(isInlineImageType('application/pdf')).toBe(false);
     expect(isInlineImageType('image/svg+xml')).toBe(false);
     expect(isInlineImageType(null)).toBe(false);
+  });
+});
+
+describe('sniffFont (docs/DESIGN.md §6: fonts checked by content)', () => {
+  it('recognises WOFF2, WOFF, TrueType and OpenType', () => {
+    expect(sniffFont(Buffer.from('wOF2rest'))).toBe('font/woff2');
+    expect(sniffFont(Buffer.from('wOFFrest'))).toBe('font/woff');
+    expect(sniffFont(Uint8Array.from([0, 1, 0, 0, 0, 12]))).toBe('font/ttf');
+    expect(sniffFont(Buffer.from('true-rest'))).toBe('font/ttf');
+    expect(sniffFont(Buffer.from('OTTOrest'))).toBe('font/otf');
+  });
+
+  it('refuses images, collections, SVG fonts and text', () => {
+    expect(sniffFont(Uint8Array.from(HEADS.png))).toBeNull();
+    expect(sniffFont(Buffer.from('ttcfrest'))).toBeNull();
+    expect(sniffFont(Buffer.from('<svg><font'))).toBeNull();
+    expect(sniffFont(Buffer.from('@font-face {'))).toBeNull();
+    expect(sniffFont(Uint8Array.from([0, 1]))).toBeNull();
   });
 });
 

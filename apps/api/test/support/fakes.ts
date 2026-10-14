@@ -27,7 +27,7 @@ export interface FakePrisma {
   user: { findUnique: Fn; findMany: Fn; create: Fn; update: Fn; count: Fn };
   session: { findUnique: Fn; create: Fn; update: Fn; deleteMany: Fn };
   auditLog: { create: Fn; findMany: Fn };
-  appSetting: { findUnique: Fn };
+  appSetting: { findUnique: Fn; upsert: Fn };
   project: { findUnique: Fn; findMany: Fn; create: Fn; update: Fn };
   projectMember: {
     findUnique: Fn;
@@ -53,7 +53,7 @@ export function fakePrisma(): { fake: FakePrisma; prisma: PrismaService } {
     user: { findUnique: fn(), findMany: fn(), create: fn(), update: fn(), count: fn() },
     session: { findUnique: fn(), create: fn(), update: fn(), deleteMany: fn() },
     auditLog: { create: fn(), findMany: fn() },
-    appSetting: { findUnique: fn() },
+    appSetting: { findUnique: fn(), upsert: fn() },
     project: { findUnique: fn(), findMany: fn(), create: fn(), update: fn() },
     projectMember: {
       findUnique: fn(),
@@ -177,6 +177,13 @@ export function makeConfig(
     loginRateLimit: 10,
     loginRateWindowMs: 60_000,
     attachmentsDir: '/unused/attachments',
+    appName: 'kloister-test',
+    appDir: '/unused',
+    brandingDir: '/unused/branding',
+    backupsDir: '/unused/backups',
+    pgDumpPath: 'pg_dump',
+    logDir: null,
+    logLevel: 'silent',
     ...overrides,
   });
 }

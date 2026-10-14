@@ -1,4 +1,20 @@
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { expect, type Page } from '@playwright/test';
+
+/**
+ * The API's server folder in the browser tests (`APP_DIR`): attachments,
+ * branding files, backups and logs all go below it, so the storage screen
+ * measures something real and nothing lands anywhere else.
+ */
+export const E2E_SERVER_DIR = join(tmpdir(), 'kloister-e2e-server');
+
+/**
+ * A stand-in for pg_dump that writes a small file, written by the seed
+ * step. The CI runner's own pg_dump is older than the Postgres service and
+ * would refuse to dump it (see docs/DECISIONS.md, M6).
+ */
+export const E2E_PG_DUMP = join(E2E_SERVER_DIR, 'bin', 'pg_dump');
 
 /**
  * Password every seeded test user ends up with. These accounts exist only in

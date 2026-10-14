@@ -12,6 +12,14 @@
 @use '@fontsource/figtree/600.css' as figtree-600;
 @use '@fontsource/figtree/700.css' as figtree-700;
 @use '@fontsource/jetbrains-mono/500.css' as mono-500;
+// The other bundled UI font presets (docs/DESIGN.md §6). Browsers download
+// a font file only when the admin's chosen font uses it.
+@use '@fontsource/atkinson-hyperlegible/400.css' as atkinson-400;
+@use '@fontsource/atkinson-hyperlegible/700.css' as atkinson-700;
+@use '@fontsource/ibm-plex-sans/400.css' as plex-400;
+@use '@fontsource/ibm-plex-sans/500.css' as plex-500;
+@use '@fontsource/ibm-plex-sans/600.css' as plex-600;
+@use '@fontsource/ibm-plex-sans/700.css' as plex-700;
 @use 'styles/tokens';
 @use 'styles/material';
 @use 'styles/base';
@@ -19,3 +27,4 @@
 @use 'styles/shell';
 @use 'styles/drawer';
 @use 'styles/annotations';
+@use 'styles/settings';

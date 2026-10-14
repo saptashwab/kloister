@@ -1,0 +1,192 @@
+/*
+ * Settings screens (SPEC §6 user and admin settings): the tab bar of the
+ * admin settings, rows of form fields, choice cards, file rows and disk
+ * usage bars. On the design tokens only; global so component style budgets
+ * stay small.
+ */
+
+/* The admin settings tabs. */
+.k-settings-tabs {
+  margin-bottom: var(--k-space-2);
+}
+
+/* A row of form fields that wraps at narrow widths. */
+.k-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--k-space-4);
+
+  .mat-mdc-form-field {
+    flex: 1 1 220px;
+    max-width: 320px;
+  }
+}
+
+/* Buttons at the end of a panel. */
+.k-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-2);
+}
+
+/* Cards of a radio choice, such as the UI font (one per option). */
+.k-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--k-space-2);
+}
+
+.k-choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-1);
+  padding: var(--k-space-3);
+  border: 1px solid var(--k-border);
+  border-radius: var(--k-radius-md);
+  background: var(--k-surface);
+  cursor: pointer;
+
+  &.on {
+    border-color: var(--k-primary);
+    background: var(--k-primary-soft);
+  }
+
+  &.off {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .name {
+    display: flex;
+    align-items: center;
+    gap: var(--k-space-2);
+    font-weight: 600;
+  }
+
+  .sample {
+    font-size: 1.125rem;
+    line-height: 1.3;
+  }
+
+  .hint {
+    font-size: var(--k-small);
+    color: var(--k-muted);
+  }
+}
+
+/* An uploaded file with its details and actions. */
+.k-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--k-space-3);
+  padding: var(--k-space-3);
+  border: 1px solid var(--k-border);
+  border-radius: var(--k-radius-md);
+
+  .what {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 200px;
+    min-width: 0;
+  }
+
+  .detail {
+    font-size: var(--k-small);
+    color: var(--k-muted);
+    overflow-wrap: anywhere;
+  }
+}
+
+/* A hidden file input opened by a button. */
+.k-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Disk usage: one bar per folder. */
+.k-usage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) auto;
+    gap: var(--k-space-1) var(--k-space-3);
+    align-items: baseline;
+  }
+
+  .name {
+    font-weight: 600;
+  }
+
+  .size {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .path {
+    grid-column: 1 / -1;
+    font-family: var(--k-font-mono);
+    font-size: var(--k-small);
+    color: var(--k-muted);
+    overflow-wrap: anywhere;
+  }
+
+  .bar {
+    grid-column: 1 / -1;
+    height: 8px;
+    border-radius: var(--k-radius-full);
+    background: var(--k-sunken);
+    overflow: hidden;
+
+    span {
+      display: block;
+      height: 100%;
+      background: var(--k-primary);
+    }
+  }
+}
+
+/* Key facts in a panel, such as the next backup. */
+.k-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--k-space-2) var(--k-space-6);
+  margin: 0;
+
+  div {
+    display: flex;
+    flex-direction: column;
+  }
+
+  dt {
+    font-size: var(--k-small);
+    color: var(--k-muted);
+  }
+
+  dd {
+    margin: 0;
+    font-weight: 600;
+  }
+}
+
+/* Tables scroll inside their panel at narrow widths. */
+.k-table-scroll {
+  overflow-x: auto;
+}
+
+/* One settings tab: its panels stacked. */
+.k-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-4);
+  padding-top: var(--k-space-2);
+}

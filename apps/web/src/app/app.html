@@ -3,7 +3,11 @@
   <div class="shell" [class.nav-open]="navOpen()">
     <nav class="sidebar" aria-label="Main">
       <div class="brand">
-        <span class="mark" aria-hidden="true"><app-icon name="board" [size]="16" /></span>
+        @if (theme.logoUrl(); as logo) {
+          <img class="k-logo" [src]="logo" alt="" />
+        } @else {
+          <span class="mark" aria-hidden="true"><app-icon name="board" [size]="16" /></span>
+        }
         <h1>{{ title() }}</h1>
         <button
           #closeNavButton
@@ -63,6 +67,9 @@
         <a class="nav-link" routerLink="/admin/users" routerLinkActive="active">
           <app-icon name="users" [size]="18" />Users
         </a>
+        <a class="nav-link" routerLink="/admin/settings" routerLinkActive="active">
+          <app-icon name="settings" [size]="18" />Settings
+        </a>
         <a class="nav-link" routerLink="/admin/audit" routerLinkActive="active">
           <app-icon name="audit" [size]="18" />Audit log
         </a>
@@ -84,6 +91,9 @@
       </button>
       <ng-template #userMenu>
         <div class="k-popover k-menu" cdkMenu>
+          <a class="k-action" cdkMenuItem routerLink="/settings">
+            <app-icon name="palette" [size]="18" />Settings and theme
+          </a>
           <a class="k-action" cdkMenuItem routerLink="/change-password">
             <app-icon name="key" [size]="18" />Change password
           </a>
@@ -123,7 +133,12 @@
   </div>
 } @else {
   <main id="main" class="bare">
-    <h1 class="bare-title">{{ title() }}</h1>
+    <div class="bare-brand">
+      @if (theme.logoUrl(); as logo) {
+        <img class="k-logo lg" [src]="logo" alt="" />
+      }
+      <h1 class="bare-title">{{ title() }}</h1>
+    </div>
     @if (store.user(); as pending) {
       <div class="bare-actions">
         <span class="muted">{{ pending.displayName }}</span>

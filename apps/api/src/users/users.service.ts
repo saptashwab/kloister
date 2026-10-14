@@ -4,7 +4,9 @@ import {
   ErrorCode,
   type Page,
   SystemRole,
+  type MyThemeDto,
   type TemporaryPasswordResponse,
+  type ThemeDto,
   type UserDto,
 } from '@kloister/shared';
 import { AuditService } from '../audit/audit.service.js';
@@ -16,7 +18,7 @@ import { pageArgs, toPage } from '../common/pagination.js';
 import { isUniqueViolation, mapTransactionConflict } from '../common/prisma-errors.js';
 import type { Prisma, User } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { normalizeEmail, toUserDto } from './user.mapper.js';
+import { normalizeEmail, toUserDto, userTheme } from './user.mapper.js';
 import type { CreateUserDto, ListUsersQueryDto, UpdateMeDto, UpdateUserDto } from './users.dto.js';
 
 /** Outcome of {@link UsersService.bootstrapAdmin}. */
@@ -293,6 +295,37 @@ export class UsersService {
       return updated;
     });
     return toUserDto(user);
+  }
+
+  /**
+   * Returns the caller's own theme (SPEC §6 user settings).
+   *
+   * @param auth The caller.
+   * @returns Their theme, or null when they use the admin default.
+   */
+  getMyTheme(auth: AuthContext): MyThemeDto {
+    return { theme: userTheme(auth.user.themePrefs) };
+  }
+
+  /**
+   * Sets or clears the caller's own theme. A personal look, so it is not
+   * audited.
+   *
+   * @param auth The caller.
+   * @param theme The theme, or null for "use default".
+   * @returns The stored theme.
+   */
+  async setMyTheme(auth: AuthContext, theme: ThemeDto | null): Promise<MyThemeDto> {
+    const themePrefs =
+      theme === null
+        ? {}
+        : {
+            mode: theme.mode,
+            primary: theme.primary.toUpperCase(),
+            accent: theme.accent.toUpperCase(),
+          };
+    await this.prisma.user.update({ where: { id: auth.user.id }, data: { themePrefs } });
+    return { theme: userTheme(themePrefs) };
   }
 
   /**

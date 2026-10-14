@@ -54,38 +54,8 @@ export class FileStoreService {
    * @returns The received file; 413 `FILE_TOO_LARGE` when larger than the
    *   limit, 400 when empty. Nothing is left behind on failure.
    */
-  async receive(source: Readable, maxBytes: number): Promise<ReceivedFile> {
-    const dir = join(this.config.attachmentsDir, INCOMING);
-    await mkdir(dir, { recursive: true, mode: 0o750 });
-    const tempPath = join(dir, randomUUID());
-    const hash = createHash('sha256');
-    let size = 0;
-    let head = Buffer.alloc(0);
-    const meter = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        size += chunk.length;
-        if (size > maxBytes) {
-          callback(fileTooLarge(maxBytes));
-          return;
-        }
-        if (head.length < SNIFF_BYTES) {
-          head = Buffer.concat([head, chunk.subarray(0, SNIFF_BYTES - head.length)]);
-        }
-        hash.update(chunk);
-        callback(null, chunk);
-      },
-    });
-    try {
-      await pipeline(source, meter, createWriteStream(tempPath, { mode: 0o640 }));
-    } catch (error) {
-      await rm(tempPath, { force: true });
-      throw error;
-    }
-    if (size === 0) {
-      await rm(tempPath, { force: true });
-      throw invalidField('file', 'The file is empty');
-    }
-    return { tempPath, sizeBytes: size, sha256: hash.digest('hex'), head };
+  receive(source: Readable, maxBytes: number): Promise<ReceivedFile> {
+    return receiveInto(join(this.config.attachmentsDir, INCOMING), source, maxBytes);
   }
 
   /**
@@ -180,6 +150,55 @@ export class FileStoreService {
       }
     }
   }
+}
+
+/**
+ * Streams an upload into a folder under a random name while counting its
+ * size and computing its SHA-256, without holding it in memory. Used for
+ * attachments and for the admin's branding files; the caller renames the
+ * file into place (same file system) or discards it.
+ *
+ * @param dir Folder for files still being checked; created if missing.
+ * @param source The request body.
+ * @param maxBytes Largest size accepted.
+ * @returns The received file; 413 `FILE_TOO_LARGE` when larger than the
+ *   limit, 400 when empty. Nothing is left behind on failure.
+ */
+export async function receiveInto(
+  dir: string,
+  source: Readable,
+  maxBytes: number,
+): Promise<ReceivedFile> {
+  await mkdir(dir, { recursive: true, mode: 0o750 });
+  const tempPath = join(dir, randomUUID());
+  const hash = createHash('sha256');
+  let size = 0;
+  let head = Buffer.alloc(0);
+  const meter = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      size += chunk.length;
+      if (size > maxBytes) {
+        callback(fileTooLarge(maxBytes));
+        return;
+      }
+      if (head.length < SNIFF_BYTES) {
+        head = Buffer.concat([head, chunk.subarray(0, SNIFF_BYTES - head.length)]);
+      }
+      hash.update(chunk);
+      callback(null, chunk);
+    },
+  });
+  try {
+    await pipeline(source, meter, createWriteStream(tempPath, { mode: 0o640 }));
+  } catch (error) {
+    await rm(tempPath, { force: true });
+    throw error;
+  }
+  if (size === 0) {
+    await rm(tempPath, { force: true });
+    throw invalidField('file', 'The file is empty');
+  }
+  return { tempPath, sizeBytes: size, sha256: hash.digest('hex'), head };
 }
 
 /**
