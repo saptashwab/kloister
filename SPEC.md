@@ -21,6 +21,8 @@ applied after installation through admin theme settings.
 - Kanban board with buckets, status, labels, assignees, due dates, checklists, notes, attachments
 - Sprints, backlog/hierarchy view
 - In-app notifications only
+- My work: everything assigned to the user across their projects, plus their personal tasks, as a list or a status board
+- A private personal space per user for personal tasks (boards, buckets, labels, checklists), visible to its owner only
 - ADO CSV export
 - Theme: admin default + per-user override, admin-set app name and logo
 - Admin-controlled Postgres backups and log retention
@@ -29,6 +31,9 @@ applied after installation through admin theme settings.
 ### v2 (out of scope now; design must not block it)
 - Natural-language task parser (llama.cpp on the server), gated by admin per user and per project
 - Optional TOTP second factor (no server-sent codes)
+
+### v3 (later; design must not block it)
+- Move or copy a personal task into a project (and back)
 
 ---
 
@@ -120,6 +125,21 @@ Teams let a PM plan a project in more detail; a project works fully without any.
 
 ---
 
+### 3.6 Personal spaces
+Every user has exactly one personal space: a private project for tasks that belong to no project (finish a training,
+submit a reimbursement). It is created on first use.
+- Only its owner can see or change anything in it. Nobody else can, system admins included: there is no admin
+  cross-project access, no PM assignment, no members, no teams, no assignees other than the owner and no `@mention`.
+  Requests from anyone else get 404, as for any project they cannot see (3.4).
+- Inside it the owner has the PM rights of 3.2 (buckets, labels, sprints, label style, items, checklists, notes,
+  attachments), so it works like any board.
+- It never appears in the admin "All projects" list, in another user's "all their work", in ADO export or in the admin
+  audit log viewer (its entries are kept for the owner's activity history only).
+- Attachments in it count against a per-user quota (5), not a project quota.
+- When the owner is deactivated it is kept unchanged and stays hidden; reactivation restores access.
+- Privacy is enforced by the app. Server operators with database or file access (including backups) can still read
+  it; docs/ADMIN.md says so.
+
 ## 4. Data model (Prisma)
 
 All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
@@ -127,7 +147,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **User**: email (unique, lowercased), displayName, passwordHash, systemRole (`ADMIN|USER`),
   mustChangePassword, isActive, failedLoginCount, lockedUntil, themePrefs (json), lastLoginAt
 - **Session**: userId, tokenHash, expiresAt, lastSeenAt, userAgent, ip
-- **Project**: key (2–6 uppercase chars, unique, used in item numbers like `KLO-42`), name, description,
+- **Project**: key (2–6 uppercase chars, unique, used in item numbers like `KLO-42`; null for personal spaces, whose
+  items are shown as `#42`), ownerId (nullable, unique; set only for a personal space, its owner), name, description,
   archivedAt, settings (json: membersCanAssignOthers, statusToBucket rules, labelStyle (`SOLID|TINTED|COVER`, default `SOLID`, set by PMs), ado settings)
 - **ProjectMember**: projectId, userId, role (`PM|LEAD|MEMBER|VIEWER`), visibility (`ALL|BUCKETS|OWN|TEAMS`),
   allowedBucketIds (uuid[]); unique (projectId, userId)
@@ -185,6 +206,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - stored as `/app/kloister/data/attachments/<projectId>/<uuid>`, never under the web root
   - served via an authenticated endpoint with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`
   - max file size 25 MB and per-project quota 2 GB by default, both admin-configurable; inline images use the same size limit and count toward the quota
+  - personal spaces have a per-user quota instead, 1 GB by default, admin-configurable next to the project quota
   - inline images are served only to users who can see the item, with `X-Content-Type-Options: nosniff`
 - No outbound network calls from the backend at runtime.
 
@@ -193,7 +215,19 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 ## 6. Features (frontend)
 
 - **Login / forced password change**
-- **Projects list**: the user's projects. Admins also get the All/My toggle.
+- **Projects list**: the user's projects. Admins also get the All/My toggle. Personal spaces are never listed here.
+- **My work** (sidebar): everything assigned to the signed-in user across their unarchived projects, limited by their
+  access in each, plus all open items of their personal space.
+  - List view (default) grouped by due date: Overdue, Today, This week, Later, No date.
+  - Board view with the four statuses as columns (Not started, In progress, Blocked, Done). Buckets are per project and
+    are never merged or mapped across projects; each card shows its project (or "Personal") and its bucket as a tag.
+    Dragging a card to another column changes its status, which applies that project's `statusToBucket` rule (4.2).
+  - Filters: source (All, Projects, Personal), project, type, label and due; an "Also items I created" switch; Done
+    items on request; group by project as an option. Clicking a card opens it in its own project or personal space.
+  - "View all their work" for another person (below) uses the same list and board views, never includes personal
+    items, and is limited by the viewer's access in each project.
+- **Personal space** (3.6): its own entry at the top of the sidebar's project list, with the board, backlog, sprints
+  and settings of a project (buckets, labels, label style), without members, teams, assignees or ADO export.
 - **Board** (main view):
   - columns are buckets, with a Group-by switch: Bucket (default), Status, Assignee, Sprint
   - drag-drop between and within columns
@@ -216,7 +250,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Project settings** (PM): general, members (role and visibility per member), teams (optional), buckets (with rules),
   labels, label style, statusToBucket map, ADO export settings
 - **Notifications**: bell with unread count, polled every 60s. Notification types:
-  assigned to you, mentioned, due tomorrow, overdue, status change on items you created.
+  assigned to you, mentioned, due tomorrow, overdue, status change on items you created. Due tomorrow and overdue also
+  cover the owner's personal tasks.
   Due-date checks run daily at 09:00 server time.
 - **User settings**: display name, password change, theme (mode, primary and accent colour) or "use default"
 - **Admin**:
@@ -225,7 +260,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - branding (app name, logo upload, default theme, UI font: a preset (Figtree (default), Atkinson Hyperlegible, IBM Plex Sans,
     Georgia, Arial) or an uploaded font file; one font for everyone, no per-user override)
   - security (session timeouts, lockout)
-  - storage (attachment limits, disk usage of `/app/kloister`)
+  - storage (attachment limits: file size, project quota, personal space quota per user; disk usage of `/app/kloister`)
   - backups (enable, time, retention days, last results, "run now")
   - logs (retention days)
   - audit log viewer with filters
@@ -295,7 +330,7 @@ and the export preview lists this as a warning.
 - `GET /api/v1/health` returns 200 with no auth required, for scripts.
 - An OpenAPI doc is generated at build time into `docs/` (not served in production).
 
-Main groups: `auth`, `me`, `users/:id/work`, `admin/users`, `admin/settings`, `admin/audit`, `admin/backups`,
+Main groups: `auth`, `me`, `me/work`, `me/personal` (the caller's personal space), `users/:id/work`, `admin/users`, `admin/settings`, `admin/audit`, `admin/backups`,
 `projects`, `projects/:id/members`, `projects/:id/teams`, `buckets`, `labels`, `sprints`, `items` (+ `/move`, `/checklist`,
 `/notes`, `/attachments`, `/children`), `notifications`, `projects/:id/export/ado` (+ `/preview`).
 
@@ -394,6 +429,7 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M5 | Notes, mentions, attachments, images pasted or dropped into descriptions and notes, notifications |
 | M6 | Theming and branding (including the UI font), admin settings, backups, log retention, disk usage |
 | M6.5 | Polish pass over every screen, reviewed from the browser-test screenshots: consistency, accessibility (WCAG 2.2 AA: keyboard, focus, contrast, screen readers, reduced motion), layouts at phone and tablet width, motion, keyboard shortcuts and a command palette, large-board performance |
+| M6.7 | My work as list and status board across projects (filters, "also items I created", group by project), the same views for "all their work", and the private personal space per user (3.6) with its per-user quota setting, plus the permission tests proving nobody else, admins included, can reach it |
 | M7 | Deploy scripts, release workflow, INSTALL/UPGRADE/ADMIN docs, end-to-end install test on a RHEL 8 VM (first usable release, v1.0) |
 | M8 | ADO export plus preview, validated by tests against the documented import rules (v1.1) |
 

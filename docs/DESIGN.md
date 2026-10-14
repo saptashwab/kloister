@@ -386,3 +386,9 @@ M6 adds:
   keeps the designed tokens above.
 - The user menu's "Settings and theme" opens a settings page rather than a theme submenu (section 7).
 - Admin settings are one page with tabs (Branding, Security, Storage, Backups, Logs) under the sidebar's Settings link.
+
+Planned for M6.7 (SPEC §3.6, §6):
+
+- The sidebar's project list starts with "Personal", the signed-in user's private personal space.
+- My work gets a list view grouped by due date and a board view with the four statuses as columns; cards there show
+  a project chip ("Personal" for personal tasks) and their bucket as a small tag.
