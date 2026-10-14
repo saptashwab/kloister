@@ -53,8 +53,9 @@ export async function signIn(page: Page, email: string): Promise<void> {
   await page.getByLabel('Email').fill(email);
   await page.getByLabel('Password').fill(E2E_PASSWORD);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  // The project list's key link (the sidebar link also names the project).
-  await expect(page.getByRole('link', { name: PROJECT_KEY, exact: true })).toBeVisible();
+  // The signed-in list also works for users with no project memberships.
+  await expect(page.getByRole('heading', { name: 'Projects', exact: true })).toBeVisible();
+  await expect(page.locator('app-skeleton')).toHaveCount(0);
 }
 
 /**

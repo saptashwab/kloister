@@ -58,6 +58,10 @@ describe('RichTextEditor', () => {
    * @param area The editing area.
    */
   function caretAtEnd(area: HTMLElement): void {
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
     // jsdom has no layout; supply a known caret rectangle to check anchoring.
     Object.defineProperty(Range.prototype, 'getBoundingClientRect', {
       configurable: true,

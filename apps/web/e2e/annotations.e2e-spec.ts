@@ -194,7 +194,10 @@ test('images pasted or dropped into a description and a note open full size', as
   await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog', { name: 'expected-total.png' })).toBeVisible();
   await page.getByRole('button', { name: 'Close', exact: true }).last().click();
-  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('dialog', { name: 'expected-total.png', exact: true })).toHaveCount(
+    0,
+  );
+  await expect(drawer).toBeVisible();
   await expect(noteImage).toBeFocused();
 });
 

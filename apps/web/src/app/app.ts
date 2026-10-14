@@ -152,7 +152,8 @@ export class App {
   protected closeNav(): void {
     if (!this.navOpen()) return;
     this.navOpen.set(false);
-    this.openNavButton()?.nativeElement.focus();
+    // Wait for the content's inert attribute to be removed before focusing it.
+    setTimeout(() => this.openNavButton()?.nativeElement.focus());
   }
 
   /**
