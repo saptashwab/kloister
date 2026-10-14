@@ -350,6 +350,7 @@ Main groups: `auth`, `me`, `me/work`, `me/personal` (the caller's personal space
 ├── config/kloister.env               chmod 600, owner <app_name>
 ├── config/.pgpass                    chmod 600
 ├── data/attachments/
+├── data/branding/                     admin-uploaded logo and font files (served by the app, never under the web root)
 ├── backups/postgres/                 <app_name>-<yyyymmdd-hhmmss>.dump (pg_dump -Fc)
 ├── logs/backend/backend-<yyyy-mm-dd>.log
 ├── logs/backups/backup-<yyyy-mm-dd>.log
