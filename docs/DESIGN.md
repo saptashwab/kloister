@@ -421,3 +421,27 @@ M6.5 resolves and adds:
 - Drawer details, settings presentation and command-dialog styles load with their lazy screens to keep the
   unchanged initial bundle budget. These changes resolve the deferred tablet rail, drawer focus trap and
   caret-mention differences above; the blocked-status and person-chip differences remain.
+
+Planned for M6.8 (SPEC §6.1–6.3), without changes to the approved artboards:
+
+- Card and drawer actions add **Duplicate item…**. A dialog offers one copy per selected person or a copy
+  count with optional assignments, previews the resulting titles and assignees, and confirms **Create N copies**.
+  New tasks start with fresh progress; keep dates/sprint and copy attachments are explicit options. The dialog
+  explains the difference between several people sharing one task and each person having their own copy.
+- My work and project screens add **Export…**, with current-filtered versus all-eligible scope, included details
+  and counts. Name the latter **All my work** or **All visible project items** to identify its source. My work
+  keeps its assigned/created/personal source rules, Done option and unarchived-project limits in either case.
+  **Include files for offline use** produces an archive with the workbook and permitted files/content; a plain
+  workbook is the smaller default. State that these snapshots support offline reading, while recovery requires
+  backups. Export controls use readable scope, not the ADO role restriction.
+- A single **Help & FAQ** sidebar entry keeps support easy to find without adding several learning links.
+  Its searchable page groups short how-to articles, labels role requirements and offers **Take the tour**.
+- The tour is a short guided visit to pages, with brief instructions, step count, Back/Next and Skip. It combines
+  common steps with the user's effective permissions in the chosen project/team and any system-admin tools.
+  Replaying after a role change uses current permissions. It never performs real edits, blocks password change,
+  or runs automatically just because a role changed. Empty projects have explanatory steps rather than broken
+  targets. Keep the usual path within 2–3 minutes; put optional detail in linked FAQ articles.
+- Tour navigation and overlays use existing tokens and shared/CDK components, with keyboard focus management,
+  visible focus, screen-reader instructions and reduced motion. On phones, instructions must not hide their
+  target or require horizontal page scrolling. Load tour, help and export presentation lazily within the
+  unchanged bundle budget. These are planned additions, not completed differences from the canvas.

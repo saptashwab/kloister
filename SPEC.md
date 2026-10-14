@@ -24,6 +24,9 @@ applied after installation through admin theme settings.
 - My work: everything assigned to the user across their projects, plus their personal tasks, as a list or a status board
 - A private personal space per user for personal tasks (boards, buckets, labels, checklists), visible to its owner only
 - ADO CSV export
+- Duplicate work items, including one fresh copy per selected person
+- Excel snapshots and optional offline file archives of visible work
+- A short first-login tour and searchable Help & FAQ
 - Theme: admin default + per-user override, admin-set app name and logo
 - Admin-controlled Postgres backups and log retention
 - Install / upgrade / start / stop scripts for RHEL 8
@@ -83,6 +86,7 @@ kloister/
 |---|---|---|---|---|
 | View items (within visibility scope) | ✔ | ✔ | ✔ | ✔ |
 | Create items | ✔ | ✔ | ✔ | ✘ |
+| Duplicate fully visible items within the same space | ✔ | ✔ | ✔ | ✘ |
 | Edit any item | ✔ | ✔ | ✘ | ✘ |
 | Edit items assigned to or created by self | ✔ | ✔ | ✔ | ✘ |
 | Assign items to others | ✔ | ✔ | Project setting (default off) | ✘ |
@@ -93,8 +97,13 @@ kloister/
 | Manage members, roles, visibility | ✔ | ✘ | ✘ | ✘ |
 | Project settings, ADO settings, archive project | ✔ | ✘ | ✘ | ✘ |
 | ADO export | ✔ | ✔ | ✘ | ✘ |
+| Excel / offline export of visible data | ✔ | ✔ | ✔ | ✔ |
 
 A project must always have at least one PM; removing or demoting the last PM is rejected.
+
+Duplication requires the ordinary create permission, full visibility of the source and the normal creation,
+assignment and destination-scope checks. A title-only ancestor is not a readable source. Excel/offline export
+adds no visibility: every included item, related detail and file must be readable by the caller (6.2).
 
 ### 3.3 Visibility scope (Member and Viewer only; PM and Lead always see everything)
 - `ALL`: every item in the project
@@ -270,6 +279,78 @@ Theming uses CSS custom properties only. Default palette is neutral (slate/indig
 
 ---
 
+### 6.1 Duplicate work items (M6.8)
+
+- "Duplicate item…" is available in the card actions and drawer actions when the caller may create items and
+  fully read the source. Copies stay in the same project or personal space; copying between spaces stays v3.
+- The dialog offers one copy per selected person (the selection determines the count), or a number of copies
+  with optional assignments. Assignment controls obey the existing assignment permission; users without
+  permission to assign others can choose only themselves or unassigned. Personal copies stay owner-only.
+- Show a preview of each new title and assignee and an explicit "Create N copies" action before submission.
+  Each copy is independent and gets a new item number; the caller is its creator.
+- Copy title, description and checklist text, type, priority and labels; reset status to Not started,
+  completion and checked checklist lines. Dates and sprint are explicit keep options. An optional parent must
+  satisfy the ordinary readable-reference and hierarchy rules. Do not copy notes, activity history,
+  dependencies or children. Attachments are opt-in; description images must be usable from the new item,
+  independently authorized and included in the existing quota and content checks.
+- Multiple assignees continue to share one item's status and checklist. Independent progress needs separate
+  tasks, optionally grouped under a Story or Feature; duplication does not add per-assignee progress fields.
+
+### 6.2 Excel snapshots and offline archives (M6.8)
+
+- My work and project screens offer "Export…": current filtered view or all eligible items in that source
+  view, with a preview of scope, filters, item count and included details. "All my work" keeps My work's
+  assigned/created-item rules, chosen All/Projects/Personal source, Done option and unarchived-project limits;
+  it never becomes a search of every visible project item. "All visible project items" stays inside the
+  selected project. The all option removes narrowing project/type/label/due/text filters where applicable,
+  while the filtered option keeps them. Export includes every matching page, not just
+  the currently loaded page. Personal-space export is owner-only; another person's personal work is never
+  included. Archived projects can be read/exported but not duplicated.
+- Every project role, including Viewers, may export readable data. ADO export remains PM/Lead only (3.2, 7).
+  My work uses the same project-membership and visibility limits as its list, including for admins. Direct
+  project exports retain the existing admin cross-project access auditing; they never expose personal spaces.
+- The .xlsx workbook is a readable snapshot with a Summary sheet (scope, filters, export time), Items sheet
+  (hierarchy, all assignees, status, bucket, sprint, team, labels, priority, dates, description and progress),
+  and linked sheets for Checklists, Notes, Dependencies, Files and readable activity history. Include related
+  details only to the extent the caller may read them. Hidden ancestors remain titles only; hidden item
+  references and private audit metadata must not leak through related sheets.
+- Use filters, frozen headers, wrapped text, suitable column widths and clear date formatting. Preserve all
+  selected readable content without silent truncation, loss of assignees or unreported omissions. Rich-text
+  content is readable in Excel; its original formatting/content is retained in the offline archive. User text
+  is data, never a spreadsheet formula or macro. Record the snapshot's scope and any limits in its summary.
+- "Include files for offline use" downloads a ZIP containing the workbook, readable descriptions/notes with
+  their inline images, permitted attachments and an index linking items to files. Access does not depend on
+  the running app, and original filenames must not become unsafe archive paths. Generate exports locally on
+  the server, without external services; keep libraries out of the initial frontend bundle. These are readable
+  snapshots, not a database restore format; existing database and file backups remain necessary.
+
+### 6.3 First-login tour and Help & FAQ (M6.8)
+
+- A skippable, untimed introduction follows the user's first successful required password change. It must
+  never run before that change, weaken the password-change restriction, or repeat automatically for later
+  sign-ins/password resets. Completing or skipping it dismisses the automatic first-login introduction.
+  Existing accounts get manual replay without a forced tour on upgrade. First-login state must be durable
+  across browsers; its data representation is proposed and approved during M6.8 planning before schema edits.
+- The normal path takes no more than 2–3 minutes, with a few brief steps, Back, Next, Skip and a step count.
+  Navigate to applicable pages and explain capabilities without creating demo work, changing settings or
+  making the user perform real edits. Handle empty projects and missing memberships without dead ends.
+- Compose common features (My work, Personal, navigation, board/detail, notifications, export and help) with
+  the caller's effective project/team capabilities and independent system Admin capabilities. Members learn
+  permitted creation/editing; Viewers get the read-only variant; Leads add their planning/assignment tools;
+  PMs add project/member management. Admin status alone never implies PM or Lead rights in projects.
+- A person can have different roles in different projects. Use the current project or let them choose one
+  they can access; identify the project/team scope of each capability. Include team Lead rights only in their
+  relevant team. Replay builds the tour from current permissions, so role changes are reflected without a
+  forced replay. Skip inaccessible routes/steps and re-check if permissions change during a tour.
+- A sidebar "Help & FAQ" entry opens a searchable, linked how-to page with "Take the tour" for replay. Topics
+  include roles/visibility, personal privacy, shared versus separate tasks, duplication, assignment, boards,
+  checklist/notes/files, sprints, notifications, themes, keyboard shortcuts, exports and backups. Mark role
+  requirements clearly, explain common permission restrictions, and link to actions only when permitted.
+  Articles are bundled and available without external services; help explains implemented features only.
+- Tour and help are lazy-loaded and follow DESIGN's tokens, keyboard/focus rules and reduced motion. The tour
+  has no timeout, covers phone/tablet layouts and never obscures the focused control. Detailed procedures live
+  in FAQ articles, not in an expanded first-login tour. ADO instructions are added when M8 implements export.
+
 ## 7. ADO CSV export
 
 ### 7.1 Selection modes
@@ -432,6 +513,7 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M6 | Theming and branding (including the UI font), admin settings, backups, log retention, disk usage |
 | M6.5 | Polish pass over every screen, reviewed from the browser-test screenshots: consistency, accessibility (WCAG 2.2 AA: keyboard, focus, contrast, screen readers, reduced motion), layouts at phone and tablet width, motion, keyboard shortcuts and a command palette, large-board performance |
 | M6.7 | My work as list and status board across projects (filters, "also items I created", group by project), the same views for "all their work", and the private personal space per user (3.6) with its per-user quota setting, plus the permission tests proving nobody else, admins included, can reach it |
+| M6.8 | Same-space item duplication (including one copy per selected person), permission-scoped Excel snapshots and optional offline file archives, a skippable 2–3 minute first-login tour composed from current capabilities, manual replay and searchable sidebar Help & FAQ (6.1–6.3); endpoint permission tests, export-content/file safety tests and browser coverage for roles, first-login/replay, accessibility and responsive screens |
 | M7 | Deploy scripts, release workflow, INSTALL/UPGRADE/ADMIN docs, end-to-end install test on a RHEL 8 VM (first usable release, v1.0) |
 | M8 | ADO export plus preview, validated by tests against the documented import rules (v1.1) |
 
