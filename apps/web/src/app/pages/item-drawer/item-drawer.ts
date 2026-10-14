@@ -10,6 +10,7 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 import { Router } from '@angular/router';
@@ -634,6 +635,7 @@ export class ItemDrawer {
   private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
   private readonly dialogs = inject(Dialogs);
+  private readonly matDialog = inject(MatDialog);
   private readonly annotations = inject(AnnotationsApiService);
   private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
 
@@ -1083,13 +1085,16 @@ export class ItemDrawer {
 
   /**
    * Esc closes the drawer, except when it comes from an open select panel or
-   * hover card (`aria-expanded="true"`), which closes itself instead.
+   * hover card (`aria-expanded="true"`), which closes itself instead, or while
+   * a dialog (the image viewer, a confirmation) is open: focus may still be
+   * in the drawer while the dialog opens, and that Esc belongs to the dialog.
    *
    * @param event The key event.
    */
   protected onEscape(event: Event): void {
     const target = event.target as HTMLElement | null;
     if (event.defaultPrevented || target?.closest('[aria-expanded="true"]')) return;
+    if (this.matDialog.openDialogs.length > 0) return;
     this.close();
   }
 

@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { MatDialog } from '@angular/material/dialog';
+import { provideRouter, Router } from '@angular/router';
 import type { AuditEntryDto, ItemRefDto, ProjectDto, WorkItemDetailDto } from '@kloister/shared';
 import { makeBucket, makeItem, makeMember, makeProject, settle } from '../../../testing/fixtures';
 import { AnnotationsApiService } from '../../core/annotations-api.service';
@@ -278,6 +279,24 @@ describe('ItemDrawer', () => {
     expect(img.getAttribute('tabindex')).toBe('0');
     img.click();
     expect(open).toHaveBeenCalledWith([{ src, alt: 'Shot' }], 0);
+  });
+
+  it('leaves Esc to an open dialog and closes on Esc otherwise', async () => {
+    const { fixture, root } = await render(makeItem(4));
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    const dialog = TestBed.inject(MatDialog);
+    const openDialogs = vi.spyOn(dialog, 'openDialogs', 'get');
+    const esc = () =>
+      root
+        .querySelector('.d-panel')!
+        .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    openDialogs.mockReturnValue([{} as never]);
+    esc();
+    expect(navigate).not.toHaveBeenCalled();
+    openDialogs.mockReturnValue([]);
+    esc();
+    await settle(fixture);
+    expect(navigate).toHaveBeenCalledTimes(1);
   });
 
   it('is read-only on archived projects whatever the item allows', async () => {

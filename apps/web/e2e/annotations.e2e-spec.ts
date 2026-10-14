@@ -141,7 +141,10 @@ test('a PM mentions a Member in a note, who is notified through the bell', async
   await entry.click();
   await expect(page).toHaveURL(new RegExp(`/p/${PROJECT_KEY}/items/${ITEMS.taskA}$`));
   await expect(page.locator('app-item-drawer')).toContainText('Can you check the totals');
-  // Opening it marked it read; the assignment is still unread.
+  // Opening it marked it read; the assignment is still unread. The drawer's
+  // scrim covers the shell, so close the drawer before using the bell.
+  await page.locator('app-item-drawer').getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(page.locator('app-item-drawer .d-panel')).toHaveCount(0);
   await page.getByRole('link', { name: 'Notifications, 1 unread' }).click();
   await page.getByRole('button', { name: 'Mark all as read' }).click();
   await expect(page.getByRole('link', { name: 'Notifications', exact: true })).toBeVisible();
