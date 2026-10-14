@@ -68,6 +68,7 @@ test('shortcuts, help, palette and drawer focus paths', async ({ page }) => {
   await expect(page.getByRole('listbox', { name: 'Labels' })).toBeVisible();
   await page.keyboard.press('Escape');
   await drawer.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(drawer).toHaveCount(0);
   await page.locator('main').press('j');
   const first = await page.evaluate(() => document.activeElement?.getAttribute('href'));
   await page.keyboard.press('j');
@@ -77,6 +78,10 @@ test('shortcuts, help, palette and drawer focus paths', async ({ page }) => {
   expect(await page.evaluate(() => document.activeElement?.getAttribute('href'))).toBe(first);
   await page.keyboard.press('Enter');
   await expect(drawer).toBeVisible();
+  // Visibility precedes the CDK's deferred focus capture on route entry.
+  await expect
+    .poll(() => page.evaluate(() => document.activeElement?.closest('.d-panel') !== null))
+    .toBe(true);
   await page.keyboard.press('Escape');
   await expect(drawer).toHaveCount(0);
   expect(await page.evaluate(() => document.activeElement?.matches('app-item-card a.title'))).toBe(

@@ -212,6 +212,8 @@ test('another user and an administrator cannot open or list private work', async
   const ownerId = project.ownerId;
   try {
     for (const user of [USERS.pm, USERS.admin]) {
+      // A live session redirects /login; switch identities before signing in.
+      await page.context().clearCookies();
       await signIn(page, user);
       expect((await page.request.get(`api/v1/projects/${project.id}`)).status()).toBe(404);
       expect(
@@ -233,6 +235,7 @@ test('another user and an administrator cannot open or list private work', async
       await snap(page, 'all their work status board, private items excluded');
     }
   } finally {
+    await page.context().clearCookies();
     await signIn(page, USERS.member);
     await removeTask(page, project.id, item.id);
   }
