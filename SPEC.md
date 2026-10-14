@@ -34,6 +34,7 @@ applied after installation through admin theme settings.
 
 ### v3 (later; design must not block it)
 - Move or copy a personal task into a project (and back)
+- When an admin changes the session timeouts, an option to sign everyone out so the new values apply to all sessions at once
 
 ---
 
