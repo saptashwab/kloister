@@ -503,6 +503,18 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 - `enable-service.sh` (opt-in, manual): installs `<app_name>-backend.service` with `User=<app_name>` and `Restart=on-failure`
 - `logs/backend` rotation and cleanup are done by the app itself according to the admin's retention setting
 
+### 9.6 Public getting-started documentation
+- M7 adds a root `README.md` describing Kloister, implemented features, release status and license,
+  with a couple of representative screenshots using disposable example data and the current UI.
+- Include generic download/source installation and run instructions for ordinary users, separate from
+  the RHEL automation: supported systems and prerequisites, Node/Postgres setup, dependency install,
+  required configuration, migrations, initial administrator creation, build/start, browser access,
+  stopping the app and persistent-data locations. Commands must match the delivered code and state
+  which shell/platform they apply to; explain any supported-platform limitations honestly.
+- Link to detailed INSTALL/UPGRADE/ADMIN guides for RHEL deployment, security, backup and recovery.
+  Generic instructions do not change the RHEL release layout or authorize additional deployment
+  automation. Do not present future ADO export as shipped before M8.
+
 ---
 
 ## 10. Build milestones (each ends with tests passing and a commit)
@@ -520,7 +532,7 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M6.5 | Polish pass over every screen, reviewed from the browser-test screenshots: consistency, accessibility (WCAG 2.2 AA: keyboard, focus, contrast, screen readers, reduced motion), layouts at phone and tablet width, motion, keyboard shortcuts and a command palette, large-board performance |
 | M6.7 | My work as list and status board across projects (filters, "also items I created", group by project), the same views for "all their work", and the private personal space per user (3.6) with its per-user quota setting, plus the permission tests proving nobody else, admins included, can reach it |
 | M6.8 | Same-space item duplication (including one copy per selected person), permission-scoped Excel snapshots and optional offline file archives, a skippable 2–3 minute first-login tour composed from current capabilities, manual replay and searchable sidebar Help & FAQ (6.1–6.3); endpoint permission tests, export-content/file safety tests and browser coverage for roles, first-login/replay, accessibility and responsive screens |
-| M7 | Deploy scripts, release workflow, INSTALL/UPGRADE/ADMIN docs, end-to-end install test on a RHEL 8 VM (first usable release, v1.0) |
+| M7 | Deploy scripts, release workflow, public root README with product overview/screenshots and generic installation/run steps (9.6), INSTALL/UPGRADE/ADMIN docs, end-to-end install test on a RHEL 8 VM (first usable release, v1.0) |
 | M8 | ADO export plus preview, validated by tests against the documented import rules (v1.1) |
 
 ---

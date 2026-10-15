@@ -156,4 +156,18 @@ M6.8 decisions (2026-10-15):
 
 ## Follow-ups for later milestones
 
+M6.8 CI repair (2026-10-15): run 38690846607 passed unit tests, migrations/schema drift and database tests;
+38 of 40 browser tests passed. The repair waits for Material option removal and uses normal switch clicks
+with retrying checked-state assertions, preserving source/created/Done snapshot checks. Help search includes
+article bodies, so the negative check now uses an article that does not mention the query. Viewer permission
+and keyboard assertions remain. Fresh independent review found no actionable issues.
+
+- **M7 public documentation (owner request, 2026-10-15)**: Add the missing root README with a product
+  overview, implemented features, a couple of current screenshots with example data, release status,
+  license, generic download/install/run steps and links to detailed deployment/upgrade/admin guides
+  (SPEC §9.6). Generic instructions must cover prerequisites, configuration, migrations/bootstrap,
+  starting/stopping and data persistence on supported systems; state limitations and shell/platform
+  differences. Keep RHEL-specific automation and its established layout. This expands documentation,
+  not deployment architecture; implementation waits for the fresh M7 session.
+
 - **M7**: `@kloister/shared` is a runtime dependency of the API; the release `backend/` must bundle or vendor it, since `npm ci --omit=dev` cannot resolve a private workspace package. Set the production base href to `/__KLOISTER_BASE__/` (SPEC §9.2). Ship `prisma.config.ts`, `prisma/` and migrations in `backend/`; run Prisma commands with `CHECKPOINT_DISABLE=1` so the CLI makes no outbound update check. Confirm the `argon2` prebuilt binary loads on RHEL 8 (else switch to `@node-rs/argon2`, SPEC §2). install.sh passes `APP_NAME` and `DATABASE_URL` via `kloister.env` and runs `create-admin`. Set `NODE_ENV=production` in `kloister.env`. Make sure the `create-admin` temporary password goes to the terminal only and is never copied into `logs/install/` (SPEC §9.4 step 10). Generate the OpenAPI document into `docs/` at build time (SPEC §8). install.sh writes `ATTACHMENTS_DIR=/app/<app_name>/data/attachments` to `kloister.env` and creates that folder owned by `<app_name>` (mode 0750); ADMIN.md must say that Postgres backups do not include these files. M6 adds environment settings that install.sh must write to `kloister.env` and create folders for (owned by `<app_name>`, mode 0750): `APP_DIR=/app/<app_name>`, `BRANDING_DIR=/app/<app_name>/data/branding`, `BACKUP_DIR=/app/<app_name>/backups/postgres`, `LOG_DIR=/app/<app_name>/logs` (the app creates `backend/` and `backups/` in it), `PG_DUMP_PATH=/usr/pgsql-<PG_MAJOR>/bin/pg_dump` and `PGPASSFILE=/app/<app_name>/config/.pgpass`; `LOG_LEVEL` is optional. All but `LOG_LEVEL` and `PGPASSFILE` are required with `NODE_ENV=production`. start.sh should send the process's own output and errors (crashes before the logger exists) to `logs/backend/` without clashing with the daily files. ADMIN.md: backups are on by default at 02:00 server time; check that the first one ran; restore with `pg_restore`; check the real `pg_dump` on the VM (CI uses a stand-in). ADMIN.md must explain that personal privacy is enforced by the app, not encryption; database/file operators and backups can read personal data.
