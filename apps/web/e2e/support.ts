@@ -64,9 +64,10 @@ export async function signIn(page: Page, email: string): Promise<void> {
  * @param page The browser page.
  * @param label The form field label.
  * @param option The option text.
- * @returns Resolves once picked.
+ * @returns Resolves once picked and the option overlay has closed.
  */
 export async function choose(page: Page, label: string, option: string): Promise<void> {
   await page.locator('mat-form-field', { hasText: label }).locator('mat-select').click();
   await page.getByRole('option', { name: option, exact: true }).click();
+  await expect(page.getByRole('option', { name: option, exact: true })).toBeHidden();
 }

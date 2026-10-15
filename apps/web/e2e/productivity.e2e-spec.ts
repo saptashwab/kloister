@@ -115,8 +115,12 @@ test('My work export keeps source, Done and created-item eligibility with all-el
   await signIn(page, USERS.member);
   await page.goto('/work');
   await choose(page, 'Source', 'Projects');
-  await page.getByRole('switch', { name: 'Also items I created', exact: true }).check();
-  await page.getByRole('switch', { name: 'Show done', exact: true }).check();
+  const createdSwitch = page.getByRole('switch', { name: 'Also items I created', exact: true });
+  await createdSwitch.click();
+  await expect(createdSwitch).toBeChecked();
+  const doneSwitch = page.getByRole('switch', { name: 'Show done', exact: true });
+  await doneSwitch.click();
+  await expect(doneSwitch).toBeChecked();
   await page.getByRole('button', { name: 'Export…' }).click();
   const dialog = page.getByRole('dialog', { name: 'Export snapshot' });
   const response = page.waitForResponse(
@@ -143,7 +147,7 @@ test('bundled FAQ searches procedures and keyboard replay reflects current Viewe
     page.getByRole('heading', { name: 'Excel and offline snapshots', exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole('heading', { name: 'Create, assign and edit work', exact: true }),
+    page.getByRole('heading', { name: 'Boards, status and hierarchy', exact: true }),
   ).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
