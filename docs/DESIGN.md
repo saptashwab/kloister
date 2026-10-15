@@ -428,9 +428,10 @@ M6.5 resolves and adds:
   unchanged initial bundle budget. These changes resolve the deferred tablet rail, drawer focus trap and
   caret-mention differences above; the blocked-status and person-chip differences remain.
 
-Planned for M6.8 (SPEC §6.1–6.3), without changes to the approved artboards:
+M6.8 adds (SPEC §6.1–6.3), without changing the approved artboards:
 
-- Card and drawer actions add **Duplicate item…**. A dialog offers one copy per selected person or a copy
+- Card and drawer actions add an overlapping-squares icon with a **Duplicate item** tooltip on hover/focus
+  and the same accessible name. A dialog offers one copy per selected person or a copy
   count with optional assignments, previews the resulting titles and assignees, and confirms **Create N copies**.
   New tasks start with fresh progress; keep dates/sprint and copy attachments are explicit options. The dialog
   explains the difference between several people sharing one task and each person having their own copy.
@@ -450,4 +451,7 @@ Planned for M6.8 (SPEC §6.1–6.3), without changes to the approved artboards:
 - Tour navigation and overlays use existing tokens and shared/CDK components, with keyboard focus management,
   visible focus, screen-reader instructions and reduced motion. On phones, instructions must not hide their
   target or require horizontal page scrolling. Load tour, help and export presentation lazily within the
-  unchanged bundle budget. These are planned additions, not completed differences from the canvas.
+  unchanged bundle budget. Material dialogs use the shared 640 px size token with viewport limits;
+  the tour's lower-page panel keeps its focused instructions and controls visible at phone width.
+  Help procedures remain separate from the short introduction. Export previews name effective filters
+  in ordinary language, while the server calculates scope and item counts across every matching page.

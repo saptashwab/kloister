@@ -1,3 +1,4 @@
+import { SnapshotAction } from '../../ui/snapshot-action';
 import { CdkDrag, CdkDropList, CdkDropListGroup, type CdkDragDrop } from '@angular/cdk/drag-drop';
 import {
   Component,
@@ -35,6 +36,7 @@ import { ToastService } from '../../ui/toast.service';
 @Component({
   selector: 'app-work',
   imports: [
+    SnapshotAction,
     RouterLink,
     MatButtonModule,
     MatButtonToggleModule,
@@ -65,6 +67,9 @@ import { ToastService } from '../../ui/toast.service';
           </p>
         </div>
       </div>
+      @if (isMe()) {
+        <app-snapshot-action source="me" [filters]="snapshotFilters()" />
+      }
       <div class="row controls" aria-label="Work views and filters">
         <mat-button-toggle-group
           aria-label="Work view"
@@ -269,6 +274,25 @@ import { ToastService } from '../../ui/toast.service';
   `,
 })
 export class WorkPage {
+  /** Serializes the current source and narrowing filters for a server scope preview. */
+  protected snapshotFilters(): Record<string, string | boolean> {
+    const filter = this.filter();
+    return {
+      source: filter.source,
+      includeCreated: this.includeCreated(),
+      includeDone: this.includeDone(),
+      today: this.today,
+      ...Object.fromEntries(
+        Object.entries({
+          projectId: filter.projectId,
+          type: filter.type,
+          labelId: filter.labelId,
+          dueGroup: filter.due,
+        }).filter(([, value]) => value !== ''),
+      ),
+    };
+  }
+
   private readonly api = inject(WorkApiService);
   private readonly itemsApi = inject(ItemsApiService);
   private readonly session = inject(SessionStore);

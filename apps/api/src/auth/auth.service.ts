@@ -240,6 +240,14 @@ export class AuthService {
     }
     const passwordHash = await this.passwords.hash(newPassword);
     const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.user.updateMany({
+        where: {
+          id: auth.user.id,
+          mustChangePassword: true,
+          introductionState: 'AWAITING_INITIAL_PASSWORD',
+        },
+        data: { introductionState: 'READY' },
+      });
       const user = await tx.user.update({
         where: { id: auth.user.id },
         data: { passwordHash, mustChangePassword: false },

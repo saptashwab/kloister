@@ -4,6 +4,7 @@ import {
   effect,
   type ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
   viewChild,
@@ -56,6 +57,7 @@ export class App {
   /** Lazy search and keyboard reference entry points. */
   protected readonly shortcuts = inject(Shortcuts);
   private readonly auth = inject(AuthService);
+  private readonly injector = inject(Injector);
   private readonly router = inject(Router);
 
   /** Signed-in state. */
@@ -83,6 +85,8 @@ export class App {
     const user = this.store.user();
     return user && !user.mustChangePassword ? user : null;
   });
+  /** Refresh session services only when the signed-in, password-cleared identity changes. */
+  private readonly activeIdentity = computed(() => this.user()?.id);
 
   /** The unread count as shown on the badge. */
   protected readonly unreadText = computed(() => {
@@ -118,13 +122,14 @@ export class App {
    */
   constructor() {
     effect(() => {
-      const id = this.user()?.id;
+      const id = this.activeIdentity();
       untracked(() => {
         if (id === undefined) {
           this.nav.clear();
           this.notifications.stop();
           this.theme.setUserTheme(null);
         } else {
+          void import('./pages/help/tour').then((m) => m.offerIntroduction(this.injector, id));
           void this.nav.refresh();
           this.notifications.start();
           void this.theme.loadUserTheme();

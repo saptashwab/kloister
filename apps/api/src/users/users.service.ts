@@ -109,6 +109,7 @@ export class UsersService {
             systemRole: dto.systemRole ?? SystemRole.USER,
             passwordHash,
             mustChangePassword: true,
+            introductionState: 'AWAITING_INITIAL_PASSWORD',
           },
         });
         await this.audit.record(
@@ -357,6 +358,7 @@ export class UsersService {
               systemRole: SystemRole.ADMIN,
               passwordHash,
               mustChangePassword: true,
+              introductionState: 'AWAITING_INITIAL_PASSWORD',
             },
           });
           await this.audit.record(

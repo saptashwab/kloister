@@ -52,6 +52,7 @@ import { ViewImages } from '../../ui/image-viewer';
 import { LabelPill } from '../../ui/label-pill';
 import { PriorityIcon, StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
+import { ItemCopyAction } from '../../ui/item-copy-action';
 import { ItemActivity } from './item-activity';
 import { ItemAttachments } from './item-attachments';
 import { ItemChecklist } from './item-checklist';
@@ -97,6 +98,7 @@ const FIELD_NAMES: Record<string, string> = {
   styleUrl: '../../../styles/_drawer.scss',
   encapsulation: ViewEncapsulation.None,
   imports: [
+    ItemCopyAction,
     CdkTrapFocus,
     MatMenuModule,
     MatSelectModule,
@@ -157,6 +159,9 @@ const FIELD_NAMES: Record<string, string> = {
         <button type="button" class="k-icon-btn" aria-label="Copy link" (click)="copyLink()">
           <app-icon name="link" [size]="17" />
         </button>
+        @if (detail(); as source) {
+          <app-item-copy-action [item]="source" />
+        }
         @if (canDelete()) {
           <button
             type="button"

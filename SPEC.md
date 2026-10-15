@@ -155,7 +155,8 @@ submit a reimbursement). It is created on first use.
 All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 
 - **User**: email (unique, lowercased), displayName, passwordHash, systemRole (`ADMIN|USER`),
-  mustChangePassword, isActive, failedLoginCount, lockedUntil, themePrefs (json), lastLoginAt
+  mustChangePassword, introductionState (`AWAITING_INITIAL_PASSWORD|READY|DISMISSED|EXEMPT`),
+  isActive, failedLoginCount, lockedUntil, themePrefs (json), lastLoginAt
 - **Session**: userId, tokenHash, expiresAt, lastSeenAt, userAgent, ip
 - **Project**: key (2–6 uppercase chars, unique, used in item numbers like `KLO-42`; null for personal spaces, whose
   items are shown as `#42`), ownerId (nullable, unique; set only for a personal space, its owner), name, description,
@@ -330,7 +331,12 @@ Theming uses CSS custom properties only. Default palette is neutral (slate/indig
   never run before that change, weaken the password-change restriction, or repeat automatically for later
   sign-ins/password resets. Completing or skipping it dismisses the automatic first-login introduction.
   Existing accounts get manual replay without a forced tour on upgrade. First-login state must be durable
-  across browsers; its data representation is proposed and approved during M6.8 planning before schema edits.
+  across browsers. Owner-approved M6.8 representation: one `User.introductionState` enum, default `EXEMPT`
+  for all existing accounts on upgrade, including accounts still awaiting password change. Admin creation and
+  initial-admin bootstrap explicitly set `AWAITING_INITIAL_PASSWORD`; the first successful required change
+  atomically advances it to `READY`. Completion or Skip changes `READY` to `DISMISSED`. Password resets,
+  sign-ins and role changes preserve this state. Replay cannot re-enroll an account. An interrupted `READY`
+  introduction remains pending; the normal required-password gate always applies.
 - The normal path takes no more than 2–3 minutes, with a few brief steps, Back, Next, Skip and a step count.
   Navigate to applicable pages and explain capabilities without creating demo work, changing settings or
   making the user perform real edits. Handle empty projects and missing memberships without dead ends.

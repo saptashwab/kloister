@@ -1,3 +1,4 @@
+import { SnapshotAction } from '../../ui/snapshot-action';
 import { Component, computed, inject, type OnInit, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -12,6 +13,7 @@ import {
   buildTree,
   EMPTY_FILTER,
   flattenTree,
+  endOfWeek,
   isoDate,
   matchesFilter,
   NONE,
@@ -40,6 +42,7 @@ import { SessionStore } from '../../core/session.store';
 @Component({
   selector: 'app-backlog',
   imports: [
+    SnapshotAction,
     RouterOutlet,
     MatButtonModule,
     MatCheckboxModule,
@@ -128,6 +131,7 @@ import { SessionStore } from '../../core/session.store';
       <p class="k-alert" role="alert">{{ error() }}</p>
     }
 
+    <app-snapshot-action [source]="ctx.project()?.id ?? ''" [filters]="snapshotFilters()" />
     <div class="row filters">
       <mat-form-field>
         <mat-label>Search</mat-label>
@@ -340,6 +344,28 @@ export class BacklogPage implements OnInit {
   /** Type names. */
   protected readonly typeLabels = TYPE_LABELS;
   private readonly today = isoDate(new Date());
+
+  /** Serializes every current screen filter for the server snapshot preview. */
+  protected snapshotFilters(): Record<string, string | boolean> {
+    const f = this.filter();
+    return {
+      today: this.today,
+      boardOnly: false,
+      ...Object.fromEntries(
+        Object.entries({
+          q: f.text,
+          type: f.type,
+          labelId: f.labelId,
+          sprintId: f.sprintId,
+          assigneeId: f.assigneeId === 'none' ? '' : f.assigneeId,
+          dueGroup: f.due === 'overdue' ? 'Overdue' : '',
+          unassigned: f.assigneeId === 'none',
+          dueFrom: f.due === 'week' ? this.today : '',
+          dueTo: f.due === 'week' ? endOfWeek(this.today) : '',
+        }).filter(([, value]) => value !== ''),
+      ),
+    };
+  }
 
   /** Current filters (the board's, minus label and due). */
   protected readonly filter = signal<BoardFilter>(EMPTY_FILTER);

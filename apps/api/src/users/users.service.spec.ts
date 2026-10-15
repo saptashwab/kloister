@@ -72,6 +72,7 @@ describe('UsersService', () => {
           systemRole: 'USER',
           passwordHash: 'hash:temporary-password-xyz',
           mustChangePassword: true,
+          introductionState: 'AWAITING_INITIAL_PASSWORD',
         },
       });
       expect(JSON.stringify(audit.records)).not.toContain('temporary-password-xyz');

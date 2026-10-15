@@ -1,3 +1,8 @@
+import { SettingsModule } from '../settings/settings.module.js';
+import { DuplicationController } from './duplication.controller.js';
+import { DuplicationService } from './duplication.service.js';
+import { ProjectSnapshotsController, WorkSnapshotsController } from './snapshots.controller.js';
+import { SnapshotsService } from './snapshots.service.js';
 import { Module } from '@nestjs/common';
 import { AuditModule } from '../audit/audit.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
@@ -19,9 +24,23 @@ import { WorkService } from './work.service.js';
  * so notes and attachments find items through the same visibility filter.
  */
 @Module({
-  imports: [AuditModule, ProjectsModule, NotificationsModule, StorageModule],
-  controllers: [ItemsController, ChecklistController, WorkController],
-  providers: [ItemsService, DependenciesService, ChecklistService, WorkService],
+  imports: [AuditModule, ProjectsModule, NotificationsModule, StorageModule, SettingsModule],
+  controllers: [
+    ItemsController,
+    ChecklistController,
+    WorkController,
+    DuplicationController,
+    ProjectSnapshotsController,
+    WorkSnapshotsController,
+  ],
+  providers: [
+    ItemsService,
+    DependenciesService,
+    ChecklistService,
+    WorkService,
+    DuplicationService,
+    SnapshotsService,
+  ],
   exports: [ItemsService],
 })
 export class ItemsModule {}

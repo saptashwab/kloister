@@ -1,3 +1,4 @@
+import { SnapshotAction } from '../../ui/snapshot-action';
 import { Component, computed, inject, type OnInit, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -42,6 +43,7 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
   selector: 'app-sprints',
   host: { class: 'k-page' },
   imports: [
+    SnapshotAction,
     EmptyState,
     Skeleton,
     ReactiveFormsModule,
@@ -52,7 +54,7 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
     MatInputModule,
     MatSelectModule,
   ],
-  template: `
+  template: `<app-snapshot-action [source]="ctx.project()?.id ?? ''" />
     @if (error()) {
       <p class="k-alert" role="alert">{{ error() }}</p>
     }
@@ -177,8 +179,7 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
           </tbody>
         </table>
       </div>
-    }
-  `,
+    } `,
 })
 export class SprintsPage implements OnInit {
   /** Shared project state. */

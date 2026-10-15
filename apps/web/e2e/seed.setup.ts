@@ -72,6 +72,8 @@ async function activate(email: string, temporary: string): Promise<string> {
     currentPassword: temporary,
     newPassword: E2E_PASSWORD,
   });
+  // Fixtures represent established users; dedicated introduction tests cover first use.
+  await call(sid, 'PUT', 'me/introduction', {});
   return sid;
 }
 

@@ -24,7 +24,7 @@ const fn = (): Fn => jest.fn<(...args: unknown[]) => Promise<unknown>>();
 
 /** The subset of Prisma the services under test use, all mocked. */
 export interface FakePrisma {
-  user: { findUnique: Fn; findMany: Fn; create: Fn; update: Fn; count: Fn };
+  user: { updateMany: Fn; findUnique: Fn; findMany: Fn; create: Fn; update: Fn; count: Fn };
   session: { findUnique: Fn; create: Fn; update: Fn; deleteMany: Fn };
   auditLog: { create: Fn; findMany: Fn; count: Fn };
   appSetting: { findUnique: Fn; upsert: Fn };
@@ -50,7 +50,14 @@ export interface FakePrisma {
  */
 export function fakePrisma(): { fake: FakePrisma; prisma: PrismaService } {
   const fake: FakePrisma = {
-    user: { findUnique: fn(), findMany: fn(), create: fn(), update: fn(), count: fn() },
+    user: {
+      updateMany: fn(),
+      findUnique: fn(),
+      findMany: fn(),
+      create: fn(),
+      update: fn(),
+      count: fn(),
+    },
     session: { findUnique: fn(), create: fn(), update: fn(), deleteMany: fn() },
     auditLog: { create: fn(), findMany: fn(), count: fn() },
     appSetting: { findUnique: fn(), upsert: fn() },
@@ -137,6 +144,7 @@ export function makeUser(overrides: Partial<User> = {}): User {
     passwordHash: 'hash',
     systemRole: 'USER',
     mustChangePassword: false,
+    introductionState: 'EXEMPT',
     isActive: true,
     failedLoginCount: 0,
     lockedUntil: null,

@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { ItemStatus, LabelStyle, type WorkItemDto } from '@kloister/shared';
 import { dueState, dueText } from '../../core/item-changes';
 import { ProjectContext } from '../../core/project-context';
+import { ItemCopyAction } from '../../ui/item-copy-action';
 import { Avatar } from '../../ui/avatar';
 import { Icon } from '../../ui/icon';
 import { LabelPill } from '../../ui/label-pill';
@@ -18,7 +19,7 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
  */
 @Component({
   selector: 'app-item-card',
-  imports: [RouterLink, Avatar, Icon, LabelPill, PriorityIcon, TypeIcon],
+  imports: [ItemCopyAction, RouterLink, Avatar, Icon, LabelPill, PriorityIcon, TypeIcon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'card', '[class.done]': 'done()' },
   styles: `
@@ -112,7 +113,7 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
           <span class="k-pill warn">Blocked</span>
         }
         <span class="spacer"></span>
-        <app-priority-icon [priority]="i.priority" />
+        <app-priority-icon [priority]="i.priority" /><app-item-copy-action [item]="i" />
       </div>
       <a class="title" [routerLink]="['items', i.number]" queryParamsHandling="preserve">{{
         i.title

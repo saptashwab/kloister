@@ -213,12 +213,14 @@ export class ItemsService {
    * @param auth The caller.
    * @param access The caller's access.
    * @param dto The item.
+   * @param transaction Internal transaction for atomic independent copies.
    * @returns The new item (201).
    */
   async create(
     auth: AuthContext,
     access: ProjectAccess,
     dto: CreateItemDto,
+    transaction?: Prisma.TransactionClient,
   ): Promise<WorkItemDetailDto> {
     const projectId = access.project.id;
     const teamId = dto.teamId ?? null;
@@ -243,92 +245,91 @@ export class ItemsService {
     // Read committed: taking the next number locks the project row, which
     // serializes creates without making concurrent creates fail. References
     // deleted meanwhile surface as a foreign-key violation, mapped to 409.
-    const row = await this.withForeignKeyConflict(() =>
-      this.prisma.$transaction(async (tx) => {
-        const parentId = dto.parentId ?? null;
-        if (parentId !== null) {
-          const parent = await this.findVisibleRef(tx, access, parentId, 'parentId', 'Parent');
-          assertParentType(dto.type, parent.type);
-        }
-        const bucket = await findBucketFor(tx, projectId, dto.type, dto.bucketId ?? null);
-        await assertOpenSprint(tx, projectId, dto.sprintId ?? null);
-        await assertTeam(tx, projectId, teamId);
-        await assertMembers(tx, projectId, assigneeIds);
-        await assertLabels(tx, projectId, dto.labelIds ?? []);
+    const createRow = async (tx: Prisma.TransactionClient) => {
+      const parentId = dto.parentId ?? null;
+      if (parentId !== null) {
+        const parent = await this.findVisibleRef(tx, access, parentId, 'parentId', 'Parent');
+        assertParentType(dto.type, parent.type);
+      }
+      const bucket = await findBucketFor(tx, projectId, dto.type, dto.bucketId ?? null);
+      await assertOpenSprint(tx, projectId, dto.sprintId ?? null);
+      await assertTeam(tx, projectId, teamId);
+      await assertMembers(tx, projectId, assigneeIds);
+      await assertLabels(tx, projectId, dto.labelIds ?? []);
 
-        const facts: ItemFacts = {
-          createdById: auth.user.id,
-          assigneeIds,
-          bucketId: bucket?.id ?? null,
-          teamId,
-          hasChildren: false,
-        };
-        if (!this.access.canViewItem(access, facts)) {
-          throw invalidField(
-            bucket === null ? 'teamId' : 'bucketId',
-            'You could not see an item created here; choose a bucket or team in your scope',
-          );
-        }
-        const status =
-          dto.status ??
-          (bucket === null
-            ? ItemStatus.NOT_STARTED
-            : statusOnEnter(bucket, ItemStatus.NOT_STARTED));
-        // Take the number first: the row lock it holds until commit makes
-        // concurrent creates read the top position one after another. Raw
-        // SQL, so the project's updatedAt (and its settings edits) are untouched.
-        const [counter] = await tx.$queryRaw<{ lastItemNumber: number }[]>`
+      const facts: ItemFacts = {
+        createdById: auth.user.id,
+        assigneeIds,
+        bucketId: bucket?.id ?? null,
+        teamId,
+        hasChildren: false,
+      };
+      if (!this.access.canViewItem(access, facts)) {
+        throw invalidField(
+          bucket === null ? 'teamId' : 'bucketId',
+          'You could not see an item created here; choose a bucket or team in your scope',
+        );
+      }
+      const status =
+        dto.status ??
+        (bucket === null ? ItemStatus.NOT_STARTED : statusOnEnter(bucket, ItemStatus.NOT_STARTED));
+      // Take the number first: the row lock it holds until commit makes
+      // concurrent creates read the top position one after another. Raw
+      // SQL, so the project's updatedAt (and its settings edits) are untouched.
+      const [counter] = await tx.$queryRaw<{ lastItemNumber: number }[]>`
           UPDATE "Project" SET "lastItemNumber" = "lastItemNumber" + 1
           WHERE "id" = ${projectId}::uuid RETURNING "lastItemNumber"`;
-        if (counter === undefined) throw notFound('Project');
-        const number = counter.lastItemNumber;
-        const first = await tx.workItem.findFirst({
-          where: { projectId, bucketId: bucket?.id ?? null },
-          orderBy: { position: 'asc' },
-          select: { position: true },
-        });
-        const item = await tx.workItem.create({
-          data: {
-            projectId,
-            number,
-            type: dto.type,
-            parentId,
-            title: dto.title,
-            description,
-            status,
-            priority: dto.priority ?? undefined,
-            bucketId: bucket?.id ?? null,
-            sprintId: dto.sprintId ?? null,
-            teamId,
-            startDate: startDate === null ? null : toDbDate(startDate),
-            dueDate: dueDate === null ? null : toDbDate(dueDate),
-            position: first === null ? POSITION_STEP : first.position - POSITION_STEP,
-            createdById: auth.user.id,
-            completedAt: status === ItemStatus.DONE ? new Date() : null,
-          },
-        });
-        await setAssignees(tx, projectId, item.id, [], assigneeIds);
-        await setLabels(tx, projectId, item.id, [], dto.labelIds ?? []);
-        await this.record(tx, auth, access, AuditAction.ITEM_CREATED, item.id, {
-          number,
-          type: item.type,
-          title: item.title,
-        });
-        await this.notifications.notify(tx, {
-          type: NotificationType.ASSIGNED,
-          actorId: auth.user.id,
+      if (counter === undefined) throw notFound('Project');
+      const number = counter.lastItemNumber;
+      const first = await tx.workItem.findFirst({
+        where: { projectId, bucketId: bucket?.id ?? null },
+        orderBy: { position: 'asc' },
+        select: { position: true },
+      });
+      const item = await tx.workItem.create({
+        data: {
           projectId,
-          itemId: item.id,
-          facts,
-          recipients: assigneeIds,
-        });
-        return tx.workItem.findUniqueOrThrow({
-          where: { id: item.id },
-          include: this.include(access),
-        });
-      }),
+          number,
+          type: dto.type,
+          parentId,
+          title: dto.title,
+          description,
+          status,
+          priority: dto.priority ?? undefined,
+          bucketId: bucket?.id ?? null,
+          sprintId: dto.sprintId ?? null,
+          teamId,
+          startDate: startDate === null ? null : toDbDate(startDate),
+          dueDate: dueDate === null ? null : toDbDate(dueDate),
+          position: first === null ? POSITION_STEP : first.position - POSITION_STEP,
+          createdById: auth.user.id,
+          completedAt: status === ItemStatus.DONE ? new Date() : null,
+        },
+      });
+      await setAssignees(tx, projectId, item.id, [], assigneeIds);
+      await setLabels(tx, projectId, item.id, [], dto.labelIds ?? []);
+      await this.record(tx, auth, access, AuditAction.ITEM_CREATED, item.id, {
+        number,
+        type: item.type,
+        title: item.title,
+      });
+      await this.notifications.notify(tx, {
+        type: NotificationType.ASSIGNED,
+        actorId: auth.user.id,
+        projectId,
+        itemId: item.id,
+        facts,
+        recipients: assigneeIds,
+      });
+      return tx.workItem.findUniqueOrThrow({
+        where: { id: item.id },
+        include: this.include(access),
+      });
+    };
+    const row = await this.withForeignKeyConflict(() =>
+      transaction === undefined ? this.prisma.$transaction(createRow) : createRow(transaction),
     );
-    return this.detail(this.prisma, access, row);
+    return this.detail(transaction ?? this.prisma, access, row);
   }
 
   /**

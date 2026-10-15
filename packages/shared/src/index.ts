@@ -14,3 +14,4 @@ export * from './pagination.js';
 export * from './projects.js';
 export * from './settings.js';
 export * from './work.js';
+export * from './productivity.js';

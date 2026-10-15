@@ -1,5 +1,11 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
+/** Circle shared by status icons, keeping shell payload small without changing their paths. */
+const STATUS_CIRCLE = 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18';
+
+/** Shield shared by audit and administration navigation. */
+const SHIELD = 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z';
+
 /**
  * The bundled icon set (DESIGN §5): 24-unit stroke paths, drawn with
  * `currentColor`. Compiled into the app, so nothing is fetched from another
@@ -16,8 +22,9 @@ export const ICONS = {
   folder: 'M3 6h6l2 2h10v11H3z',
   users:
     'M9 11a4 4 0 1 0 0-8a4 4 0 1 0 0 8M2 21v-1a6 6 0 0 1 12 0v1M16 3.5a4 4 0 0 1 0 7M22 21v-1a6 6 0 0 0-4-5.6',
-  audit: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6zM9 12l2 2 4-4',
+  audit: SHIELD + 'M9 12l2 2 4-4',
   plus: 'M12 5v14M5 12h14',
+  copy: 'M8 8h12v12H8zM16 8V4H4v12h4',
   search: 'M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14M20 20l-4-4',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   close: 'M6 6l12 12M18 6 6 18',
@@ -36,7 +43,7 @@ export const ICONS = {
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   image: 'M3 5h18v14H3zM3 16l5-5 4 4 3-3 6 6M15.5 8.5h.01',
   alert: 'M12 3l10 18H2zM12 10v4M12 17h.01',
-  info: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 11v5M12 8h.01',
+  info: STATUS_CIRCLE + 'M12 11v5M12 8h.01',
   undo: 'M9 14 4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3',
   grip: 'M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01',
   archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
@@ -54,7 +61,7 @@ export const ICONS = {
   palette:
     'M12 3a9 9 0 0 0 0 18c1.1 0 1.6-.9 1.2-1.8-.5-1-.2-2.2 1-2.2H17a4 4 0 0 0 4-4c0-5.5-4-10-9-10M7.5 11h.01M10.5 7h.01M15.5 7.5h.01',
   upload: 'M12 16V5M7 10l5-5 5 5M5 20h14',
-  shield: 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z',
+  shield: SHIELD,
   disk: 'M3 6h18v12H3zM3 13h18M7 16h.01M10 16h.01',
   database:
     'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
@@ -68,10 +75,10 @@ export const ICONS = {
   TASK: 'M4 4h16v16H4zM8 12l3 3 5-6',
   BUG: 'M9 9h6v6a3 3 0 0 1-6 0zM10 9V7a2 2 0 0 1 4 0v2M4 12h5M15 12h5M6 6l3 3M18 6l-3 3M6 19l3-3M18 19l-3-3',
   /* Statuses (DESIGN §3.2). */
-  NOT_STARTED: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18',
-  IN_PROGRESS: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M12 7v5l3 2',
-  BLOCKED: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M8 12h8',
-  DONE: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18M8 12l3 3 5-6',
+  NOT_STARTED: STATUS_CIRCLE,
+  IN_PROGRESS: STATUS_CIRCLE + 'M12 7v5l3 2',
+  BLOCKED: STATUS_CIRCLE + 'M8 12h8',
+  DONE: STATUS_CIRCLE + 'M8 12l3 3 5-6',
 } as const;
 
 /** The name of a bundled icon. */

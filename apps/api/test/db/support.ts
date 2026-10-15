@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -397,7 +397,7 @@ export async function seedAttachment(
       storedName,
       sizeBytes: bytes.length,
       mimeType: 'image/gif',
-      sha256: 'seeded',
+      sha256: createHash('sha256').update(bytes).digest('hex'),
       inline: fields.inline ?? false,
       ...(fields.createdAt === undefined ? {} : { createdAt: fields.createdAt }),
     },
@@ -455,6 +455,8 @@ export async function upload(
 
 /** Minimal response view used by the helpers. */
 export interface Res {
+  /** Exact bytes for workbook/archive content assertions. */
+  rawPayload: Buffer;
   statusCode: number;
   json: () => unknown;
   headers: Record<string, unknown>;

@@ -22,6 +22,14 @@ enum SystemRole {
   USER
 }
 
+/// Durable introduction eligibility; upgrades never enroll existing accounts.
+enum IntroductionState {
+  AWAITING_INITIAL_PASSWORD
+  READY
+  DISMISSED
+  EXEMPT
+}
+
 /// A local account. Accounts are created by admins only; there is no self sign-up.
 model User {
   id                 String     @id @default(uuid()) @db.Uuid
@@ -33,6 +41,8 @@ model User {
   systemRole         SystemRole @default(USER)
   /// Set when an admin creates the account or resets its password.
   mustChangePassword Boolean    @default(true)
+  /// Only new accounts explicitly enroll; password resets preserve this state.
+  introductionState IntroductionState @default(EXEMPT)
   isActive           Boolean    @default(true)
   failedLoginCount   Int        @default(0)
   lockedUntil        DateTime?

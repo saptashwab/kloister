@@ -17,6 +17,11 @@ const NO_DRAWER: Routes = [{ path: '', children: [] }];
  */
 export const routes: Routes = [
   {
+    path: 'help',
+    canActivate: [authGuard],
+    loadComponent: () => import('./pages/help/help').then((m) => m.HelpPage),
+  },
+  {
     path: 'login',
     canActivate: [guestGuard],
     loadComponent: () => import('./pages/login/login').then((m) => m.LoginPage),

@@ -1,3 +1,4 @@
+import { SnapshotAction } from '../../ui/snapshot-action';
 import { CdkDrag, type CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
 import {
   Component,
@@ -32,6 +33,7 @@ import {
   dropRequest,
   EMPTY_FILTER,
   type GroupBy,
+  endOfWeek,
   isoDate,
   matchesFilter,
   NONE,
@@ -72,6 +74,7 @@ const QUICK_PEOPLE = 6;
 @Component({
   selector: 'app-board',
   imports: [
+    SnapshotAction,
     CdkDropListGroup,
     CdkDropList,
     CdkDrag,
@@ -185,6 +188,7 @@ const QUICK_PEOPLE = 6;
       <p class="k-alert info" role="status">Sprint board: {{ name }}</p>
     }
 
+    <app-snapshot-action [source]="ctx.project()?.id ?? ''" [filters]="snapshotFilters()" />
     <div class="toolbar" role="toolbar" aria-label="Board filters">
       <label class="search">
         <app-icon name="search" />
@@ -534,6 +538,28 @@ export class BoardPage implements OnInit, PersonFilter {
 
   /** What the columns are. */
   protected readonly groupBy = signal<GroupBy>('bucket');
+  /** Serializes every current screen filter for the server snapshot preview. */
+  protected snapshotFilters(): Record<string, string | boolean> {
+    const f = this.filter();
+    return {
+      today: this.today,
+      boardOnly: true,
+      ...Object.fromEntries(
+        Object.entries({
+          q: f.text,
+          type: f.type,
+          labelId: f.labelId,
+          sprintId: f.sprintId,
+          assigneeId: f.assigneeId === 'none' ? '' : f.assigneeId,
+          dueGroup: f.due === 'overdue' ? 'Overdue' : '',
+          unassigned: f.assigneeId === 'none',
+          dueFrom: f.due === 'week' ? this.today : '',
+          dueTo: f.due === 'week' ? endOfWeek(this.today) : '',
+        }).filter(([, value]) => value !== ''),
+      ),
+    };
+  }
+
   /** Current filters. */
   protected readonly filter = signal<BoardFilter>(EMPTY_FILTER);
   /** Type of cards created by quick-add. */
