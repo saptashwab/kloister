@@ -204,3 +204,9 @@ RHEL native compatibility, real backup/restore and installation/configuration ac
 The opt-in service opens its early-output log inside the shell already running as the application
 account, then execs Node. The service manager does not open app-owned output paths as root; setup
 diagnostics stay in the journal. A regression check protects that boundary alongside installation logs.
+
+M7 follow-up (2026-10-15): CI run 38700907595 passed every gate, including extracted-package,
+migration/schema, database and browser checks. Rewrite the public README around the product, screenshots,
+concise setup paths and operational links, removing internal approval/workflow language. Keep the detailed
+server-specific walkthrough in the conversation as requested; no installation procedure is added to the
+repository by this follow-up. No application, deployment or security behavior changes.
