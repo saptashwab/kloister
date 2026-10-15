@@ -161,6 +161,8 @@ M6.8 CI repair (2026-10-15): run 38690846607 passed unit tests, migrations/schem
 with retrying checked-state assertions, preserving source/created/Done snapshot checks. Help search includes
 article bodies, so the negative check now uses an article that does not mention the query. Viewer permission
 and keyboard assertions remain. Fresh independent review found no actionable issues.
+Repair `5b160d2`, pushed with documentation commit `eb28b69`, is green on CI run `38692826880`:
+549 database tests and all 40 browser scenarios passed, along with every preceding verification gate.
 
 - **M7 public documentation (owner request, 2026-10-15)**: Add the missing root README with a product
   overview, implemented features, a couple of current screenshots with example data, release status,
