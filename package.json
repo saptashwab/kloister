@@ -20,7 +20,10 @@
     "lint:fix": "npm run build -w @kloister/shared && npm run generate -w @kloister/api && eslint . --fix",
     "format": "prettier --write . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude",
     "format:check": "prettier --check . --ignore-path .gitignore --ignore-path .prettierignore --ignore-path .git/info/exclude",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present && npm run test:deploy",
+    "package:release": "node deploy/package.mjs",
+    "verify:release": "node deploy/verify-package.mjs",
+    "test:deploy": "node --test deploy/*.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

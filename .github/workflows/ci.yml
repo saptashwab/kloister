@@ -81,6 +81,12 @@ jobs:
       - name: Test
         run: npm test
 
+      # Verify the real ZIP outside the workspace, without a database connection.
+      - name: Package and verify extracted runtime
+        run: |
+          npm run package:release -- 1.0.0 dist/ci-release
+          npm run verify:release -- dist/ci-release
+
       # Apply the committed migrations exactly as install.sh/upgrade.sh will.
       - name: Apply database migrations
         run: npm run migrate:deploy -w @kloister/api

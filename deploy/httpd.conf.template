@@ -1,0 +1,6 @@
+# This file inherits the server's existing TLS and virtual-host configuration.
+ProxyPass /__APP_NAME__/api/ http://127.0.0.1:__BACKEND_PORT__/api/
+ProxyPassReverse /__APP_NAME__/api/ http://127.0.0.1:__BACKEND_PORT__/api/
+<Directory "/var/www/html/__APP_NAME__">
+    FallbackResource /__APP_NAME__/index.html
+</Directory>

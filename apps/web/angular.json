@@ -34,6 +34,7 @@
           },
           "configurations": {
             "production": {
+              "baseHref": "/__KLOISTER_BASE__/",
               "budgets": [
                 {
                   "type": "initial",

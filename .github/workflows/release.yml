@@ -1,0 +1,35 @@
+# Packaging is tag-only; creating a release tag is a separate owner action.
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CHECKPOINT_DISABLE: '1'
+      SCARF_NO_ANALYTICS: 'true'
+    steps:
+      # Build the same locked code that passed ordinary CI.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run build -w @kloister/web -- --base-href /__KLOISTER_BASE__/
+      # The package command validates semantic versions before writing output.
+      - run: npm run package:release -- "${GITHUB_REF_NAME#v}" dist/release
+      - run: npm run verify:release -- dist/release
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-package
+          path: dist/release/kloister-*.zip
+          if-no-files-found: error

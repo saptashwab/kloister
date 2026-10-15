@@ -1,0 +1,4051 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/LoginDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Signs in and sets the session cookie.\n\nPermissions: public. Rate limited per client IP (the IP is resolved\nthrough the trusted proxy only, so it cannot be spoofed); excess attempts\nget 429 `RATE_LIMITED`. Still requires the CSRF header.",
+        "tags": ["Auth"],
+        "security": []
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Ends the current session and clears the cookie.\n\nPermissions: any signed-in user, including one with a pending password change.",
+        "tags": ["Auth"]
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "operationId": "AuthController_changePassword",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ChangePasswordDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Changes the caller's own password and ends their other sessions.\n\nPermissions: any signed-in user, for themselves only; this is the one\nwrite allowed while a password change is pending. Shares the per-IP login\nrate limit, so a hijacked session cannot guess the current password fast.",
+        "tags": ["Auth"]
+      }
+    },
+    "/api/v1/admin/audit": {
+      "get": {
+        "operationId": "AuditController_list",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists audit entries newest first, with optional filters.",
+        "tags": ["Audit"]
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "operationId": "AdminUsersController_list",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive substring match on email or display name.",
+            "schema": { "maxLength": 100, "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists users, newest first.",
+        "tags": ["AdminUsers"]
+      },
+      "post": {
+        "operationId": "AdminUsersController_create",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateUserDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Creates a user with a temporary password shown once.",
+        "tags": ["AdminUsers"]
+      }
+    },
+    "/api/v1/admin/users/{id}": {
+      "get": {
+        "operationId": "AdminUsersController_get",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "User id.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Fetches one user.",
+        "tags": ["AdminUsers"]
+      },
+      "patch": {
+        "operationId": "AdminUsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "User id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateUserDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Renames, promotes/demotes, deactivates or reactivates a user.",
+        "tags": ["AdminUsers"]
+      }
+    },
+    "/api/v1/admin/users/{id}/reset-password": {
+      "post": {
+        "operationId": "AdminUsersController_resetPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "User id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Issues a new temporary password and ends the user's sessions.",
+        "tags": ["AdminUsers"]
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "operationId": "MeController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the signed-in user. Allowed while a password change is pending\nso the web app can route to the change-password screen.",
+        "tags": ["Me"]
+      },
+      "patch": {
+        "operationId": "MeController_update",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateMeDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Updates the caller's display name.",
+        "tags": ["Me"]
+      }
+    },
+    "/api/v1/me/theme": {
+      "get": {
+        "operationId": "MeController_getTheme",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the caller's own theme.",
+        "tags": ["Me"]
+      },
+      "put": {
+        "operationId": "MeController_putTheme",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ThemeBody" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Sets the caller's own theme (mode, primary and accent colour).",
+        "tags": ["Me"]
+      },
+      "delete": {
+        "operationId": "MeController_clearTheme",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Clears the caller's own theme, so the admin default applies.",
+        "tags": ["Me"]
+      }
+    },
+    "/api/v1/me/introduction": {
+      "get": {
+        "operationId": "IntroductionController_get",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "tags": ["Introduction"]
+      },
+      "put": {
+        "operationId": "IntroductionController_dismiss",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "tags": ["Introduction"]
+      }
+    },
+    "/api/v1/me/personal": {
+      "get": {
+        "operationId": "PersonalController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Reads the caller's space, or returns 404 before first use.",
+        "tags": ["Personal"]
+      },
+      "post": {
+        "operationId": "PersonalController_ensure",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Initializes the caller's space; the global CSRF guard protects this write.",
+        "tags": ["Personal"]
+      }
+    },
+    "/api/v1/projects": {
+      "get": {
+        "operationId": "ProjectsController_list",
+        "parameters": [
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "description": "`mine` (default) or `all`; `all` is for system admins only.",
+            "schema": { "type": "string", "enum": ["mine", "all"] }
+          },
+          {
+            "name": "includeArchived",
+            "required": false,
+            "in": "query",
+            "description": "Include archived projects (default false).",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive substring match on key or name.",
+            "schema": { "maxLength": 100, "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists the caller's projects, or every project for admins with `scope=all`.",
+        "tags": ["Projects"]
+      },
+      "post": {
+        "operationId": "ProjectsController_create",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateProjectDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Creates a project and assigns its first PM. Admins only.",
+        "tags": ["Projects"]
+      }
+    },
+    "/api/v1/projects/{id}": {
+      "get": {
+        "operationId": "ProjectController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the project with the caller's role and permissions.\nPermissions: any member; any admin (audited if not a member).",
+        "tags": ["Project"]
+      },
+      "patch": {
+        "operationId": "ProjectController_update",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateProjectDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Changes name, description or settings. Permissions: PM only.",
+        "tags": ["Project"]
+      }
+    },
+    "/api/v1/projects/{id}/archive": {
+      "post": {
+        "operationId": "ProjectController_archive",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Archives the project, making it read-only. Permissions: PM only.",
+        "tags": ["Project"]
+      }
+    },
+    "/api/v1/projects/{id}/unarchive": {
+      "post": {
+        "operationId": "ProjectController_unarchive",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Unarchives the project. Permissions: PM only; allowed while archived.",
+        "tags": ["Project"]
+      }
+    },
+    "/api/v1/projects/{id}/members": {
+      "get": {
+        "operationId": "MembersController_list",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists members. Permissions: any member; any admin (audited if not a member).",
+        "tags": ["Members"]
+      },
+      "post": {
+        "operationId": "MembersController_add",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/AddMemberDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Adds a member. Permissions: PMs; admins only with role PM.",
+        "tags": ["Members"]
+      }
+    },
+    "/api/v1/projects/{id}/member-candidates": {
+      "get": {
+        "operationId": "MembersController_candidates",
+        "parameters": [
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive substring match on email or display name.",
+            "schema": { "maxLength": 100, "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "type": "array", "items": { "type": "object" } } }
+            }
+          }
+        },
+        "summary": "Searches active users who are not members yet. Permissions: PMs and admins.",
+        "tags": ["Members"]
+      }
+    },
+    "/api/v1/projects/{id}/members/{userId}": {
+      "patch": {
+        "operationId": "MembersController_update",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "description": "The member's user id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateMemberDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Changes a member's role or visibility. Permissions: PMs; admins only to\npromote to or demote from PM. The last active PM cannot be demoted.",
+        "tags": ["Members"]
+      },
+      "delete": {
+        "operationId": "MembersController_remove",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "description": "The member's user id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Removes a member. Permissions: PMs; admins only PMs. The last active PM\ncannot be removed.",
+        "tags": ["Members"]
+      }
+    },
+    "/api/v1/projects/{id}/teams": {
+      "get": {
+        "operationId": "TeamsController_list",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists teams with their members. Permissions: any member; any admin\n(audited if not a member).",
+        "tags": ["Teams"]
+      },
+      "post": {
+        "operationId": "TeamsController_create",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateTeamDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Creates a team. Permissions: PM only.",
+        "tags": ["Teams"]
+      }
+    },
+    "/api/v1/projects/{id}/teams/{teamId}": {
+      "patch": {
+        "operationId": "TeamsController_update",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "description": "Team id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateTeamDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Renames a team or changes its description. Permissions: PM only.",
+        "tags": ["Teams"]
+      },
+      "delete": {
+        "operationId": "TeamsController_remove",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "description": "Team id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Deletes a team; its members stay in the project. Permissions: PM only.",
+        "tags": ["Teams"]
+      }
+    },
+    "/api/v1/projects/{id}/teams/{teamId}/members/{userId}": {
+      "put": {
+        "operationId": "TeamsController_setMember",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "description": "Team id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "description": "The user's id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/SetTeamMemberDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Adds a project member to the team or changes their team role.\nPermissions: PM only.",
+        "tags": ["Teams"]
+      },
+      "delete": {
+        "operationId": "TeamsController_removeMember",
+        "parameters": [
+          {
+            "name": "teamId",
+            "required": true,
+            "in": "path",
+            "description": "Team id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "description": "The user's id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Removes a user from the team. Permissions: PM only.",
+        "tags": ["Teams"]
+      }
+    },
+    "/api/v1/projects/{id}/buckets": {
+      "get": {
+        "operationId": "BucketsController_list",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists buckets in board order. Permissions: any member; any admin.",
+        "tags": ["Buckets"]
+      },
+      "post": {
+        "operationId": "BucketsController_create",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateBucketDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Adds a bucket as the last column. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Buckets"]
+      }
+    },
+    "/api/v1/projects/{id}/buckets/{bucketId}": {
+      "patch": {
+        "operationId": "BucketsController_update",
+        "parameters": [
+          {
+            "name": "bucketId",
+            "required": true,
+            "in": "path",
+            "description": "Bucket id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateBucketDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Renames a bucket or changes its rule. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Buckets"]
+      },
+      "delete": {
+        "operationId": "BucketsController_remove",
+        "parameters": [
+          {
+            "name": "bucketId",
+            "required": true,
+            "in": "path",
+            "description": "Bucket id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "moveItemsTo",
+            "required": false,
+            "in": "query",
+            "description": "Bucket that receives the deleted bucket's items.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Deletes a bucket, moving its items with `?moveItemsTo=`. Permissions:\n`MANAGE_BOARD`.",
+        "tags": ["Buckets"]
+      }
+    },
+    "/api/v1/projects/{id}/buckets/{bucketId}/move": {
+      "post": {
+        "operationId": "BucketsController_move",
+        "parameters": [
+          {
+            "name": "bucketId",
+            "required": true,
+            "in": "path",
+            "description": "Bucket id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReorderDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Moves a bucket in the column order. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Buckets"]
+      }
+    },
+    "/api/v1/projects/{id}/labels": {
+      "get": {
+        "operationId": "LabelsController_list",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists labels by name. Permissions: any member; any admin.",
+        "tags": ["Labels"]
+      },
+      "post": {
+        "operationId": "LabelsController_create",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateLabelDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Creates a label. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Labels"]
+      }
+    },
+    "/api/v1/projects/{id}/labels/{labelId}": {
+      "patch": {
+        "operationId": "LabelsController_update",
+        "parameters": [
+          {
+            "name": "labelId",
+            "required": true,
+            "in": "path",
+            "description": "Label id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateLabelDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Renames or recolours a label. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Labels"]
+      },
+      "delete": {
+        "operationId": "LabelsController_remove",
+        "parameters": [
+          {
+            "name": "labelId",
+            "required": true,
+            "in": "path",
+            "description": "Label id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Deletes a label and removes it from items. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Labels"]
+      }
+    },
+    "/api/v1/projects/{id}/sprints": {
+      "get": {
+        "operationId": "SprintsController_list",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists sprints by start date. Permissions: any member; any admin.",
+        "tags": ["Sprints"]
+      },
+      "post": {
+        "operationId": "SprintsController_create",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateSprintDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Plans a sprint. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Sprints"]
+      }
+    },
+    "/api/v1/projects/{id}/sprints/{sprintId}": {
+      "patch": {
+        "operationId": "SprintsController_update",
+        "parameters": [
+          {
+            "name": "sprintId",
+            "required": true,
+            "in": "path",
+            "description": "Sprint id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateSprintDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Changes a sprint. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Sprints"]
+      },
+      "delete": {
+        "operationId": "SprintsController_remove",
+        "parameters": [
+          {
+            "name": "sprintId",
+            "required": true,
+            "in": "path",
+            "description": "Sprint id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Deletes a sprint; its items stay without one. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Sprints"]
+      }
+    },
+    "/api/v1/projects/{id}/sprints/{sprintId}/start": {
+      "post": {
+        "operationId": "SprintsController_start",
+        "parameters": [
+          {
+            "name": "sprintId",
+            "required": true,
+            "in": "path",
+            "description": "Sprint id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Makes the sprint the active one. Permissions: `MANAGE_BOARD`.",
+        "tags": ["Sprints"]
+      }
+    },
+    "/api/v1/projects/{id}/sprints/{sprintId}/close": {
+      "post": {
+        "operationId": "SprintsController_close",
+        "parameters": [
+          {
+            "name": "sprintId",
+            "required": true,
+            "in": "path",
+            "description": "Sprint id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CloseSprintDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Closes the sprint, optionally moving unfinished items. Permissions:\n`MANAGE_BOARD`.",
+        "tags": ["Sprints"]
+      }
+    },
+    "/api/v1/projects/{id}/items": {
+      "get": {
+        "operationId": "ItemsController_list",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Only this type.",
+            "schema": { "type": "string", "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"] }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only this status.",
+            "schema": {
+              "type": "string",
+              "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+            }
+          },
+          {
+            "name": "bucketId",
+            "required": false,
+            "in": "query",
+            "description": "Only this bucket, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "sprintId",
+            "required": false,
+            "in": "query",
+            "description": "Only this sprint, or `none` (backlog).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "teamId",
+            "required": false,
+            "in": "query",
+            "description": "Only this team, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Only children of this item, or `none` for top-level items.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "assigneeId",
+            "required": false,
+            "in": "query",
+            "description": "Only items assigned to this user.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "labelId",
+            "required": false,
+            "in": "query",
+            "description": "Only items with this label.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueFrom",
+            "required": false,
+            "in": "query",
+            "description": "Due on or after this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dueTo",
+            "required": false,
+            "in": "query",
+            "description": "Due on or before this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive title search; a number also matches the item number.",
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "`number` (default) or `position` (board order).",
+            "schema": { "type": "string", "enum": ["number", "position"] }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists visible items. Permissions: any member and admin, within scope.",
+        "tags": ["Items"]
+      },
+      "post": {
+        "operationId": "ItemsController_create",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateItemDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Creates an item. Permissions: `CREATE_ITEMS` (PM, Lead, Member).",
+        "tags": ["Items"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}": {
+      "get": {
+        "operationId": "ItemsController_get",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns one item. Permissions: visible items only (404 otherwise).",
+        "tags": ["Items"]
+      },
+      "patch": {
+        "operationId": "ItemsController_update",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateItemDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Edits an item. Permissions: `EDIT_ANY_ITEM`, or `EDIT_OWN_ITEMS` on own\nitems, or leading the item's team.",
+        "tags": ["Items"]
+      },
+      "delete": {
+        "operationId": "ItemsController_remove",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "cascade",
+            "required": false,
+            "in": "query",
+            "description": "Delete the item's whole subtree too (SPEC §4.1; PM and Lead only).",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Deletes an item (`?cascade=true` for its subtree). Permissions:\n`DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items, or\nleading the item's team (no cascade).",
+        "tags": ["Items"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/move": {
+      "post": {
+        "operationId": "ItemsController_move",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/MoveItemDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Moves a card into or within a bucket. Permissions: `MOVE_ANY_ITEM`, or\n`MOVE_OWN_ITEMS` on own/assigned cards, or leading the item's team.",
+        "tags": ["Items"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/children": {
+      "get": {
+        "operationId": "ItemsController_children",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists an item's visible children. Permissions: visible parent only.",
+        "tags": ["Items"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/activity": {
+      "get": {
+        "operationId": "ItemsController_activity",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Returns an item's activity history. Permissions: visible items only.",
+        "tags": ["Items"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/dependencies": {
+      "post": {
+        "operationId": "ItemsController_addDependency",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Blocked item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/AddDependencyDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Marks the item as blocked by another. Permissions: as for editing the item.",
+        "tags": ["Items"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/dependencies/{blockingItemId}": {
+      "delete": {
+        "operationId": "ItemsController_removeDependency",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Blocked item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "blockingItemId",
+            "required": true,
+            "in": "path",
+            "description": "The blocking item's id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Removes a \"blocked by\" dependency. Permissions: as for editing the item.",
+        "tags": ["Items"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/checklist": {
+      "get": {
+        "operationId": "ChecklistController_list",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "type": "array", "items": { "type": "object" } } }
+            }
+          }
+        },
+        "summary": "Lists the checklist in order. Permissions: visible items only.",
+        "tags": ["Checklist"]
+      },
+      "post": {
+        "operationId": "ChecklistController_add",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateChecklistItemDto" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Appends a line. Permissions: as for editing the item.",
+        "tags": ["Checklist"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/checklist/{lineId}": {
+      "patch": {
+        "operationId": "ChecklistController_update",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "description": "Line id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UpdateChecklistItemDto" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Edits or ticks a line. Permissions: as for editing the item.",
+        "tags": ["Checklist"]
+      },
+      "delete": {
+        "operationId": "ChecklistController_remove",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "description": "Line id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Removes a line. Permissions: as for editing the item.",
+        "tags": ["Checklist"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/checklist/{lineId}/move": {
+      "post": {
+        "operationId": "ChecklistController_move",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "lineId",
+            "required": true,
+            "in": "path",
+            "description": "Line id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReorderDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Reorders a line. Permissions: as for editing the item.",
+        "tags": ["Checklist"]
+      }
+    },
+    "/api/v1/me/work": {
+      "get": {
+        "operationId": "WorkController_mine",
+        "parameters": [
+          {
+            "name": "includeDone",
+            "required": false,
+            "in": "query",
+            "description": "Include Done items (default false: open work only).",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "includeCreated",
+            "required": false,
+            "in": "query",
+            "description": "Include project items created by the selected person.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "My work source; other people's personal work is never included.",
+            "schema": { "type": "string", "enum": ["ALL", "PROJECTS", "PERSONAL"] }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "description": "Restrict to a readable project; inaccessible ids return no matches.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Item type.",
+            "schema": { "type": "string", "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"] }
+          },
+          {
+            "name": "labelId",
+            "required": false,
+            "in": "query",
+            "description": "Per-project label id.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueFrom",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive due-date lower bound.",
+            "schema": { "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "type": "string" }
+          },
+          {
+            "name": "dueTo",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive due-date upper bound.",
+            "schema": { "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Lists assigned/created project work and the caller's personal tasks.",
+        "tags": ["Work"]
+      }
+    },
+    "/api/v1/users/{userId}/work": {
+      "get": {
+        "operationId": "WorkController_list",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "description": "The person.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "includeDone",
+            "required": false,
+            "in": "query",
+            "description": "Include Done items (default false: open work only).",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "includeCreated",
+            "required": false,
+            "in": "query",
+            "description": "Include project items created by the selected person.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "My work source; other people's personal work is never included.",
+            "schema": { "type": "string", "enum": ["ALL", "PROJECTS", "PERSONAL"] }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "description": "Restrict to a readable project; inaccessible ids return no matches.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Item type.",
+            "schema": { "type": "string", "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"] }
+          },
+          {
+            "name": "labelId",
+            "required": false,
+            "in": "query",
+            "description": "Per-project label id.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueFrom",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive due-date lower bound.",
+            "schema": { "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "type": "string" }
+          },
+          {
+            "name": "dueTo",
+            "required": false,
+            "in": "query",
+            "description": "Inclusive due-date upper bound.",
+            "schema": { "pattern": "^\\d{4}-\\d{2}-\\d{2}$", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Lists the open items (or all, with `includeDone=true`) assigned to a\nperson that the caller can see.",
+        "tags": ["Work"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/duplicate": {
+      "post": {
+        "operationId": "DuplicationController_create",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Readable source.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/DuplicateDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "type": "array", "items": { "type": "object" } } }
+            }
+          }
+        },
+        "summary": "Creates exactly the confirmed independent copies.",
+        "tags": ["Duplication"]
+      }
+    },
+    "/api/v1/projects/{id}/snapshots/preview": {
+      "get": {
+        "operationId": "ProjectSnapshotsController_preview",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Only this type.",
+            "schema": { "type": "string", "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"] }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only this status.",
+            "schema": {
+              "type": "string",
+              "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+            }
+          },
+          {
+            "name": "bucketId",
+            "required": false,
+            "in": "query",
+            "description": "Only this bucket, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "sprintId",
+            "required": false,
+            "in": "query",
+            "description": "Only this sprint, or `none` (backlog).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "teamId",
+            "required": false,
+            "in": "query",
+            "description": "Only this team, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Only children of this item, or `none` for top-level items.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "assigneeId",
+            "required": false,
+            "in": "query",
+            "description": "Only items assigned to this user.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "labelId",
+            "required": false,
+            "in": "query",
+            "description": "Only items with this label.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueFrom",
+            "required": false,
+            "in": "query",
+            "description": "Due on or after this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dueTo",
+            "required": false,
+            "in": "query",
+            "description": "Due on or before this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive title search; a number also matches the item number.",
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "`number` (default) or `position` (board order).",
+            "schema": { "type": "string", "enum": ["number", "position"] }
+          },
+          {
+            "name": "boardOnly",
+            "required": false,
+            "in": "query",
+            "description": "Filtered board shows only items on a board; all-eligible includes off-board items.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "unassigned",
+            "required": false,
+            "in": "query",
+            "description": "Filtered board's unassigned chip.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "description": "Filtered screen or every eligible item from the same source.",
+            "schema": { "type": "string", "enum": ["filtered", "all"] }
+          },
+          {
+            "name": "offline",
+            "required": false,
+            "in": "query",
+            "description": "Include permitted files and original rich text for offline reading.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "My work source retained in both scope modes.",
+            "schema": { "type": "string", "enum": ["ALL", "PROJECTS", "PERSONAL"] }
+          },
+          {
+            "name": "includeCreated",
+            "required": false,
+            "in": "query",
+            "description": "My work's created-item option, retained in both scope modes.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "includeDone",
+            "required": false,
+            "in": "query",
+            "description": "My work's Done option, retained in both scope modes.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "description": "Narrow My work to a project.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueGroup",
+            "required": false,
+            "in": "query",
+            "description": "Named due group from the work screen.",
+            "schema": {
+              "type": "string",
+              "enum": ["Overdue", "Today", "This week", "Later", "No date"]
+            }
+          },
+          {
+            "name": "today",
+            "required": false,
+            "in": "query",
+            "description": "Viewer's calendar day used for work due grouping.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Previews every eligible page without exporting unreadable content.",
+        "tags": ["ProjectSnapshots"]
+      }
+    },
+    "/api/v1/projects/{id}/snapshots": {
+      "get": {
+        "operationId": "ProjectSnapshotsController_download",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Only this type.",
+            "schema": { "type": "string", "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"] }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only this status.",
+            "schema": {
+              "type": "string",
+              "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+            }
+          },
+          {
+            "name": "bucketId",
+            "required": false,
+            "in": "query",
+            "description": "Only this bucket, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "sprintId",
+            "required": false,
+            "in": "query",
+            "description": "Only this sprint, or `none` (backlog).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "teamId",
+            "required": false,
+            "in": "query",
+            "description": "Only this team, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Only children of this item, or `none` for top-level items.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "assigneeId",
+            "required": false,
+            "in": "query",
+            "description": "Only items assigned to this user.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "labelId",
+            "required": false,
+            "in": "query",
+            "description": "Only items with this label.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueFrom",
+            "required": false,
+            "in": "query",
+            "description": "Due on or after this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dueTo",
+            "required": false,
+            "in": "query",
+            "description": "Due on or before this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive title search; a number also matches the item number.",
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "`number` (default) or `position` (board order).",
+            "schema": { "type": "string", "enum": ["number", "position"] }
+          },
+          {
+            "name": "boardOnly",
+            "required": false,
+            "in": "query",
+            "description": "Filtered board shows only items on a board; all-eligible includes off-board items.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "unassigned",
+            "required": false,
+            "in": "query",
+            "description": "Filtered board's unassigned chip.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "description": "Filtered screen or every eligible item from the same source.",
+            "schema": { "type": "string", "enum": ["filtered", "all"] }
+          },
+          {
+            "name": "offline",
+            "required": false,
+            "in": "query",
+            "description": "Include permitted files and original rich text for offline reading.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "My work source retained in both scope modes.",
+            "schema": { "type": "string", "enum": ["ALL", "PROJECTS", "PERSONAL"] }
+          },
+          {
+            "name": "includeCreated",
+            "required": false,
+            "in": "query",
+            "description": "My work's created-item option, retained in both scope modes.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "includeDone",
+            "required": false,
+            "in": "query",
+            "description": "My work's Done option, retained in both scope modes.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "description": "Narrow My work to a project.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueGroup",
+            "required": false,
+            "in": "query",
+            "description": "Named due group from the work screen.",
+            "schema": {
+              "type": "string",
+              "enum": ["Overdue", "Today", "This week", "Later", "No date"]
+            }
+          },
+          {
+            "name": "today",
+            "required": false,
+            "in": "query",
+            "description": "Viewer's calendar day used for work due grouping.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Downloads a readable snapshot; the API rechecks the scope on every request.",
+        "tags": ["ProjectSnapshots"]
+      }
+    },
+    "/api/v1/me/snapshots/preview": {
+      "get": {
+        "operationId": "WorkSnapshotsController_preview",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Only this type.",
+            "schema": { "type": "string", "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"] }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only this status.",
+            "schema": {
+              "type": "string",
+              "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+            }
+          },
+          {
+            "name": "bucketId",
+            "required": false,
+            "in": "query",
+            "description": "Only this bucket, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "sprintId",
+            "required": false,
+            "in": "query",
+            "description": "Only this sprint, or `none` (backlog).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "teamId",
+            "required": false,
+            "in": "query",
+            "description": "Only this team, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Only children of this item, or `none` for top-level items.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "assigneeId",
+            "required": false,
+            "in": "query",
+            "description": "Only items assigned to this user.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "labelId",
+            "required": false,
+            "in": "query",
+            "description": "Only items with this label.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueFrom",
+            "required": false,
+            "in": "query",
+            "description": "Due on or after this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dueTo",
+            "required": false,
+            "in": "query",
+            "description": "Due on or before this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive title search; a number also matches the item number.",
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "`number` (default) or `position` (board order).",
+            "schema": { "type": "string", "enum": ["number", "position"] }
+          },
+          {
+            "name": "boardOnly",
+            "required": false,
+            "in": "query",
+            "description": "Filtered board shows only items on a board; all-eligible includes off-board items.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "unassigned",
+            "required": false,
+            "in": "query",
+            "description": "Filtered board's unassigned chip.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "description": "Filtered screen or every eligible item from the same source.",
+            "schema": { "type": "string", "enum": ["filtered", "all"] }
+          },
+          {
+            "name": "offline",
+            "required": false,
+            "in": "query",
+            "description": "Include permitted files and original rich text for offline reading.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "My work source retained in both scope modes.",
+            "schema": { "type": "string", "enum": ["ALL", "PROJECTS", "PERSONAL"] }
+          },
+          {
+            "name": "includeCreated",
+            "required": false,
+            "in": "query",
+            "description": "My work's created-item option, retained in both scope modes.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "includeDone",
+            "required": false,
+            "in": "query",
+            "description": "My work's Done option, retained in both scope modes.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "description": "Narrow My work to a project.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueGroup",
+            "required": false,
+            "in": "query",
+            "description": "Named due group from the work screen.",
+            "schema": {
+              "type": "string",
+              "enum": ["Overdue", "Today", "This week", "Later", "No date"]
+            }
+          },
+          {
+            "name": "today",
+            "required": false,
+            "in": "query",
+            "description": "Viewer's calendar day used for work due grouping.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Previews only the caller's eligible work.",
+        "tags": ["WorkSnapshots"]
+      }
+    },
+    "/api/v1/me/snapshots": {
+      "get": {
+        "operationId": "WorkSnapshotsController_download",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Only this type.",
+            "schema": { "type": "string", "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"] }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "description": "Only this status.",
+            "schema": {
+              "type": "string",
+              "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+            }
+          },
+          {
+            "name": "bucketId",
+            "required": false,
+            "in": "query",
+            "description": "Only this bucket, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "sprintId",
+            "required": false,
+            "in": "query",
+            "description": "Only this sprint, or `none` (backlog).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "teamId",
+            "required": false,
+            "in": "query",
+            "description": "Only this team, or `none`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Only children of this item, or `none` for top-level items.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "assigneeId",
+            "required": false,
+            "in": "query",
+            "description": "Only items assigned to this user.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "labelId",
+            "required": false,
+            "in": "query",
+            "description": "Only items with this label.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueFrom",
+            "required": false,
+            "in": "query",
+            "description": "Due on or after this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "dueTo",
+            "required": false,
+            "in": "query",
+            "description": "Due on or before this date.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "q",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive title search; a number also matches the item number.",
+            "schema": { "maxLength": 100, "type": "string" }
+          },
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "`number` (default) or `position` (board order).",
+            "schema": { "type": "string", "enum": ["number", "position"] }
+          },
+          {
+            "name": "boardOnly",
+            "required": false,
+            "in": "query",
+            "description": "Filtered board shows only items on a board; all-eligible includes off-board items.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "unassigned",
+            "required": false,
+            "in": "query",
+            "description": "Filtered board's unassigned chip.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "scope",
+            "required": false,
+            "in": "query",
+            "description": "Filtered screen or every eligible item from the same source.",
+            "schema": { "type": "string", "enum": ["filtered", "all"] }
+          },
+          {
+            "name": "offline",
+            "required": false,
+            "in": "query",
+            "description": "Include permitted files and original rich text for offline reading.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "source",
+            "required": false,
+            "in": "query",
+            "description": "My work source retained in both scope modes.",
+            "schema": { "type": "string", "enum": ["ALL", "PROJECTS", "PERSONAL"] }
+          },
+          {
+            "name": "includeCreated",
+            "required": false,
+            "in": "query",
+            "description": "My work's created-item option, retained in both scope modes.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "includeDone",
+            "required": false,
+            "in": "query",
+            "description": "My work's Done option, retained in both scope modes.",
+            "schema": { "type": "boolean" }
+          },
+          {
+            "name": "projectId",
+            "required": false,
+            "in": "query",
+            "description": "Narrow My work to a project.",
+            "schema": { "format": "uuid", "type": "string" }
+          },
+          {
+            "name": "dueGroup",
+            "required": false,
+            "in": "query",
+            "description": "Named due group from the work screen.",
+            "schema": {
+              "type": "string",
+              "enum": ["Overdue", "Today", "This week", "Later", "No date"]
+            }
+          },
+          {
+            "name": "today",
+            "required": false,
+            "in": "query",
+            "description": "Viewer's calendar day used for work due grouping.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Downloads only work currently eligible for the caller.",
+        "tags": ["WorkSnapshots"]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "operationId": "NotificationsController_list",
+        "parameters": [
+          {
+            "name": "unread",
+            "required": false,
+            "in": "query",
+            "description": "Only unread notifications (default false: all).",
+            "schema": { "type": "boolean" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists the caller's notifications, newest first.",
+        "tags": ["Notifications"]
+      }
+    },
+    "/api/v1/notifications/unread-count": {
+      "get": {
+        "operationId": "NotificationsController_unreadCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Counts the caller's unread notifications, for the bell.",
+        "tags": ["Notifications"]
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "operationId": "NotificationsController_markAllRead",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Marks all the caller's notifications as read.",
+        "tags": ["Notifications"]
+      }
+    },
+    "/api/v1/notifications/{notificationId}/read": {
+      "post": {
+        "operationId": "NotificationsController_markRead",
+        "parameters": [
+          {
+            "name": "notificationId",
+            "required": true,
+            "in": "path",
+            "description": "Notification id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Marks one of the caller's notifications as read.",
+        "tags": ["Notifications"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/notes": {
+      "get": {
+        "operationId": "NotesController_list",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists the item's notes, newest first. Permissions: visible items only.",
+        "tags": ["Notes"]
+      },
+      "post": {
+        "operationId": "NotesController_create",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateNoteDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Adds a note. Permissions: `ANNOTATE_ITEMS` on a visible item.",
+        "tags": ["Notes"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/notes/{noteId}": {
+      "patch": {
+        "operationId": "NotesController_update",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "description": "Note id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/UpdateNoteDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Changes a note. Permissions: its author, with `ANNOTATE_ITEMS`.",
+        "tags": ["Notes"]
+      },
+      "delete": {
+        "operationId": "NotesController_remove",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "noteId",
+            "required": true,
+            "in": "path",
+            "description": "Note id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Deletes a note. Permissions: its author, or PMs, Leads and the item's\nteam Leads.",
+        "tags": ["Notes"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/attachments": {
+      "get": {
+        "operationId": "AttachmentsController_list",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists the item's attachments, newest first. Permissions: visible items.",
+        "tags": ["Attachments"]
+      },
+      "post": {
+        "operationId": "AttachmentsController_upload",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Uploads an attachment. Permissions: `ANNOTATE_ITEMS` on a visible item.",
+        "tags": ["Attachments"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/attachments/{attachmentId}": {
+      "get": {
+        "operationId": "AttachmentsController_download",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "attachmentId",
+            "required": true,
+            "in": "path",
+            "description": "Attachment id.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Downloads an attachment, always as a download (`Content-Disposition:\nattachment`, `nosniff`). Permissions: visible items only.",
+        "tags": ["Attachments"]
+      },
+      "delete": {
+        "operationId": "AttachmentsController_remove",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "attachmentId",
+            "required": true,
+            "in": "path",
+            "description": "Attachment id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Deletes an attachment. Permissions: the uploader, PMs, Leads and the\nitem's team Leads.",
+        "tags": ["Attachments"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/images": {
+      "post": {
+        "operationId": "InlineImagesController_upload",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Uploads an image. Permissions: `ANNOTATE_ITEMS` on a visible item.",
+        "tags": ["InlineImages"]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/images/{imageId}": {
+      "get": {
+        "operationId": "InlineImagesController_view",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "imageId",
+            "required": true,
+            "in": "path",
+            "description": "Image id.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Sends an image with its detected type and `nosniff`. Browsers must ask\nagain each time (`no-cache`), so an image is never shown from a cache to\nsomeone who can no longer see its item. Permissions: visible items.",
+        "tags": ["InlineImages"]
+      }
+    },
+    "/api/v1/admin/settings/security": {
+      "get": {
+        "operationId": "AdminSettingsController_getSecurity",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the session and lockout settings in effect.",
+        "tags": ["AdminSettings"]
+      },
+      "put": {
+        "operationId": "AdminSettingsController_putSecurity",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SecuritySettingsBody" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Replaces the session and lockout settings.",
+        "tags": ["AdminSettings"]
+      }
+    },
+    "/api/v1/admin/settings/storage": {
+      "get": {
+        "operationId": "AdminSettingsController_getStorage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the attachment limits in effect.",
+        "tags": ["AdminSettings"]
+      },
+      "put": {
+        "operationId": "AdminSettingsController_putStorage",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/StorageSettingsBody" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Replaces the attachment limits.",
+        "tags": ["AdminSettings"]
+      }
+    },
+    "/api/v1/admin/settings/storage/usage": {
+      "get": {
+        "operationId": "AdminSettingsController_getUsage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Measures the disk usage of the app's folder, attachments, backups and\nlogs, plus the free space of the disk.",
+        "tags": ["AdminSettings"]
+      }
+    },
+    "/api/v1/admin/settings/logs": {
+      "get": {
+        "operationId": "AdminSettingsController_getLogs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the log retention in effect.",
+        "tags": ["AdminSettings"]
+      },
+      "put": {
+        "operationId": "AdminSettingsController_putLogs",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/LogSettingsBody" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Replaces the log retention.",
+        "tags": ["AdminSettings"]
+      }
+    },
+    "/api/v1/admin/settings/theme": {
+      "get": {
+        "operationId": "AdminSettingsController_getTheme",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the default theme.",
+        "tags": ["AdminSettings"]
+      },
+      "put": {
+        "operationId": "AdminSettingsController_putTheme",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ThemeBody" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Replaces the default theme.",
+        "tags": ["AdminSettings"]
+      }
+    },
+    "/api/v1/branding": {
+      "get": {
+        "operationId": "PublicBrandingController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the app name, logo and font locations and the default theme.",
+        "tags": ["PublicBranding"],
+        "security": []
+      }
+    },
+    "/api/v1/branding/logo": {
+      "get": {
+        "operationId": "PublicBrandingController_logo",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "summary": "Sends the logo.",
+        "tags": ["PublicBranding"],
+        "security": []
+      }
+    },
+    "/api/v1/branding/fonts/{weight}": {
+      "get": {
+        "operationId": "PublicBrandingController_font",
+        "parameters": [
+          {
+            "name": "weight",
+            "required": true,
+            "in": "path",
+            "description": "`regular` or `bold`.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Sends an uploaded font file.",
+        "tags": ["PublicBranding"],
+        "security": []
+      }
+    },
+    "/api/v1/admin/settings/branding": {
+      "get": {
+        "operationId": "AdminBrandingController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the branding settings.",
+        "tags": ["AdminBranding"]
+      },
+      "put": {
+        "operationId": "AdminBrandingController_put",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/BrandingBody" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Saves the app name and the font.",
+        "tags": ["AdminBranding"]
+      }
+    },
+    "/api/v1/admin/settings/branding/logo": {
+      "put": {
+        "operationId": "AdminBrandingController_putLogo",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Uploads a new logo (PNG, JPEG, GIF or WebP by content, at most 1 MB).",
+        "tags": ["AdminBranding"]
+      },
+      "delete": {
+        "operationId": "AdminBrandingController_deleteLogo",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Removes the logo.",
+        "tags": ["AdminBranding"]
+      }
+    },
+    "/api/v1/admin/settings/branding/fonts/{weight}": {
+      "put": {
+        "operationId": "AdminBrandingController_putFont",
+        "parameters": [
+          {
+            "name": "weight",
+            "required": true,
+            "in": "path",
+            "description": "`regular` or `bold`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Uploads the regular or bold font file (WOFF2, WOFF, TTF or OTF by\ncontent, at most 10 MB).",
+        "tags": ["AdminBranding"]
+      },
+      "delete": {
+        "operationId": "AdminBrandingController_deleteFont",
+        "parameters": [
+          {
+            "name": "weight",
+            "required": true,
+            "in": "path",
+            "description": "`regular` or `bold`.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Removes a font file; removing the regular one removes both and switches\nan uploaded font back to Figtree.",
+        "tags": ["AdminBranding"]
+      }
+    },
+    "/api/v1/admin/backups": {
+      "get": {
+        "operationId": "BackupsController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns the schedule, whether a backup is running, the last results and\nthe backup files.",
+        "tags": ["Backups"]
+      }
+    },
+    "/api/v1/admin/backups/settings": {
+      "put": {
+        "operationId": "BackupsController_putSettings",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/BackupSettingsBody" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Replaces the schedule.",
+        "tags": ["Backups"]
+      }
+    },
+    "/api/v1/admin/backups/run": {
+      "post": {
+        "operationId": "BackupsController_run",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Starts a backup now; the result appears in the last results.",
+        "tags": ["Backups"]
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Reports that the backend is answering requests.",
+        "tags": ["Health"],
+        "security": []
+      }
+    }
+  },
+  "info": {
+    "title": "Kloister API",
+    "description": "Session cookie authentication; state-changing requests require X-Requested-With: kloister. Authorization is enforced by the API. Hidden items return 404. See SPEC sections 3–5 for role and visibility rules. Binary file routes are documented by their controllers.",
+    "version": "development",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": { "cookie": { "type": "apiKey", "in": "cookie", "name": "sid" } },
+    "schemas": {
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Not checked as an email here: any mismatch is just a failed login.",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "description": "No minimum on login, so old or temporary passwords still work.",
+            "maxLength": 256
+          }
+        },
+        "required": ["email", "password"]
+      },
+      "ChangePasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "description": "The password the user currently has.",
+            "maxLength": 256
+          },
+          "newPassword": {
+            "type": "string",
+            "description": "At least 12 characters; no composition rules (SPEC §5).",
+            "minLength": 12,
+            "maxLength": 256
+          }
+        },
+        "required": ["currentPassword", "newPassword"]
+      },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Login email. TLDs are optional because internal mail domains often lack one.",
+            "maxLength": 254,
+            "format": "email"
+          },
+          "displayName": {
+            "type": "string",
+            "description": "Name shown in the UI.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "systemRole": {
+            "type": "string",
+            "description": "Defaults to `USER`.",
+            "enum": ["ADMIN", "USER"]
+          }
+        },
+        "required": ["email", "displayName"]
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "New display name.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "systemRole": {
+            "type": "string",
+            "description": "Promote or demote.",
+            "enum": ["ADMIN", "USER"]
+          },
+          "isActive": { "type": "boolean", "description": "Deactivate or reactivate." }
+        }
+      },
+      "UpdateMeDto": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string",
+            "description": "New display name.",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        }
+      },
+      "ThemeBody": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "description": "Light, dark or the operating system's choice.",
+            "enum": ["SYSTEM", "LIGHT", "DARK"],
+            "type": "string"
+          },
+          "primary": { "type": "string", "description": "Primary colour, `#RRGGBB`." },
+          "accent": { "type": "string", "description": "Accent colour, `#RRGGBB`." }
+        },
+        "required": ["mode", "primary", "accent"]
+      },
+      "CreateProjectDto": {
+        "type": "object",
+        "properties": {
+          "key": { "type": "string", "description": "2–6 letters; lowercase input is uppercased." },
+          "name": {
+            "type": "string",
+            "description": "Display name.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional plain-text description.",
+            "maxLength": 2000
+          },
+          "pmUserIds": {
+            "description": "The Project Managers: one or more distinct users.",
+            "uniqueItems": true,
+            "minItems": 1,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          }
+        },
+        "required": ["key", "name", "pmUserIds"]
+      },
+      "ProjectSettingsChangeDto": {
+        "type": "object",
+        "properties": {
+          "membersCanAssignOthers": {
+            "type": "boolean",
+            "description": "Lets Members assign items to others."
+          },
+          "statusToBucket": {
+            "type": "object",
+            "description": "Replaces the status → bucket map (SPEC §4.2); `{}` clears it."
+          },
+          "labelStyle": {
+            "type": "string",
+            "description": "Label style for the whole project (SPEC §4, §6).",
+            "enum": ["SOLID", "TINTED", "COVER"]
+          }
+        }
+      },
+      "UpdateProjectDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "New display name.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": { "type": "string", "description": "New description.", "maxLength": 2000 },
+          "settings": {
+            "description": "Settings to change.",
+            "allOf": [{ "$ref": "#/components/schemas/ProjectSettingsChangeDto" }]
+          }
+        }
+      },
+      "AddMemberDto": {
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string", "description": "User to add.", "format": "uuid" },
+          "role": {
+            "type": "string",
+            "description": "Project role.",
+            "enum": ["PM", "LEAD", "MEMBER", "VIEWER"]
+          },
+          "visibility": {
+            "type": "string",
+            "description": "Visibility scope; defaults to `ALL`.",
+            "enum": ["ALL", "BUCKETS", "OWN", "TEAMS"]
+          },
+          "allowedBucketIds": {
+            "description": "Buckets visible under `BUCKETS` scope.",
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          }
+        },
+        "required": ["userId", "role"]
+      },
+      "UpdateMemberDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "New role.",
+            "enum": ["PM", "LEAD", "MEMBER", "VIEWER"]
+          },
+          "visibility": {
+            "type": "string",
+            "description": "New visibility scope.",
+            "enum": ["ALL", "BUCKETS", "OWN", "TEAMS"]
+          },
+          "allowedBucketIds": {
+            "description": "New bucket list.",
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          }
+        }
+      },
+      "CreateTeamDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name, unique within the project.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description.",
+            "maxLength": 1000
+          }
+        },
+        "required": ["name"]
+      },
+      "UpdateTeamDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "New name.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "description": { "type": "string", "description": "New description.", "maxLength": 1000 }
+        }
+      },
+      "SetTeamMemberDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "Role in the team.",
+            "enum": ["LEAD", "MEMBER"]
+          }
+        },
+        "required": ["role"]
+      },
+      "CreateBucketDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Name.", "minLength": 1, "maxLength": 100 },
+          "onEnterMode": {
+            "type": "string",
+            "description": "Entry rule; default `NONE`.",
+            "enum": ["NONE", "SET", "SET_IF_NOT_STARTED"]
+          },
+          "onEnterStatus": {
+            "type": "string",
+            "nullable": true,
+            "description": "Status set by the rule.",
+            "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+          }
+        },
+        "required": ["name"]
+      },
+      "UpdateBucketDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "New name.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "onEnterMode": {
+            "type": "string",
+            "description": "New entry rule.",
+            "enum": ["NONE", "SET", "SET_IF_NOT_STARTED"]
+          },
+          "onEnterStatus": {
+            "type": "string",
+            "nullable": true,
+            "description": "New rule status.",
+            "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+          }
+        }
+      },
+      "ReorderDto": {
+        "type": "object",
+        "properties": {
+          "afterId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Row to place this one after; omit or null for the first place.",
+            "format": "uuid"
+          }
+        }
+      },
+      "CreateLabelDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Name.", "minLength": 1, "maxLength": 100 },
+          "colour": { "type": "string", "description": "`#rrggbb`." }
+        },
+        "required": ["name", "colour"]
+      },
+      "UpdateLabelDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "New name.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "colour": { "type": "string", "description": "New colour." }
+        }
+      },
+      "CreateSprintDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Name.", "minLength": 1, "maxLength": 100 },
+          "startDate": { "type": "string", "description": "`YYYY-MM-DD`." },
+          "endDate": { "type": "string", "description": "`YYYY-MM-DD`." },
+          "adoIterationPath": {
+            "type": "string",
+            "nullable": true,
+            "description": "ADO iteration path override.",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        },
+        "required": ["name", "startDate", "endDate"]
+      },
+      "UpdateSprintDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "New name.",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "startDate": { "type": "string", "description": "New start date." },
+          "endDate": { "type": "string", "description": "New end date." },
+          "adoIterationPath": {
+            "type": "string",
+            "nullable": true,
+            "description": "New override, or null to clear.",
+            "minLength": 1,
+            "maxLength": 4000
+          }
+        }
+      },
+      "CloseSprintDto": {
+        "type": "object",
+        "properties": {
+          "moveUnfinishedTo": {
+            "type": "string",
+            "nullable": true,
+            "description": "Open sprint for unfinished items, null for the backlog, omitted to leave them.",
+            "format": "uuid"
+          }
+        }
+      },
+      "CreateItemDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Item type.",
+            "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"]
+          },
+          "title": { "type": "string", "description": "Title.", "minLength": 1, "maxLength": 255 },
+          "description": {
+            "type": "string",
+            "description": "HTML description; sanitized before storing.",
+            "maxLength": 100000
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Parent item.",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Initial status.",
+            "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+          },
+          "priority": { "type": "number", "description": "Priority.", "minimum": 1, "maximum": 4 },
+          "bucketId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Bucket.",
+            "format": "uuid"
+          },
+          "sprintId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sprint.",
+            "format": "uuid"
+          },
+          "teamId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Team.",
+            "format": "uuid"
+          },
+          "startDate": { "type": "string", "nullable": true, "description": "Start date." },
+          "dueDate": { "type": "string", "nullable": true, "description": "Due date." },
+          "assigneeIds": {
+            "description": "Assignees.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          },
+          "labelIds": {
+            "description": "Labels.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          }
+        },
+        "required": ["type", "title"]
+      },
+      "UpdateItemDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "New type.",
+            "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"]
+          },
+          "title": {
+            "type": "string",
+            "description": "New title.",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "description": {
+            "type": "string",
+            "description": "New description.",
+            "maxLength": 100000
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "New parent, or null.",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "New status.",
+            "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+          },
+          "priority": {
+            "type": "number",
+            "description": "New priority.",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "sprintId": {
+            "type": "string",
+            "nullable": true,
+            "description": "New sprint, or null.",
+            "format": "uuid"
+          },
+          "teamId": {
+            "type": "string",
+            "nullable": true,
+            "description": "New team, or null.",
+            "format": "uuid"
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "New start date, or null."
+          },
+          "dueDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "New due date, or null."
+          },
+          "assigneeIds": {
+            "description": "Full assignee list.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          },
+          "labelIds": {
+            "description": "Full label list.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          }
+        }
+      },
+      "MoveItemDto": {
+        "type": "object",
+        "properties": {
+          "bucketId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Target bucket; omitted keeps the bucket, null takes an Epic/Feature off the board.",
+            "format": "uuid"
+          },
+          "afterId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Item to place the card after; omitted or null for the top.",
+            "format": "uuid"
+          }
+        }
+      },
+      "AddDependencyDto": {
+        "type": "object",
+        "properties": {
+          "blockingItemId": {
+            "type": "string",
+            "description": "The item that blocks this one.",
+            "format": "uuid"
+          }
+        },
+        "required": ["blockingItemId"]
+      },
+      "CreateChecklistItemDto": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string", "description": "Text.", "minLength": 1, "maxLength": 500 },
+          "done": { "type": "boolean", "description": "Initially ticked." }
+        },
+        "required": ["text"]
+      },
+      "UpdateChecklistItemDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "New text.",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "done": { "type": "boolean", "description": "Tick or untick." }
+        }
+      },
+      "CopyDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Resulting title.",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "assigneeIds": {
+            "description": "Optional assignees, checked by ordinary creation permissions.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          }
+        },
+        "required": ["title", "assigneeIds"]
+      },
+      "DuplicateDto": {
+        "type": "object",
+        "properties": {
+          "copies": {
+            "description": "Every previewed copy, confirmed together.",
+            "minItems": 1,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CopyDto" }
+          },
+          "bucketId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Explicit destination bucket, including off-board for compatible types.",
+            "format": "uuid"
+          },
+          "teamId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Explicit optional team; ordinary creation rules apply.",
+            "format": "uuid"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Optional readable parent compatible with the copied type.",
+            "format": "uuid"
+          },
+          "keepDates": {
+            "type": "boolean",
+            "description": "Keep both calendar dates only when requested."
+          },
+          "keepSprint": {
+            "type": "boolean",
+            "description": "Keep the source's open sprint only when requested."
+          },
+          "attachments": {
+            "type": "boolean",
+            "description": "Copy non-inline attachments only when requested."
+          }
+        },
+        "required": ["copies"]
+      },
+      "CreateNoteDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "HTML; sanitized by the server (SPEC §5).",
+            "maxLength": 20000
+          }
+        },
+        "required": ["body"]
+      },
+      "UpdateNoteDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "New HTML; sanitized by the server.",
+            "maxLength": 20000
+          }
+        },
+        "required": ["body"]
+      },
+      "SecuritySettingsBody": {
+        "type": "object",
+        "properties": {
+          "idleTimeoutMinutes": { "type": "number", "description": "Idle timeout in minutes." },
+          "absoluteTimeoutMinutes": {
+            "type": "number",
+            "description": "Absolute timeout in minutes; at least the idle timeout (checked by the service)."
+          },
+          "lockoutThreshold": {
+            "type": "number",
+            "description": "Failed sign-ins in a row before a lockout."
+          },
+          "lockoutMinutes": { "type": "number", "description": "Lockout length in minutes." }
+        },
+        "required": [
+          "idleTimeoutMinutes",
+          "absoluteTimeoutMinutes",
+          "lockoutThreshold",
+          "lockoutMinutes"
+        ]
+      },
+      "StorageSettingsBody": {
+        "type": "object",
+        "properties": {
+          "maxFileSizeMb": { "type": "number", "description": "Largest file in MB." },
+          "projectQuotaMb": {
+            "type": "number",
+            "description": "Per-project space in MB; at least the file size limit (checked by the service)."
+          },
+          "personalQuotaMb": { "type": "number", "description": "Per-user personal quota, in MB." }
+        },
+        "required": ["maxFileSizeMb", "projectQuotaMb", "personalQuotaMb"]
+      },
+      "LogSettingsBody": {
+        "type": "object",
+        "properties": {
+          "retentionDays": { "type": "number", "description": "Days daily log files are kept." }
+        },
+        "required": ["retentionDays"]
+      },
+      "BrandingBody": {
+        "type": "object",
+        "properties": {
+          "appName": {
+            "type": "string",
+            "description": "App name, shown in the shell and the page title. Control and format characters are refused.",
+            "minLength": 1,
+            "maxLength": 60,
+            "pattern": "^[^\\p{Cc}\\p{Cf}]+$"
+          },
+          "font": {
+            "type": "string",
+            "description": "The UI font; `UPLOADED` needs an uploaded regular file (checked by the service).",
+            "enum": [
+              "FIGTREE",
+              "ATKINSON_HYPERLEGIBLE",
+              "IBM_PLEX_SANS",
+              "GEORGIA",
+              "ARIAL",
+              "UPLOADED"
+            ]
+          }
+        },
+        "required": ["appName", "font"]
+      },
+      "BackupSettingsBody": {
+        "type": "object",
+        "properties": {
+          "enabled": { "type": "boolean", "description": "Whether the daily backup runs." },
+          "time": { "type": "string", "description": "Server-local time, `HH:MM`." },
+          "retentionDays": { "type": "number", "description": "Days backups are kept." }
+        },
+        "required": ["enabled", "time", "retentionDays"]
+      }
+    }
+  },
+  "security": [{ "cookie": [] }]
+}
