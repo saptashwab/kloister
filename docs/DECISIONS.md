@@ -84,6 +84,21 @@ and all 876 local tests pass (shared 1, API 586, web 276, deployment 13).
 API/database and browser types pass; 48 browser checks list. The initial bundle
 remains 499.88 kB without warnings. Database/browser execution remains CI-only.
 
+M8 repeat-upload test follow-up (2026-10-17): run 38953577410 passed the database
+suite and the phone conflict choices. Its remaining failure occurred after the
+first successful apply: the test set a file on a disabled input during the
+post-apply project refresh. Unlike ordinary pointer file selection, automation
+can set a disabled input; the busy guard correctly ignored that event. The old
+filename satisfied the test's wait, and the next preview returned the old applied
+receipt. Wait for the enabled input before setting files and after decoding,
+assert the previous preview is removed, and require a fresh PREVIEW before the
+repeat apply. Keep the repeat apply and stable-count checks unchanged. Runtime
+behavior, timing budgets, permissions and assertions are not weakened.
+Fresh independent review found no actionable issues. Clean install, formatting,
+lint, build and all 876 local tests pass. API/database and browser types pass,
+and 48 browser checks list. The initial bundle remains 499.88 kB without warnings.
+Database and browser execution remain CI-only.
+
 ## Planning update: M7.5 and M8 (2026-10-16)
 
 The confirmed sequence is the six UI fixes in M7.5, then both directions of ADO

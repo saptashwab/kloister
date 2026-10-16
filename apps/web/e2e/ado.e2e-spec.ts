@@ -66,12 +66,16 @@ async function csvFromDownload(page: Page): Promise<string> {
   return file.async('string');
 }
 async function upload(page: Page, csv: string): Promise<void> {
-  await page.locator('input[type=file]').setInputFiles({
+  const input = page.locator('input[type=file]');
+  await expect(input).toBeEnabled();
+  await input.setInputFiles({
     name: 'synthetic-return.csv',
     mimeType: 'text/csv',
     buffer: Buffer.from(csv, 'utf8'),
   });
+  await expect(page.getByRole('region', { name: 'Transfer preview', exact: true })).toHaveCount(0);
   await expect(page.getByText('synthetic-return.csv', { exact: true })).toBeVisible();
+  await expect(input).toBeEnabled();
   await page.getByRole('checkbox', { name: /I confirm this file belongs/ }).check();
 }
 
@@ -150,6 +154,7 @@ test('ADO starting point needs explicit new-row and field review, preserves coun
   await expect(page.getByRole('heading', { name: /Review.*APPLIED/ })).toBeVisible();
   await upload(page, csv);
   await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
+  await expect(page.getByRole('heading', { name: /Review.*PREVIEW/ })).toBeVisible();
   await page.getByRole('button', { name: 'Apply 1 reviewed rows' }).click();
   await expect(page.getByRole('heading', { name: /Review.*APPLIED/ })).toBeVisible();
   const results = (await (
