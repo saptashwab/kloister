@@ -257,7 +257,7 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
         @if (deleting(); as b) {
           <div class="row" role="group" [attr.aria-label]="'Delete ' + b.name">
             <span>Delete {{ b.name }} and move its cards to</span>
-            <mat-form-field appearance="outline" class="bucket-destination">
+            <mat-form-field appearance="outline" floatLabel="always" class="bucket-destination">
               <mat-label>Destination bucket</mat-label>
               <mat-select
                 aria-label="Bucket receiving the cards"

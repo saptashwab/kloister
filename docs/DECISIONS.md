@@ -279,3 +279,13 @@ repository by this follow-up. No application, deployment or security behavior ch
   covered light/dark presentation, phone/tablet layouts, actual top-bar and nested
   card drags, double-click rename, keyboard selection and Settings consistency.
   Database and full browser regressions remain CI-only; no local database ran.
+
+M7.5 CI repair (2026-10-16): run 38907968471 passed the preceding gates, including
+migrations, database tests and packaging, but failed three new browser scenarios.
+Traces show the bucket gesture started through a fading menu backdrop; a second
+card gesture encountered the previous CDK preview/placeholder; the original-order
+snapshot also ran before columns loaded. Wait for actual overlay/drag cleanup and
+loaded columns, retaining real pointer drags, order/persistence and rollback checks.
+Keep the outlined destination label floated so its empty-field label does not
+cover the select click target. Search/race, destination reset, responsive layout
+and permission assertions remain intact. No M8 work is included.

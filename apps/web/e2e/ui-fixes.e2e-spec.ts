@@ -33,6 +33,10 @@ async function project(
  * @returns Resolves after releasing the pointer.
  */
 async function dragTo(page: Page, source: Locator, target: Locator): Promise<void> {
+  // CDK previews and closing menu backdrops can still intercept the next
+  // gesture after optimistic text has already reached its destination.
+  await expect(page.locator('.cdk-overlay-backdrop')).toHaveCount(0);
+  await expect(page.locator('.cdk-drag-preview, .cdk-drag-placeholder')).toHaveCount(0);
   await source.scrollIntoViewIfNeeded();
   const from = await source.boundingBox();
   if (!from) throw new Error('Missing drag source');
@@ -43,7 +47,14 @@ async function dragTo(page: Page, source: Locator, target: Locator): Promise<voi
   const to = await target.boundingBox();
   if (!to) throw new Error('Missing drop target');
   await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 25 });
+  const saved = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'POST' &&
+      /\/(?:items|buckets)\/[^/]+\/move$/.test(new URL(response.url()).pathname),
+  );
   await page.mouse.up();
+  await saved;
+  await expect(page.locator('.cdk-drag-preview, .cdk-drag-placeholder')).toHaveCount(0);
 }
 
 /** Attaches synthetic screenshots to the CI report.
@@ -57,7 +68,7 @@ async function snap(page: Page, name: string): Promise<void> {
     .attach(name, { body: await page.screenshot({ fullPage: true }), contentType: 'image/png' });
 }
 
-test('board bucket handles and keyboard controls persist the same order as Settings', async ({
+test('board bucket top bars and keyboard controls persist the same order as Settings', async ({
   page,
 }) => {
   await signIn(page, USERS.admin);
@@ -126,6 +137,7 @@ test('cards append to short, empty and long columns without column drags and rol
     made.push((await r.json()) as WorkItemDetailDto);
   }
   await page.goto(`/p/${p.key}`);
+  await expect(page.locator('section.column')).toHaveCount(4);
   const column = (name: string) => page.locator(`section.column[aria-label="${name}"]`);
   const card = (title: string) => page.locator('app-item-card', { hasText: title });
   const originalOrder = await page
