@@ -699,7 +699,7 @@
                   </dd>
                 </dl>
                 @if (p.state === 'PREVIEW' && tab() !== 'recovery') {
-                  <mat-form-field appearance="outline"
+                  <mat-form-field appearance="outline" floatLabel="always"
                     ><mat-label>Choose {{ d.field }} for {{ row.title }}</mat-label
                     ><mat-select
                       [ngModel]="

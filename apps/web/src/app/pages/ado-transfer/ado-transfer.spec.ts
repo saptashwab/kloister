@@ -107,6 +107,56 @@ describe('lazy transfer review lifecycle', () => {
     expect(page.dirty()).toBe(true);
     expect(page.inbound.idempotencyKey).not.toBe(key);
   });
+  it('floats the long conflict label before an empty resolution is focused', async () => {
+    const { page, fixture } = await render();
+    page.preview.set({
+      batchId: null,
+      digest: 'review',
+      destination: {
+        organization: 'collection',
+        remoteProject: 'remote',
+        profile: { process: 'Agile' },
+        revision: 1,
+      } as AdoDestinationDto,
+      rows: [
+        {
+          index: 0,
+          itemId: 'local-item',
+          remoteId: '72001',
+          title: 'Remote starting example',
+          kind: 'update',
+          selected: true,
+          differences: [
+            {
+              field: 'title',
+              local: 'Local title',
+              incoming: 'Remote starting example',
+              baselineLocal: null,
+              baselineRemote: null,
+              conflict: true,
+            },
+          ],
+          warnings: [],
+        },
+      ],
+      files: [],
+      warnings: [],
+      errors: [],
+      state: 'PREVIEW',
+    });
+    await settle(fixture);
+    const field = (fixture.nativeElement as HTMLElement).querySelector(
+      '.ado-difference mat-form-field',
+    );
+    expect(field?.querySelector('mat-select')?.classList.contains('mat-mdc-select-empty')).toBe(
+      true,
+    );
+    expect(field?.querySelector('mat-select')?.getAttribute('aria-expanded')).toBe('false');
+    expect(
+      field?.querySelector('label')?.classList.contains('mdc-floating-label--float-above'),
+    ).toBe(true);
+    expect(field?.textContent).toContain('Choose title for Remote starting example');
+  });
   it('discards a delayed old-project preview and clears approvals on project navigation', async () => {
     const { page, api, fixture, project } = await render();
     let resolve!: (p: AdoPreview) => void;

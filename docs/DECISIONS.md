@@ -72,6 +72,18 @@ lint, build and all 875 local tests pass (shared 1, API 586, web 275, deployment
 initial bundle remains 499.88 kB without warnings under unchanged budgets.
 Database/browser execution stays CI-only.
 
+M8 browser follow-up (2026-10-17): repair run 38951459560 passed all 651 database
+tests and the preceding gates. One of 48 browser checks failed at phone width:
+the long first-link choice label covered its empty Material select and intercepted
+the ordinary pointer click. Keep conflict-choice labels floated before focus so
+the empty select remains clickable. A rendered regression checks the empty,
+closed control and floated label; the browser workflow retains real clicks,
+explicit choices, apply/repeat and stable-count assertions.
+Fresh independent review found no issues. Clean install, formatting, lint, build
+and all 876 local tests pass (shared 1, API 586, web 276, deployment 13).
+API/database and browser types pass; 48 browser checks list. The initial bundle
+remains 499.88 kB without warnings. Database/browser execution remains CI-only.
+
 ## Planning update: M7.5 and M8 (2026-10-16)
 
 The confirmed sequence is the six UI fixes in M7.5, then both directions of ADO
