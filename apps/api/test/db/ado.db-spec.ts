@@ -320,7 +320,11 @@ describe('scoped durable offline transfers (CI database only)', () => {
     const p = await preview(incoming());
     const results = await Promise.all([apply(p), apply(p)]);
     expect(results.some((r) => r.statusCode === 201)).toBe(true);
-    expect(results.every((r) => [201, 409].includes(r.statusCode))).toBe(true);
+    expect(
+      results
+        .filter((r) => ![201, 409].includes(r.statusCode))
+        .map((r) => ({ status: r.statusCode, body: r.json() })),
+    ).toEqual([]);
     expect((await apply(p)).statusCode).toBe(201);
     expect(await prisma.workItem.count({ where: { projectId: project } })).toBe(2);
     expect(await prisma.adoItemLink.count({ where: { remoteId: '901' } })).toBe(1);

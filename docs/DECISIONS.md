@@ -56,6 +56,22 @@ database; this is a delivery artifact, not a published version or release.
 Database/browser execution and the disposable live ADO acceptance drill remain
 unverified until CI and owner execution respectively. No release/tag is published.
 
+M8 CI repair (2026-10-17): run 38949560373 initially stopped at the public registry
+image rate limit. Its retry passed the preceding gates but exposed a concurrent
+import conflict returning an unexpected error (650 database tests passed, one
+failed). The raw SQL item-number allocator can surface serialization/deadlock
+SQLSTATE through Prisma P2010 driver-adapter metadata, while ordinary writes use
+P2034. Map only the raw serialization/deadlock codes to the existing retryable
+409 response; preserve unrelated failures. Unit cases cover both metadata shapes
+and unrelated errors. The database scenario retains concurrent requests, allowed
+success/conflict responses, retry and stable item/link counts, with response bodies
+included in unexpected-status diagnostics. No isolation or authorization changes.
+Fresh independent review found no actionable issues. Clean install, formatting,
+lint, build and all 875 local tests pass (shared 1, API 586, web 275, deployment
+13); API/database and browser types pass, with 48 browser checks listed. The
+initial bundle remains 499.88 kB without warnings under unchanged budgets.
+Database/browser execution stays CI-only.
+
 ## Planning update: M7.5 and M8 (2026-10-16)
 
 The confirmed sequence is the six UI fixes in M7.5, then both directions of ADO

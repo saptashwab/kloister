@@ -34,15 +34,26 @@ export function isForeignKeyViolation(error: unknown): boolean {
 }
 
 /**
- * Converts a serializable-transaction conflict (Prisma P2034, raised when a
- * concurrent transaction touched the same rows) into 409 `CONFLICT`, so the
+ * Converts a serializable-transaction conflict (Prisma P2034 or a raw-query
+ * P2010 wrapping PostgreSQL serialization/deadlock SQLSTATE) into 409 `CONFLICT`, so the
  * client sees "try again" rather than a 500. Other errors are returned as is.
  *
  * @param error Anything thrown inside a transaction.
  * @returns The error to rethrow.
  */
 export function mapTransactionConflict(error: unknown): unknown {
-  return prismaCode(error) === 'P2034'
+  const code = prismaCode(error);
+  const meta = (
+    error as {
+      meta?: {
+        code?: unknown;
+        driverAdapterError?: { cause?: { originalCode?: unknown } };
+      };
+    } | null
+  )?.meta;
+  const sqlState = meta?.driverAdapterError?.cause?.originalCode ?? meta?.code;
+  const rawConflict = code === 'P2010' && (sqlState === '40001' || sqlState === '40P01');
+  return code === 'P2034' || rawConflict
     ? new ApiException(
         HttpStatus.CONFLICT,
         ErrorCode.CONFLICT,
