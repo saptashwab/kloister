@@ -211,6 +211,7 @@ export class ProjectAccessService {
               P.ASSIGN_PMS,
               P.ASSIGN_OTHERS,
               P.EXPORT_ADO,
+              P.IMPORT_ADO,
             ]).has(p),
         ),
       ),

@@ -80,6 +80,11 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
         <p class="k-alert warn archived" role="status">This project is archived and read-only.</p>
       }
       <nav mat-tab-nav-bar mat-stretch-tabs="false" [tabPanel]="panel" aria-label="Project views">
+        @if (ctx.has(adoPermission) && project.ownerId === null) {
+          <a mat-tab-link [routerLink]="['/p', project.key, 'ado']" [active]="activeTab() === 'ado'"
+            >ADO transfer</a
+          >
+        }
         @for (tab of tabs; track tab.path) {
           <a
             mat-tab-link
@@ -107,6 +112,8 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
   `,
 })
 export class ProjectShellPage {
+  /** Transfer is project PM/Lead only; snapshots use their own control. */
+  protected readonly adoPermission = ProjectPermission.EXPORT_ADO;
   /** Lazy command palette shared with the app shell. */
   protected readonly shortcuts = inject(Shortcuts);
   /** Shared state of the project, provided here for the pages below. */
@@ -145,6 +152,7 @@ export class ProjectShellPage {
    */
   protected readonly activeTab = computed(() => {
     const segment = this.url().split(/[?#]/)[0]?.split('/')[3] ?? '';
+    if (segment === 'ado') return 'ado';
     return this.tabs.some((t) => t.path === segment) ? segment : '';
   });
 

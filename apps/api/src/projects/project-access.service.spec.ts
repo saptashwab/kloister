@@ -39,6 +39,7 @@ const SPEC_TABLE: [ProjectPermission, Cell, Cell, Cell, Cell][] = [
   [ProjectPermission.ASSIGN_PMS, true, false, false, false],
   [ProjectPermission.MANAGE_PROJECT, true, false, false, false],
   [ProjectPermission.EXPORT_ADO, true, true, false, false],
+  [ProjectPermission.IMPORT_ADO, true, false, false, false],
 ];
 
 /**

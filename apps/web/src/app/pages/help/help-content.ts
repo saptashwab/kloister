@@ -10,8 +10,14 @@ export interface HelpArticle {
   text: string;
 }
 
-/** Implemented features only; future import/export integrations are deliberately excluded. */
+/** Bundled procedures describe implemented features, including the separate reviewed CSV transfer. */
 export const HELP_ARTICLES: readonly HelpArticle[] = [
+  {
+    id: 'ado',
+    title: 'ADO transfer: create, return IDs, update and import',
+    role: 'Ordinary project PM/Lead export; project PM only for settings, incoming CSV, linking and recovery. Team Leads and administrators get no extra rights.',
+    text: 'Open the separate ADO transfer project tab; Export… remains the Excel/offline snapshot. A PM reviews one destination and per-project Basic/Agile/Scrum/CMMI/Custom mappings. Choose a project, sprint, subtree or exact items, optional any/all labels and default ancestor inclusion. Preview every selected/context row and omission. Initial create files omit State and Assigned To; save them once in ADO, export the assigned IDs and Description footer, then link returned IDs only. This preserves local intended state and assignments for a later real-ID update. Without the issued reference, explicitly match a known pending item; titles never establish identity. A PM may instead import selected ADO-origin rows, explicitly confirming new IDs, existing buckets, reverse types, assignees and each changed field. Parents outside a subset are mapped, explicitly selected or intentionally omitted; missing rows never delete. Current local, incoming and both confirmed baselines show conflicts requiring choices. Preview again after choices change. Extra local assignees survive remote single-person updates. Files/images, native comments, dependencies and historical authorship are outside CSV fidelity. Dates need confirmed per-type support. A PM supplies fresh remote observations; Leads consume them for export only. CSV cannot lock ADO or prove provenance from IDs: acknowledge destination and observation freshness. Pending creates block another create until reconciled or explicitly cancelled with duplicate risk. Recovery downloads the exact reserved files; manually replaying a create file in ADO can duplicate it. Deleted identities remain tombstones. Upload limits are 10 MiB, 1,000 data rows and 1 MiB per cell; each output file counts ancestor context toward 1,000 rows. Completed content expires after 90 days, while pending state, active mappings and retry receipts survive. No token or external connection is used. Test with disposable work using the shipped ADO-EXPORT guide; live target compatibility requires operator acceptance.',
+  },
   {
     id: 'roles',
     title: 'Roles, visibility and teams',

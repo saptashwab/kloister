@@ -112,6 +112,11 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/project/project-shell').then((m) => m.ProjectShellPage),
     children: [
       {
+        path: 'ado',
+        loadComponent: () =>
+          import('./pages/ado-transfer/ado-transfer').then((m) => m.AdoTransferPage),
+      },
+      {
         path: 'backlog',
         loadComponent: () => import('./pages/backlog/backlog').then((m) => m.BacklogPage),
         children: [{ path: 'items/:number', loadComponent: itemDrawer }, ...NO_DRAWER],

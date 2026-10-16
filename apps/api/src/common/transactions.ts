@@ -22,15 +22,20 @@ import {
  * @param prisma Database client.
  * @param work The transaction body.
  * @param duplicateMessage Message for a unique-constraint violation.
+ * @param timeout Optional bounded duration for an explicitly large atomic operation.
  * @returns The body's result.
  */
 export async function serializable<T>(
   prisma: PrismaService,
   work: (tx: Prisma.TransactionClient) => Promise<T>,
   duplicateMessage = 'Another change was made at the same time; please try again',
+  timeout?: number,
 ): Promise<T> {
   try {
-    return await prisma.$transaction(work, { isolationLevel: 'Serializable' });
+    return await prisma.$transaction(work, {
+      isolationLevel: 'Serializable',
+      ...(timeout === undefined ? {} : { timeout }),
+    });
   } catch (error) {
     if (isUniqueViolation(error)) throw conflict(duplicateMessage);
     if (isForeignKeyViolation(error)) {

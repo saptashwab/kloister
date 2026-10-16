@@ -5,6 +5,11 @@ claim these features are implemented. Implement M7.5 first, then M8. The storage
 retention and input-limit proposal was approved on 2026-10-16; review it before
 schema or API edits and ask before materially changing it.
 
+Implementation follow-up: M7.5 is complete. The M8 source implementation and its
+conservative file/context choices are recorded in DECISIONS and ADO-EXPORT. This
+document retains the approved planning baseline; live target/server acceptance
+remains operator-run and no release publication is part of M8 implementation.
+
 ## 1. Confirmed scope
 
 - M7.5 addresses six reported UI problems and improvements. M8 delivers both

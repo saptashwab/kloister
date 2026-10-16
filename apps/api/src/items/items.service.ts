@@ -349,6 +349,7 @@ export class ItemsService {
    * @param access The caller's access.
    * @param ref Item uuid or number.
    * @param dto Fields to change.
+   * @param transaction Existing transaction for an atomic reviewed transfer.
    * @returns The updated item.
    */
   async update(
@@ -356,9 +357,10 @@ export class ItemsService {
     access: ProjectAccess,
     ref: string,
     dto: UpdateItemDto,
+    transaction?: Prisma.TransactionClient,
   ): Promise<WorkItemDetailDto> {
     const projectId = access.project.id;
-    const row = await serializable(this.prisma, async (tx) => {
+    const work = async (tx: Prisma.TransactionClient) => {
       const current = await this.findVisible(tx, access, ref);
       if (!this.access.canEditItem(access, itemFacts(current))) throw forbidden();
 
@@ -537,8 +539,10 @@ export class ItemsService {
         await this.notifyStatusChange(tx, auth, access, updated);
       }
       return updated;
-    });
-    return this.detail(this.prisma, access, row);
+    };
+    const row =
+      transaction === undefined ? await serializable(this.prisma, work) : await work(transaction);
+    return this.detail(transaction ?? this.prisma, access, row);
   }
 
   /**
@@ -556,6 +560,7 @@ export class ItemsService {
    * @param access The caller's access.
    * @param ref Item uuid or number.
    * @param dto Target bucket and neighbour.
+   * @param transaction Existing transaction for an atomic reviewed transfer.
    * @returns The moved item with its final bucket and status.
    */
   async move(
@@ -563,9 +568,10 @@ export class ItemsService {
     access: ProjectAccess,
     ref: string,
     dto: MoveItemDto,
+    transaction?: Prisma.TransactionClient,
   ): Promise<WorkItemDetailDto> {
     const projectId = access.project.id;
-    const row = await serializable(this.prisma, async (tx) => {
+    const work = async (tx: Prisma.TransactionClient) => {
       const current = await this.findVisible(tx, access, ref);
       const facts = itemFacts(current);
       if (!this.access.canMoveItem(access, facts)) throw forbidden();
@@ -628,8 +634,10 @@ export class ItemsService {
       });
       if (status !== current.status) await this.notifyStatusChange(tx, auth, access, moved);
       return moved;
-    });
-    return this.detail(this.prisma, access, row);
+    };
+    const row =
+      transaction === undefined ? await serializable(this.prisma, work) : await work(transaction);
+    return this.detail(transaction ?? this.prisma, access, row);
   }
 
   /**
@@ -682,6 +690,10 @@ export class ItemsService {
         select: { storedName: true },
       });
       // One statement, so the parent links are checked only once all rows are gone.
+      await tx.adoItemLink.updateMany({
+        where: { projectId, itemId: { in: ids } },
+        data: { tombstonedAt: new Date() },
+      });
       await tx.workItem.deleteMany({ where: { projectId, id: { in: ids } } });
       await this.record(tx, auth, access, AuditAction.ITEM_DELETED, current.id, {
         number: current.number,
@@ -1115,7 +1127,7 @@ function listFilter(query: ListItemsQueryDto): Prisma.WorkItemWhereInput {
  * @param bucketId Requested bucket, or null.
  * @returns The bucket, or null.
  */
-async function findBucketFor(
+export async function findBucketFor(
   db: DbClient,
   projectId: string,
   type: ItemType,
@@ -1137,7 +1149,7 @@ async function findBucketFor(
  * @param projectId Project id.
  * @param sprintId Sprint id, or null for none.
  */
-async function assertOpenSprint(
+export async function assertOpenSprint(
   db: DbClient,
   projectId: string,
   sprintId: string | null,
@@ -1171,7 +1183,7 @@ async function assertTeam(db: DbClient, projectId: string, teamId: string | null
  * @param projectId Project id.
  * @param userIds User ids.
  */
-async function assertMembers(
+export async function assertMembers(
   db: DbClient,
   projectId: string,
   userIds: readonly string[],
@@ -1192,7 +1204,7 @@ async function assertMembers(
  * @param projectId Project id.
  * @param labelIds Label ids.
  */
-async function assertLabels(
+export async function assertLabels(
   db: DbClient,
   projectId: string,
   labelIds: readonly string[],
@@ -1208,7 +1220,7 @@ async function assertLabels(
  * @param startDate `YYYY-MM-DD` or null.
  * @param dueDate `YYYY-MM-DD` or null.
  */
-function assertDateOrder(startDate: string | null, dueDate: string | null): void {
+export function assertDateOrder(startDate: string | null, dueDate: string | null): void {
   // ISO calendar dates compare correctly as strings.
   if (startDate !== null && dueDate !== null && dueDate < startDate) {
     throw invalidField('dueDate', 'The due date is before the start date');

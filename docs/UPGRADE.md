@@ -42,6 +42,13 @@ does not trigger a repeat tour; manual replay remains in Help & FAQ.
 
 ## If any step fails
 
+M8 adds destination/link/batch/row tables through an additive migration; it does not
+reset work or change database major, deployment layout, ports or server policy.
+Transfer mappings, pending intent and retry receipts are in the database backup.
+Keep the coordinated pre-upgrade backup and run the disposable acceptance drill in
+[ADO transfer](ADO-EXPORT.md) before transferring production work. Completed transfer
+content expires after 90 days; active links, tombstones and pending state remain.
+
 Keep the maintenance window open. The script prints rollback guidance and keeps
 the prior code; it does not pretend that schema migrations can be reversed by
 copying old JavaScript. Do not repeatedly rerun over `.previous` copies. Inspect the

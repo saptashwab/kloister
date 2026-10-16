@@ -6,7 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
-import { ItemType, SprintState, type WorkItemDto } from '@kloister/shared';
+import { ItemType, ProjectPermission, SprintState, type WorkItemDto } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
 import {
   type BoardFilter,
@@ -221,6 +221,11 @@ import { SessionStore } from '../../core/session.store';
           }
         }
         <button mat-button type="button" (click)="selected.set(emptySet)">Clear selection</button>
+        @if (ctx.has(adoPermission) && ctx.project()?.ownerId === null) {
+          <button mat-button type="button" (click)="transferSelection()">
+            Transfer selected to ADO
+          </button>
+        }
       </div>
     }
     @if (report(); as r) {
@@ -328,6 +333,15 @@ import { SessionStore } from '../../core/session.store';
   `,
 })
 export class BacklogPage implements OnInit {
+  /** Distinct transfer capability, never applied to snapshots. */
+  protected readonly adoPermission = ProjectPermission.EXPORT_ADO;
+
+  /** Carries exact backlog identities into the lazy transfer screen without expanding children. */
+  protected transferSelection(): void {
+    void this.router.navigate(['/p', this.ctx.project()?.key, 'ado'], {
+      queryParams: { items: [...this.selected()].join(',') },
+    });
+  }
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
   private readonly api = inject(ItemsApiService);

@@ -90,6 +90,8 @@ export const ProjectPermission = {
   MANAGE_PROJECT: 'MANAGE_PROJECT',
   /** ADO CSV export. */
   EXPORT_ADO: 'EXPORT_ADO',
+  /** ADO incoming files, reconciliation and configuration; project PM only. */
+  IMPORT_ADO: 'IMPORT_ADO',
 } as const;
 
 /** One of the {@link ProjectPermission} values. */

@@ -63,6 +63,13 @@ restore format; they omit hidden data, accounts and server configuration.
 
 ## Manual database validation and restore
 
+ADO transfer records are part of PostgreSQL backups. Completed batch content has
+a separate fixed 90-day retention; pending workflows, active link observations,
+tombstones and compact retry receipts are preserved independently of log retention.
+Do not manually delete mappings or receipts to retry an import. Project PMs use
+the scoped Recovery workflow; system administration adds no transfer permission.
+See [ADO transfer](ADO-EXPORT.md) for the operator acceptance drill and CSV limits.
+
 Run as the app account in **Bash**, with the private environment loaded. For example,
 substitute the real name/port and set `PGHOST=127.0.0.1`, `PGPORT`, `PGUSER`,
 `PGDATABASE` and `PGPASSFILE=/app/<app_name>/config/.pgpass`. Do not put passwords

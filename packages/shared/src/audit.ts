@@ -3,6 +3,14 @@
  * activity history (SPEC §6).
  */
 export const AuditAction = {
+  /** Destination configuration changed, without profile content. */
+  ADO_CONFIGURED: 'ADO_CONFIGURED',
+  /** Recoverable outgoing intent reserved. */
+  ADO_PREPARED: 'ADO_PREPARED',
+  /** Selected incoming rows applied atomically. */
+  ADO_APPLIED: 'ADO_APPLIED',
+  /** Pending creates explicitly cancelled with duplicate-risk acknowledgement. */
+  ADO_CANCELLED: 'ADO_CANCELLED',
   LOGIN_SUCCEEDED: 'LOGIN_SUCCEEDED',
   LOGIN_FAILED: 'LOGIN_FAILED',
   ACCOUNT_LOCKED: 'ACCOUNT_LOCKED',

@@ -1,0 +1,69 @@
+.ado-page {
+  padding: var(--k-space-6) var(--k-gutter);
+  max-width: var(--k-size-880px);
+}
+.ado-actions,
+.ado-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--k-space-3);
+  margin-block: var(--k-space-4);
+}
+.ado-grid,
+.ado-mapping {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--k-space-3);
+  align-items: start;
+}
+.ado-grid > *,
+.ado-mapping > mat-form-field {
+  flex: 1 1 var(--k-size-200px);
+  min-width: 0;
+}
+.ado-mapping h4 {
+  flex-basis: 100%;
+}
+fieldset {
+  min-width: 0;
+  border: var(--k-line) solid var(--k-border);
+  border-radius: var(--k-radius-md);
+  padding: var(--k-space-4);
+}
+.ado-row,
+.ado-preview {
+  margin-block: var(--k-space-4);
+  padding: var(--k-space-4);
+  border: var(--k-line) solid var(--k-border);
+  border-radius: var(--k-radius-md);
+  overflow-wrap: anywhere;
+}
+.ado-row {
+  background: var(--k-surface);
+}
+.ado-difference {
+  padding: var(--k-space-3);
+  margin-block: var(--k-space-3);
+  background: var(--k-sunken);
+  border-radius: var(--k-radius-sm);
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font: inherit;
+}
+dd {
+  margin-inline-start: var(--k-space-4);
+}
+dt {
+  font-weight: bold;
+}
+.ado-upload {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-2);
+}
+mat-form-field {
+  width: 100%;
+}

@@ -165,6 +165,92 @@ model Project {
   sprints Sprint[]
   labels  Label[]
   items   WorkItem[]
+  adoDestination AdoDestination?
+}
+
+/// One reviewed destination per ordinary project. Remote tuples are deliberately non-exclusive.
+model AdoDestination {
+  id String @id @default(uuid()) @db.Uuid
+  projectId String @unique @db.Uuid
+  organization String
+  remoteProject String
+  profile Json
+  revision Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  links AdoItemLink[]
+  batches AdoTransferBatch[]
+  @@unique([id, projectId])
+}
+
+/// Durable reference and observations; original item identity survives deletion as a tombstone.
+model AdoItemLink {
+  id String @id @default(uuid()) @db.Uuid
+  destinationId String @db.Uuid
+  projectId String @db.Uuid
+  /// Intentionally no cascading item relation: deleted identities must never be reused.
+  itemId String @db.Uuid
+  reference String @unique
+  remoteId String?
+  tombstonedAt DateTime?
+  localBaseline Json @default("{}")
+  remoteBaseline Json @default("{}")
+  observation Json @default("{}")
+  observedAt DateTime?
+  observationRevision Int?
+  pendingBatchId String? @db.Uuid
+  /// Exact generated footer, removed only on a validated reference round trip.
+  generatedSuffix String @default("")
+  /// Exact reviewed outbound values, independent of remote creation defaults.
+  intent Json @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  destination AdoDestination @relation(fields: [destinationId, projectId], references: [id, projectId], onDelete: Cascade)
+  @@unique([destinationId, itemId])
+  @@unique([destinationId, remoteId])
+  @@index([projectId, itemId])
+}
+
+/// Recoverable bounded transfer intent. Compact retry receipts survive content expiry.
+model AdoTransferBatch {
+  id String @id @default(uuid()) @db.Uuid
+  destinationId String @db.Uuid
+  projectId String @db.Uuid
+  creatorId String @db.Uuid
+  direction String
+  mode String
+  state String @default("PREVIEW")
+  revision Int
+  idempotencyKey String
+  fileDigest String
+  digest String
+  content Json @default("{}")
+  completedAt DateTime?
+  contentExpiredAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  destination AdoDestination @relation(fields: [destinationId, projectId], references: [id, projectId], onDelete: Cascade)
+  rows AdoTransferRow[]
+  @@unique([destinationId, idempotencyKey])
+  @@unique([id, projectId])
+  @@index([state, completedAt])
+}
+
+/// Per-row normalized bounded recovery data; no uploaded archive or historical authorship.
+model AdoTransferRow {
+  id String @id @default(uuid()) @db.Uuid
+  batchId String @db.Uuid
+  projectId String @db.Uuid
+  index Int
+  itemId String? @db.Uuid
+  remoteId String?
+  result String
+  content Json @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  batch AdoTransferBatch @relation(fields: [batchId, projectId], references: [id, projectId], onDelete: Cascade)
+  @@unique([batchId, index])
 }
 
 /// A user's membership of a project. A project always keeps at least one

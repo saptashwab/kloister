@@ -1,5 +1,61 @@
 # Decisions
 
+## M8 transfer implementation (2026-10-16)
+
+- The approved destination/link/tombstone/batch/row design is additive. Original
+  local item identity intentionally has no cascading item foreign key; ordinary
+  deletion marks the link as a tombstone in the same transaction. Remote tuple
+  identities are non-exclusive across local projects, while every link and batch
+  uses composite destination/project keys. No cross-project routing is introduced.
+- Exact parsed selected content, minimal unselected hierarchy context and file
+  digests support recovery without persisting raw uploaded CSV. Completed content
+  expires after 90 days; pending records, active observations/baselines, tombstones
+  and compact idempotency receipts survive. No deployment folder or worker changes.
+- Reconciliation and observation modes record PM-reviewed remote observations
+  without treating initial remote defaults as synchronized local intent. Export
+  choices affect files only. First links and every unequal incoming field require
+  explicit choices; references are random issued description footers, never title
+  matching or authority by themselves. Ordinary item helpers accept an existing
+  transaction for atomic reviewed imports.
+- Create output uses true depth-first traversal and whole-tree boundaries. Updates
+  use confirmed IDs and hierarchy context, partitioned by final state/date support.
+  Missing remote hierarchy or emitted context columns block preparation rather
+  than guessing values. Mixed create date columns are omitted with a warning when
+  support is not confirmed for every type in that tree. Oversized update context
+  asks for a smaller selection. Formula-like text is rejected without mutation.
+- Date capabilities are explicit per type. Configurable headers do not implicitly
+  enable them. Basic flattening remains an outbound loss; reverse choices are
+  explicit. Extra local assignees are preserved separately from the last confirmed
+  remote assignee. Edited generated description blocks require correction/manual
+  matching, while harmless sanitized normalization is removed on validated return.
+- Previews validate ordinary field/reference/hierarchy/date rules and reject
+  conflicting status/bucket mappings. Related type transitions that cannot pass
+  each ordinary item validation in sequence require separate reviewed steps.
+  Apply rechecks active membership, project state, mappings and complete local
+  versions. A late row failure rolls back the selected batch and its links/audit.
+- The lazy Material interface separates transfer from snapshots, resets file-bound
+  approvals on upload, invalidates reviews after edits and discards delayed work
+  after project/workflow/capability changes. Recovery retains original outbound
+  bytes; cancellation explicitly warns about remote duplicates. Download never
+  confirms import. No release/tag or live compatibility result is claimed.
+
+Verification uses independent synthetic CSV contracts and the official Microsoft
+CSV/process documentation rechecked on 2026-10-16. The operator acceptance drill
+in ADO-EXPORT uses disposable data in both directions and preserves the existing
+production database/deployment. Database and browser execution remain CI-only.
+
+Final local verification (2026-10-17): clean install, formatting, lint, production
+build and all 863 tests passed (shared 1, API 574, web 275, deployment/docs 13).
+API/database and browser types pass; 48 browser checks list. The initial bundle
+is 499.88 kB with no warning under unchanged budgets. Independent review findings
+for hierarchy ordering/context, field preservation, provenance, description
+normalization, transaction validation and delayed UI responses were fixed with
+regression coverage. Final fresh-context review found no actionable issues.
+The local 1.1.0 ZIP passes extracted production-package verification without a
+database; this is a delivery artifact, not a published version or release.
+Database/browser execution and the disposable live ADO acceptance drill remain
+unverified until CI and owner execution respectively. No release/tag is published.
+
 ## Planning update: M7.5 and M8 (2026-10-16)
 
 The confirmed sequence is the six UI fixes in M7.5, then both directions of ADO

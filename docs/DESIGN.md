@@ -1,7 +1,7 @@
 # Design direction
 
-Status update (2026-10-16): M7.5 is implemented as recorded below. M8 remains
-future work in [the implementation plan](M8-PLAN.md).
+Status update (2026-10-16): M7.5 is implemented as recorded below. M8 adds the
+separate transfer workflow described in [the transfer guide](ADO-EXPORT.md).
 Empty labels must occupy a readable full-width region; notification header and
 content widths must align; destructive destination selects need a visible labelled
 field. Board lists need an ample trailing card-drop target. Bucket grouping gains
@@ -484,4 +484,16 @@ M7.5 implements the reported UI refinements:
   Search/Enter and Material autocomplete results with name/email. Committed users
   appear as removable chips. Multi-person chips persist across queries; edited
   single choices and outdated query responses are invalidated. Team search stays
-  local to active project members. ADO presentation remains planned for M8.
+  local to active project members.
+
+M8 adds a lazy project ADO transfer tab with Export CSV, PM-only incoming review,
+settings and recovery. The existing snapshot action stays separate. Outbound
+scope, selected/ancestor rows, file counts and losses are explicit. Incoming rows
+have identity, selection, manual matching, reverse-type and parent-omission controls.
+Field review shows current local, incoming and both confirmed baselines as escaped
+text, with explicit choices and a required renewed preview after changes. Settings
+use outlined Material fields, existing-resource selects and per-type date controls.
+Changing a file resets file-specific approvals; changing project/capabilities clears
+drafts and discards delayed responses. Layout uses existing tokens, wraps mapping
+rows at phone width and retains named keyboard controls. CSV freshness/provenance
+and cancellation duplicate risks are visible before actions.

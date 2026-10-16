@@ -3339,6 +3339,262 @@
         "tags": ["Health"],
         "security": []
       }
+    },
+    "/api/v1/projects/{id}/ado/destination": {
+      "get": {
+        "operationId": "AdoController_destination",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Reads PM-only transfer configuration.",
+        "tags": ["Ado"]
+      },
+      "put": {
+        "operationId": "AdoController_configure",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/DestinationDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Saves reviewed destination settings, PM only.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/profile": {
+      "get": {
+        "operationId": "AdoController_profile",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Reads the sanitized profile needed by an exporting PM/Lead.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/export/preview": {
+      "post": {
+        "operationId": "AdoController_previewExport",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ExportDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Previews outbound rows, PM/Lead only; never accepts remote observations.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/export/prepare": {
+      "post": {
+        "operationId": "AdoController_prepare",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ExportDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Reserves exact outgoing files and pending references, PM/Lead only.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/import/preview": {
+      "post": {
+        "operationId": "AdoController_previewImport",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ImportDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Uploads a bounded incoming preview, project PM only.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/batches": {
+      "get": {
+        "operationId": "AdoController_history",
+        "parameters": [],
+        "responses": { "200": { "description": "" } },
+        "summary": "Lists recoverable transfer history, project PM only.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/batches/{batchId}": {
+      "get": {
+        "operationId": "AdoController_recover",
+        "parameters": [
+          {
+            "name": "batchId",
+            "required": true,
+            "in": "path",
+            "description": "Scoped batch UUID.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Recovers a scoped review, project PM only.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/batches/{batchId}/download": {
+      "get": {
+        "operationId": "AdoController_download",
+        "parameters": [
+          {
+            "name": "batchId",
+            "required": true,
+            "in": "path",
+            "description": "Scoped batch UUID.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Downloads reserved outbound files, PM/Lead only, without confirming import.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/batches/{batchId}/apply": {
+      "post": {
+        "operationId": "AdoController_apply",
+        "parameters": [
+          {
+            "name": "batchId",
+            "required": true,
+            "in": "path",
+            "description": "Scoped preview UUID.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ApplyDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Applies the revalidated preview atomically, PM only.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/batches/{batchId}/cancel": {
+      "post": {
+        "operationId": "AdoController_cancel",
+        "parameters": [
+          {
+            "name": "batchId",
+            "required": true,
+            "in": "path",
+            "description": "Scoped pending batch.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CancelDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Cancels a pending create after explicit duplicate-risk acknowledgement, PM only.",
+        "tags": ["Ado"]
+      }
     }
   },
   "info": {
@@ -4044,6 +4300,198 @@
           "retentionDays": { "type": "number", "description": "Days backups are kept." }
         },
         "required": ["enabled", "time", "retentionDays"]
+      },
+      "DestinationDto": {
+        "type": "object",
+        "properties": {
+          "organization": {
+            "type": "string",
+            "description": "Organization/collection identity, never a fetch target.",
+            "maxLength": 1000
+          },
+          "remoteProject": {
+            "type": "string",
+            "description": "Remote project identity.",
+            "maxLength": 200
+          },
+          "profile": {
+            "type": "object",
+            "description": "Nested mappings receive additional semantic validation in the service."
+          },
+          "revision": {
+            "type": "number",
+            "description": "Zero for a new destination.",
+            "minimum": 0
+          }
+        },
+        "required": ["organization", "remoteProject", "profile", "revision"]
+      },
+      "SelectionDto": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "description": "Selection basis.",
+            "enum": ["project", "sprint", "subtree", "manual"]
+          },
+          "rootId": {
+            "type": "string",
+            "description": "Sprint or subtree root.",
+            "format": "uuid"
+          },
+          "itemIds": {
+            "description": "Exact manual identities.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          },
+          "labelIds": {
+            "description": "Label filter IDs.",
+            "uniqueItems": true,
+            "maxItems": 100,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
+          },
+          "labelMode": {
+            "type": "string",
+            "description": "Any/all label semantics.",
+            "enum": ["any", "all"]
+          },
+          "ancestors": { "type": "boolean", "description": "Explicit ancestor choice." },
+          "excludeDone": { "type": "boolean", "description": "Explicit completion filter." },
+          "notes": { "type": "boolean", "description": "Optional labelled note rendering." }
+        },
+        "required": ["scope", "labelIds", "labelMode", "ancestors", "excludeDone", "notes"]
+      },
+      "ExportDto": {
+        "type": "object",
+        "properties": {
+          "selection": {
+            "description": "Server-side selection.",
+            "allOf": [{ "$ref": "#/components/schemas/SelectionDto" }]
+          },
+          "assignees": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Single outgoing assignee for each local item."
+          },
+          "choices": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Reviewed file-only differences."
+          },
+          "freshnessAcknowledged": {
+            "type": "boolean",
+            "description": "Operator freshness acknowledgement."
+          },
+          "previewDigest": {
+            "type": "string",
+            "description": "Digest from preview, required by prepare.",
+            "maxLength": 64
+          },
+          "idempotencyKey": { "type": "string", "description": "Retry identity.", "format": "uuid" }
+        },
+        "required": ["selection", "assignees", "choices", "freshnessAcknowledged"]
+      },
+      "ImportDto": {
+        "type": "object",
+        "properties": {
+          "csv": {
+            "type": "string",
+            "description": "UTF-8 file text, also checked by byte length.",
+            "maxLength": 10485760
+          },
+          "mode": {
+            "type": "string",
+            "description": "Link-only, observation-only or reviewed import.",
+            "enum": ["import", "reconcile", "observe"]
+          },
+          "selectedRows": {
+            "nullable": true,
+            "description": "Null explicitly selects every uploaded row.",
+            "uniqueItems": true,
+            "maxItems": 1000,
+            "type": "array",
+            "items": { "type": "number" }
+          },
+          "destinationAcknowledged": {
+            "type": "boolean",
+            "description": "Required for files without provenance."
+          },
+          "manualLinks": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Remote IDs mapped to known local pending items."
+          },
+          "confirmedNew": {
+            "description": "Explicitly new remote IDs.",
+            "uniqueItems": true,
+            "maxItems": 1000,
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "omittedParents": {
+            "description": "Explicitly omitted remote parents.",
+            "uniqueItems": true,
+            "maxItems": 1000,
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "choices": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Per-field incoming choices."
+          },
+          "types": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Reverse-type resolutions."
+          },
+          "createLabels": {
+            "type": "object",
+            "description": "Explicit label creation list, semantically validated before use.",
+            "maxItems": 100
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Durable retry identity.",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "csv",
+          "mode",
+          "selectedRows",
+          "destinationAcknowledged",
+          "manualLinks",
+          "confirmedNew",
+          "omittedParents",
+          "choices",
+          "types",
+          "createLabels",
+          "idempotencyKey"
+        ]
+      },
+      "ApplyDto": {
+        "type": "object",
+        "properties": {
+          "digest": {
+            "type": "string",
+            "description": "Digest shown in the review.",
+            "maxLength": 64
+          }
+        },
+        "required": ["digest"]
+      },
+      "CancelDto": {
+        "type": "object",
+        "properties": {
+          "duplicateRiskAcknowledged": {
+            "type": "boolean",
+            "description": "Acknowledges that the operator may already have created remote duplicates."
+          }
+        },
+        "required": ["duplicateRiskAcknowledged"]
       }
     }
   },

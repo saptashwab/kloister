@@ -1,0 +1,755 @@
+<section class="ado-page">
+  <h2>ADO transfer</h2>
+  <p>
+    Carry reviewed CSV files between this project and Azure Boards. No connection or token is used.
+    Excel and offline reading snapshots remain available through Export….
+  </p>
+  <p><a routerLink="/help" fragment="ado">Transfer help and limitations</a></p>
+  @if (!canExport()) {
+    <p class="k-alert" role="alert">
+      ADO transfer requires project PM or project Lead permission in an ordinary project.
+    </p>
+  } @else {
+    <nav aria-label="Transfer workflows" class="ado-actions">
+      <button
+        mat-button
+        type="button"
+        (click)="switchTab('export')"
+        [attr.aria-pressed]="tab() === 'export'"
+      >
+        Export CSV
+      </button>
+      @if (canImport()) {
+        <button
+          mat-button
+          type="button"
+          (click)="switchTab('import')"
+          [attr.aria-pressed]="tab() === 'import'"
+        >
+          Import / reconcile CSV
+        </button>
+        <button
+          mat-button
+          type="button"
+          (click)="switchTab('settings')"
+          [attr.aria-pressed]="tab() === 'settings'"
+        >
+          Transfer settings
+        </button>
+        <button
+          mat-button
+          type="button"
+          (click)="switchTab('recovery')"
+          [attr.aria-pressed]="tab() === 'recovery'"
+        >
+          Recovery
+        </button>
+      }
+    </nav>
+    @if (error()) {
+      <p class="k-alert" role="alert">{{ error() }}</p>
+    }
+    @if (busy()) {
+      <p role="status">Working…</p>
+    }
+    <fieldset [disabled]="busy() || !ctx.writable()">
+      <legend>
+        {{ tab() === 'settings' ? 'PM-reviewed destination and mappings' : 'Transfer choices' }}
+      </legend>
+      @if (tab() === 'settings' && canImport()) {
+        <p>
+          Check the actual destination process and exported field headers. Presets do not certify
+          your ADO version. Blank forward states explicitly omit State. Date fields stay disabled
+          until confirmed for every exported type.
+        </p>
+        <div class="ado-grid">
+          <mat-form-field appearance="outline"
+            ><mat-label>Organization / collection identity</mat-label
+            ><input matInput [(ngModel)]="organization" (ngModelChange)="changed()"
+          /></mat-form-field>
+          <mat-form-field appearance="outline"
+            ><mat-label>ADO project identity</mat-label
+            ><input matInput [(ngModel)]="remoteProject" (ngModelChange)="changed()"
+          /></mat-form-field>
+          <mat-form-field appearance="outline"
+            ><mat-label>Process preset</mat-label
+            ><mat-select [ngModel]="profile.process" (ngModelChange)="preset($event)">
+              @for (p of processes; track p) {
+                <mat-option [value]="p">{{ p }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+          <mat-form-field appearance="outline"
+            ><mat-label>Area Path</mat-label
+            ><input matInput [(ngModel)]="profile.area" (ngModelChange)="changed()"
+          /></mat-form-field>
+          <mat-form-field appearance="outline"
+            ><mat-label>Iteration root</mat-label
+            ><input matInput [(ngModel)]="profile.iterationRoot" (ngModelChange)="changed()"
+          /></mat-form-field>
+        </div>
+        <h3>Forward types and states</h3>
+        @for (type of types; track type) {
+          <div class="ado-mapping">
+            <h4>{{ type }}</h4>
+            <mat-form-field appearance="outline"
+              ><mat-label>Remote type (blank omits)</mat-label
+              ><input
+                matInput
+                [ngModel]="profile.types[type] ?? ''"
+                (ngModelChange)="profile.types[type] = $event || null; changed()"
+            /></mat-form-field>
+            @for (status of statuses; track status) {
+              <mat-form-field appearance="outline"
+                ><mat-label>{{ status }} → remote state (blank omits)</mat-label
+                ><input
+                  matInput
+                  [ngModel]="profile.states[type][status] ?? ''"
+                  (ngModelChange)="profile.states[type][status] = $event || null; changed()"
+              /></mat-form-field>
+            }
+          </div>
+        }
+        <h3>Reverse type choices for new incoming rows</h3>
+        <p>
+          Basic Issue is ambiguous: explicitly choose Story or Bug. Existing linked types are
+          preserved unless you review a change.
+        </p>
+        @for (r of reverse; track $index) {
+          <div class="ado-grid">
+            <mat-form-field appearance="outline"
+              ><mat-label>Remote work item type</mat-label
+              ><input matInput [(ngModel)]="r.remote" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>Local type</mat-label
+              ><mat-select [(ngModel)]="r.local" (ngModelChange)="changed()">
+                @for (type of types; track type) {
+                  <mat-option [value]="type">{{ type }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+            <button mat-button type="button" (click)="reverse.splice($index, 1); changed()">
+              Remove type mapping
+            </button>
+          </div>
+        }
+        <button
+          mat-button
+          type="button"
+          (click)="reverse.push({ remote: '', local: 'STORY' }); changed()"
+        >
+          Add reverse type
+        </button>
+        <h3>Incoming state → status and existing bucket</h3>
+        <p>
+          Blank remote state is an explicit mapping for new files without State. Board columns and
+          states are independent.
+        </p>
+        @for (s of states; track $index) {
+          <div class="ado-grid">
+            <mat-form-field appearance="outline"
+              ><mat-label>Remote type</mat-label
+              ><input matInput [(ngModel)]="s.type" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>Remote state</mat-label
+              ><input matInput [(ngModel)]="s.state" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>Local status</mat-label
+              ><mat-select [(ngModel)]="s.status" (ngModelChange)="changed()">
+                @for (status of statuses; track status) {
+                  <mat-option [value]="status">{{ status }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+            <mat-form-field appearance="outline"
+              ><mat-label>Existing bucket</mat-label
+              ><mat-select [(ngModel)]="s.bucketId" (ngModelChange)="changed()">
+                @for (b of ctx.buckets(); track b.id) {
+                  <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+            <button mat-button type="button" (click)="states.splice($index, 1); changed()">
+              Remove state mapping
+            </button>
+          </div>
+        }
+        <button
+          mat-button
+          type="button"
+          (click)="
+            states.push({ type: '', state: '', status: 'NOT_STARTED', bucketId: '' }); changed()
+          "
+        >
+          Add incoming state
+        </button>
+        <h3>Optional field headers</h3>
+        <p>
+          Blank disables the field, preserving it on both sides. Confirm dates in your target before
+          enabling them.
+        </p>
+        <div class="ado-grid">
+          @for (field of fields; track field) {
+            <mat-form-field appearance="outline"
+              ><mat-label>{{ field }} header (blank disables)</mat-label
+              ><input
+                matInput
+                [ngModel]="profile.fields[field] ?? ''"
+                (ngModelChange)="profile.fields[field] = $event || undefined; changed()"
+            /></mat-form-field>
+          }
+        </div>
+        <h3>Outgoing identities</h3>
+        <h3>Confirmed date support by local type</h3>
+        <p>
+          A header alone never enables dates. Confirm only types supported by the actual
+          destination.
+        </p>
+        <div class="ado-grid">
+          <mat-form-field appearance="outline"
+            ><mat-label>Start date supported types</mat-label
+            ><mat-select
+              multiple
+              [(ngModel)]="profile.dateTypes.startDate"
+              (ngModelChange)="changed()"
+            >
+              @for (type of types; track type) {
+                <mat-option [value]="type">{{ type }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+          <mat-form-field appearance="outline"
+            ><mat-label>Due date supported types</mat-label
+            ><mat-select
+              multiple
+              [(ngModel)]="profile.dateTypes.dueDate"
+              (ngModelChange)="changed()"
+            >
+              @for (type of types; track type) {
+                <mat-option [value]="type">{{ type }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+        </div>
+        <div class="ado-grid">
+          @for (m of ctx.members(); track m.userId) {
+            <mat-form-field appearance="outline"
+              ><mat-label>{{ m.displayName }} → ADO identity</mat-label
+              ><input
+                matInput
+                [ngModel]="profile.identities[m.userId] ?? ''"
+                (ngModelChange)="profile.identities[m.userId] = $event; changed()"
+                placeholder="Display Name &lt;email&gt;"
+            /></mat-form-field>
+          }
+        </div>
+        <h3>Incoming identity aliases</h3>
+        @for (i of identities; track $index) {
+          <div class="ado-grid">
+            <mat-form-field appearance="outline"
+              ><mat-label>Remote identity alias</mat-label
+              ><input matInput [(ngModel)]="i.alias" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>Existing member or unassigned</mat-label
+              ><mat-select [(ngModel)]="i.userId" (ngModelChange)="changed()"
+                ><mat-option value="">Explicit unassigned</mat-option>
+                @for (m of ctx.members(); track m.userId) {
+                  @if (m.isActive) {
+                    <mat-option [value]="m.userId">{{ m.displayName }} · {{ m.email }}</mat-option>
+                  }
+                }
+              </mat-select></mat-form-field
+            >
+            <button mat-button type="button" (click)="identities.splice($index, 1); changed()">
+              Remove alias
+            </button>
+          </div>
+        }
+        <button
+          mat-button
+          type="button"
+          (click)="identities.push({ alias: '', userId: '' }); changed()"
+        >
+          Add identity alias
+        </button>
+        <h3>Incoming tag mappings</h3>
+        @for (t of tags; track $index) {
+          <div class="ado-grid">
+            <mat-form-field appearance="outline"
+              ><mat-label>Remote tag</mat-label
+              ><input matInput [(ngModel)]="t.tag" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>Existing label or omit</mat-label
+              ><mat-select [(ngModel)]="t.labelId" (ngModelChange)="changed()"
+                ><mat-option value="">Explicit omission</mat-option>
+                @for (l of ctx.labels(); track l.id) {
+                  <mat-option [value]="l.id">{{ l.name }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+            <button mat-button type="button" (click)="tags.splice($index, 1); changed()">
+              Remove tag mapping
+            </button>
+          </div>
+        }
+        <button mat-button type="button" (click)="tags.push({ tag: '', labelId: '' }); changed()">
+          Add tag mapping
+        </button>
+        <h3>Incoming iterations</h3>
+        @for (i of iterations; track $index) {
+          <div class="ado-grid">
+            <mat-form-field appearance="outline"
+              ><mat-label>Remote iteration path</mat-label
+              ><input matInput [(ngModel)]="i.path" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>Existing sprint or none</mat-label
+              ><mat-select [(ngModel)]="i.sprintId" (ngModelChange)="changed()"
+                ><mat-option value="">Explicit no sprint</mat-option>
+                @for (s of ctx.sprints(); track s.id) {
+                  <mat-option [value]="s.id">{{ s.name }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+            <button mat-button type="button" (click)="iterations.splice($index, 1); changed()">
+              Remove iteration mapping
+            </button>
+          </div>
+        }
+        <button
+          mat-button
+          type="button"
+          (click)="iterations.push({ path: '', sprintId: '' }); changed()"
+        >
+          Add iteration mapping
+        </button>
+        <h3>Required constant columns</h3>
+        @for (c of profile.constants; track $index) {
+          <div class="ado-grid">
+            <mat-form-field appearance="outline"
+              ><mat-label>Constant header</mat-label
+              ><input matInput [(ngModel)]="c.header" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>Constant value</mat-label
+              ><input matInput [(ngModel)]="c.value" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <button
+              mat-button
+              type="button"
+              (click)="profile.constants.splice($index, 1); changed()"
+            >
+              Remove constant
+            </button>
+          </div>
+        }
+        <button
+          mat-button
+          type="button"
+          (click)="profile.constants.push({ header: '', value: '' }); changed()"
+        >
+          Add constant
+        </button>
+        <p>
+          <button mat-flat-button type="button" (click)="save()">
+            Save reviewed transfer settings
+          </button>
+        </p>
+      }
+      @if (tab() === 'export') {
+        @if (destination(); as d) {
+          <p>
+            Destination: {{ d.organization }} / {{ d.remoteProject }} · {{ d.profile.process }} ·
+            revision {{ d.revision }}
+          </p>
+        } @else {
+          <p>A project PM must configure the destination first.</p>
+        }
+        <div class="ado-grid">
+          <mat-form-field appearance="outline"
+            ><mat-label>Export scope</mat-label
+            ><mat-select [(ngModel)]="outbound.selection.scope" (ngModelChange)="changed()"
+              ><mat-option value="project">Entire project</mat-option
+              ><mat-option value="sprint">One sprint</mat-option
+              ><mat-option value="subtree">One subtree</mat-option
+              ><mat-option value="manual">Selected items</mat-option></mat-select
+            ></mat-form-field
+          >
+          @if (outbound.selection.scope === 'sprint') {
+            <mat-form-field appearance="outline"
+              ><mat-label>Sprint</mat-label
+              ><mat-select [(ngModel)]="outbound.selection.rootId" (ngModelChange)="changed()">
+                @for (s of ctx.sprints(); track s.id) {
+                  <mat-option [value]="s.id">{{ s.name }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+          }
+          @if (outbound.selection.scope === 'subtree') {
+            <mat-form-field appearance="outline"
+              ><mat-label>Subtree root</mat-label
+              ><mat-select [(ngModel)]="outbound.selection.rootId" (ngModelChange)="changed()">
+                @for (i of ctx.items(); track i.id) {
+                  <mat-option [value]="i.id">{{ i.key }} · {{ i.title }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+          }
+          @if (outbound.selection.scope === 'manual') {
+            <mat-form-field appearance="outline"
+              ><mat-label>Selected items (all pages)</mat-label
+              ><mat-select
+                multiple
+                [(ngModel)]="outbound.selection.itemIds"
+                (ngModelChange)="changed()"
+              >
+                @for (i of ctx.items(); track i.id) {
+                  <mat-option [value]="i.id">{{ i.key }} · {{ i.title }}</mat-option>
+                }
+              </mat-select></mat-form-field
+            >
+          }
+          <mat-form-field appearance="outline"
+            ><mat-label>Label filters</mat-label
+            ><mat-select
+              multiple
+              [(ngModel)]="outbound.selection.labelIds"
+              (ngModelChange)="changed()"
+            >
+              @for (l of ctx.labels(); track l.id) {
+                <mat-option [value]="l.id">{{ l.name }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+          <mat-form-field appearance="outline"
+            ><mat-label>Label matching</mat-label
+            ><mat-select [(ngModel)]="outbound.selection.labelMode" (ngModelChange)="changed()"
+              ><mat-option value="any">Match any</mat-option
+              ><mat-option value="all">Match all</mat-option></mat-select
+            ></mat-form-field
+          >
+        </div>
+        <div class="ado-checks">
+          <mat-checkbox [(ngModel)]="outbound.selection.ancestors" (ngModelChange)="changed()"
+            >Include ancestors (default)</mat-checkbox
+          >
+          <mat-checkbox [(ngModel)]="outbound.selection.excludeDone" (ngModelChange)="changed()"
+            >Exclude Done</mat-checkbox
+          >
+          <mat-checkbox [(ngModel)]="outbound.selection.notes" (ngModelChange)="changed()"
+            >Notes as labelled description text</mat-checkbox
+          >
+          <mat-checkbox [(ngModel)]="outbound.freshnessAcknowledged" (ngModelChange)="changed()"
+            >I reviewed observation times. CSV cannot detect later ADO edits or lock remote
+            items.</mat-checkbox
+          >
+        </div>
+        @for (i of ctx.items(); track i.id) {
+          @if (i.assigneeIds.length > 1) {
+            <mat-form-field appearance="outline"
+              ><mat-label>{{ i.key }} · one remote assignee</mat-label
+              ><mat-select
+                [ngModel]="outbound.assignees[i.id]"
+                (ngModelChange)="outbound.assignees[i.id] = $event; changed()"
+                ><mat-option [value]="null">Explicit unassigned</mat-option>
+                @for (m of ctx.members(); track m.userId) {
+                  @if (i.assigneeIds.includes(m.userId)) {
+                    <mat-option [value]="m.userId">{{ m.displayName }}</mat-option>
+                  }
+                }
+              </mat-select></mat-form-field
+            >
+          }
+        }
+        <p>
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="!destination()"
+            (click)="exportPreview()"
+          >
+            Preview export CSV
+          </button>
+        </p>
+      }
+      @if (tab() === 'import' && canImport()) {
+        <p>
+          Only selected rows apply. Missing rows never delete. Reconciliation defaults to linking
+          returned IDs only.
+        </p>
+        <label class="ado-upload"
+          >UTF-8 CSV (10 MiB, 1,000 rows, 1 MiB per cell)<input
+            type="file"
+            accept=".csv,text/csv"
+            (change)="file($event)"
+        /></label>
+        <p>{{ filename }}</p>
+        <mat-form-field appearance="outline"
+          ><mat-label>Incoming workflow</mat-label
+          ><mat-select [(ngModel)]="inbound.mode" (ngModelChange)="changed()"
+            ><mat-option value="reconcile">Link returned IDs only</mat-option
+            ><mat-option value="observe">Review remote observations for later export</mat-option
+            ><mat-option value="import"
+              >Import reviewed local changes / new rows</mat-option
+            ></mat-select
+          ></mat-form-field
+        >
+        <p>
+          <mat-checkbox [(ngModel)]="inbound.destinationAcknowledged" (ngModelChange)="changed()"
+            >I confirm this file belongs to {{ destination()?.organization }} /
+            {{ destination()?.remoteProject }}. IDs alone do not prove its source.</mat-checkbox
+          >
+        </p>
+        @for (row of incomingRows(); track row.index) {
+          <article class="ado-row">
+            <mat-checkbox
+              [checked]="inbound.selectedRows === null || inbound.selectedRows.includes(row.index)"
+              (change)="selectRow(row.index, $event.checked)"
+              >Row {{ row.index + 1 }} · ID {{ row.remoteId }} · {{ row.title }}</mat-checkbox
+            >
+            @if (row.remoteId; as id) {
+              <div class="ado-grid">
+                <mat-form-field appearance="outline"
+                  ><mat-label>Manual match to a known pending local item</mat-label
+                  ><mat-select
+                    [ngModel]="inbound.manualLinks[id] ?? ''"
+                    (ngModelChange)="inbound.manualLinks[id] = $event; changed()"
+                    ><mat-option value="">No manual match</mat-option>
+                    @for (i of ctx.items(); track i.id) {
+                      <mat-option [value]="i.id">{{ i.key }} · {{ i.title }}</mat-option>
+                    }
+                  </mat-select></mat-form-field
+                >
+                <mat-form-field appearance="outline"
+                  ><mat-label>Explicit reverse type</mat-label
+                  ><mat-select
+                    [ngModel]="inbound.types[id]"
+                    (ngModelChange)="inbound.types[id] = $event; changed()"
+                  >
+                    @for (type of types; track type) {
+                      <mat-option [value]="type">{{ type }}</mat-option>
+                    }
+                  </mat-select></mat-form-field
+                >
+              </div>
+              <mat-checkbox
+                [checked]="inbound.confirmedNew.includes(id)"
+                (change)="confirm('confirmedNew', id, $event.checked)"
+                >I confirm this ID is new to this local project (no title matching)</mat-checkbox
+              >
+              <mat-checkbox
+                [checked]="inbound.omittedParents.includes(id)"
+                (change)="confirm('omittedParents', id, $event.checked)"
+                >Intentionally omit this row's unresolved parent; lose that hierarchy</mat-checkbox
+              >
+            }
+          </article>
+        }
+        <button mat-button type="button" (click)="inbound.selectedRows = null; changed()">
+          Select all uploaded rows
+        </button>
+        <h3>Explicit label creation</h3>
+        <p>
+          Map existing labels or omit tags in settings. Only these reviewed tags may create labels.
+        </p>
+        @for (l of inbound.createLabels; track $index) {
+          <div class="ado-grid">
+            <mat-form-field appearance="outline"
+              ><mat-label>Incoming tag</mat-label
+              ><input matInput [(ngModel)]="l.tag" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>New label name</mat-label
+              ><input matInput [(ngModel)]="l.name" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <mat-form-field appearance="outline"
+              ><mat-label>Label colour (#rrggbb)</mat-label
+              ><input matInput [(ngModel)]="l.colour" (ngModelChange)="changed()"
+            /></mat-form-field>
+            <button
+              mat-button
+              type="button"
+              (click)="inbound.createLabels.splice($index, 1); changed()"
+            >
+              Remove label creation
+            </button>
+          </div>
+        }
+        <button
+          mat-button
+          type="button"
+          (click)="inbound.createLabels.push({ tag: '', name: '', colour: '' }); changed()"
+        >
+          Add reviewed label creation
+        </button>
+        <p>
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="!inbound.csv || !destination()"
+            (click)="importPreview()"
+          >
+            Preview incoming CSV
+          </button>
+        </p>
+      }
+    </fieldset>
+    @if (tab() === 'recovery' && canImport()) {
+      <p>
+        Recover the exact pending create batch. Replaying it in ADO can create duplicates; reconcile
+        returned IDs before preparing another create.
+      </p>
+      @for (batch of history; track batch.id) {
+        <article class="ado-row">
+          <p>{{ batch.createdAt }} · {{ batch.mode }} · {{ batch.state }} · {{ batch.id }}</p>
+          <button mat-button type="button" (click)="recover(batch.id)">Review receipt</button>
+          @if (batch.mode === 'export') {
+            <button mat-button type="button" (click)="download(batch.id)">
+              Download original files
+            </button>
+          }
+          @if (batch.state === 'PENDING') {
+            <button mat-button type="button" (click)="cancel(batch.id)">
+              Cancel pending creates…
+            </button>
+          }
+        </article>
+      }
+      @if (nextCursor) {
+        <button mat-button type="button" (click)="loadHistory(true)">More batches</button>
+      }
+    }
+    @if (preview(); as p) {
+      <section aria-label="Transfer preview" class="ado-preview">
+        @if (tab() === 'recovery' && p.state === 'PREVIEW' && canImport()) {
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="busy() || p.errors.length > 0 || !ctx.writable()"
+            (click)="apply()"
+          >
+            Apply recovered reviewed rows
+          </button>
+        }
+        <h3>Review · {{ p.rows.length }} rows · {{ p.state }}</h3>
+        @if (dirty()) {
+          <p role="status">Choices changed. Preview again before preparing or applying.</p>
+        }
+        <p>
+          Destination: {{ p.destination.organization }} / {{ p.destination.remoteProject }} ·
+          {{ p.destination.profile.process }} · revision {{ p.destination.revision }}
+        </p>
+        <ul>
+          @for (warning of p.warnings; track $index) {
+            <li>{{ warning }}</li>
+          }
+        </ul>
+        @if (p.errors.length) {
+          <div class="k-alert" role="alert">
+            <p>Resolve before applying or preparing:</p>
+            <ul>
+              @for (error of p.errors; track $index) {
+                <li>{{ error }}</li>
+              }
+            </ul>
+          </div>
+        }
+        @for (f of p.files; track f.name) {
+          <p>{{ f.name }} · {{ f.rows }} rows including context</p>
+        }
+        @for (row of p.rows; track row.index) {
+          <article class="ado-row">
+            <h4>
+              {{ row.title }} · {{ row.kind }} · {{ row.selected ? 'selected' : 'added ancestor' }}
+            </h4>
+            <p>
+              Local {{ row.itemId ?? 'new' }} · ADO {{ row.remoteId ?? 'awaiting assigned ID' }}
+            </p>
+            <ul>
+              @for (w of row.warnings; track $index) {
+                <li>{{ w }}</li>
+              }
+            </ul>
+            @for (d of row.differences; track d.field) {
+              <div class="ado-difference">
+                <h5>
+                  {{ d.field }} · {{ d.conflict ? 'Conflict / first-link review' : 'Changed' }}
+                </h5>
+                <dl>
+                  <dt>Current local</dt>
+                  <dd>
+                    <pre>{{ d.local | json }}</pre>
+                  </dd>
+                  <dt>Incoming / remote observation</dt>
+                  <dd>
+                    <pre>{{ d.incoming | json }}</pre>
+                  </dd>
+                  <dt>Confirmed local baseline</dt>
+                  <dd>
+                    <pre>{{ d.baselineLocal | json }}</pre>
+                  </dd>
+                  <dt>Confirmed remote baseline</dt>
+                  <dd>
+                    <pre>{{ d.baselineRemote | json }}</pre>
+                  </dd>
+                </dl>
+                @if (p.state === 'PREVIEW' && tab() !== 'recovery') {
+                  <mat-form-field appearance="outline"
+                    ><mat-label>Choose {{ d.field }} for {{ row.title }}</mat-label
+                    ><mat-select
+                      [ngModel]="
+                        (tab() === 'export'
+                          ? outbound.choices[row.itemId ?? '']
+                          : inbound.choices[row.remoteId ?? ''])?.[d.field]
+                      "
+                      (ngModelChange)="choose(row, d.field, $event)"
+                      ><mat-option value="local">{{
+                        tab() === 'export' ? 'Use local in file' : 'Keep local'
+                      }}</mat-option
+                      ><mat-option value="incoming">{{
+                        tab() === 'export' ? 'Preserve observed remote' : 'Take incoming'
+                      }}</mat-option
+                      ><mat-option value="skip"
+                        >Skip field / preserve destination</mat-option
+                      ></mat-select
+                    ></mat-form-field
+                  >
+                }
+              </div>
+            }
+          </article>
+        }
+        @if (p.state === 'PREVIEW' && tab() === 'export') {
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="busy() || dirty() || p.errors.length > 0 || !ctx.writable()"
+            (click)="prepare()"
+          >
+            Prepare reviewed CSV files
+          </button>
+        }
+        @if (p.state === 'PREVIEW' && tab() === 'import') {
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="busy() || dirty() || p.errors.length > 0 || !ctx.writable()"
+            (click)="apply()"
+          >
+            Apply {{ p.rows.length }} reviewed rows
+          </button>
+        }
+        @if (tab() === 'export' && p.batchId && p.state !== 'PREVIEW') {
+          <button mat-flat-button type="button" (click)="download()">
+            Download reserved CSV files
+          </button>
+        }
+      </section>
+    }
+  }
+</section>

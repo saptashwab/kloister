@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AdoModule } from './ado/ado.module.js';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AnnotationsModule } from './annotations/annotations.module.js';
 import { AuditModule } from './audit/audit.module.js';
@@ -42,6 +43,7 @@ import { UsersModule } from './users/users.module.js';
     BrandingModule,
     BackupsModule,
     HealthModule,
+    AdoModule,
   ],
 })
 export class AppModule {}

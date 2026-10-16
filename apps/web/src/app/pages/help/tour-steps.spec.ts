@@ -45,7 +45,15 @@ describe('capability-composed introduction', () => {
     expect(
       HELP_ARTICLES.every((article) => article.role.length > 0 && article.text.length > 50),
     ).toBe(true);
-    expect(HELP_ARTICLES.map((article) => article.text).join(' ')).not.toMatch(/ADO|Azure DevOps/);
+    expect(
+      HELP_ARTICLES.filter((article) => article.id !== 'ado')
+        .map((article) => article.text)
+        .join(' '),
+    ).not.toMatch(/ADO|Azure DevOps/);
+    const transfer = HELP_ARTICLES.find((article) => article.id === 'ado');
+    expect(transfer?.role).toContain('project PM only');
+    expect(transfer?.text).toContain('link returned IDs only');
+    expect(transfer?.text).toContain('No token or external connection');
     expect(HELP_ARTICLES.find((article) => article.id === 'snapshots')?.text).toContain(
       'Every matching page',
     );

@@ -32,6 +32,17 @@ describe('API security without a session (e2e)', () => {
 
   // Permission tests: every non-public route rejects anonymous callers.
   it.each([
+    ['GET', `/api/v1/projects/${SOME_ID}/ado/destination`],
+    ['PUT', `/api/v1/projects/${SOME_ID}/ado/destination`],
+    ['GET', `/api/v1/projects/${SOME_ID}/ado/profile`],
+    ['POST', `/api/v1/projects/${SOME_ID}/ado/export/preview`],
+    ['POST', `/api/v1/projects/${SOME_ID}/ado/export/prepare`],
+    ['POST', `/api/v1/projects/${SOME_ID}/ado/import/preview`],
+    ['GET', `/api/v1/projects/${SOME_ID}/ado/batches`],
+    ['GET', `/api/v1/projects/${SOME_ID}/ado/batches/${SOME_ID}`],
+    ['GET', `/api/v1/projects/${SOME_ID}/ado/batches/${SOME_ID}/download`],
+    ['POST', `/api/v1/projects/${SOME_ID}/ado/batches/${SOME_ID}/apply`],
+    ['POST', `/api/v1/projects/${SOME_ID}/ado/batches/${SOME_ID}/cancel`],
     ['GET', '/api/v1/me'],
     ['GET', '/api/v1/me/work'],
     ['GET', '/api/v1/me/personal'],
