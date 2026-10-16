@@ -1,5 +1,34 @@
 # Decisions
 
+## Planning update: M7.5 and M8 (2026-10-16)
+
+The confirmed sequence is the six UI fixes in M7.5, then both directions of ADO
+CSV transfer in M8. SPEC section 7 and [M8-PLAN](M8-PLAN.md) replace the earlier
+create-only, always-empty-ID proposal with selective exports, any/all label filters,
+default parent inclusion with opt-out, destination-scoped durable mappings, a return
+CSV and explicit field conflicts. Existing Excel/offline snapshots stay separate.
+Project PMs/Leads export; only project PMs import, reconcile IDs and configure.
+
+One ADO destination per ordinary Kloister project is sufficient; profiles vary by
+project and actual ADO service/version/process remain unknown. A visible issued
+reference in Description with manual matching fallback avoids mandatory custom
+fields or tag-creation rights. Missing rows never delete items, unknown assignees
+need existing-member mapping or explicit unassignment, and no accounts/memberships
+are created automatically. Import selects rows and maps states to existing buckets.
+Only core fields are prioritized; files/history/dependency fidelity has explicit
+limits. Live ADO is unavailable for implementation tests.
+
+The concrete persistence/retention/limit proposal was approved on 2026-10-16:
+destination and durable item-link/tombstone records, recoverable batches and
+idempotency receipts, 90-day completed-content retention, preserved active/pending
+state, and 10 MiB uploads / 1,000 applied rows / 1 MiB cells. Future extension should
+favor multiple Kloister projects sharing an ADO project; do not make the remote
+destination globally exclusive. That does not authorize cross-project item sharing
+or broaden M8's current transfer scope. No application implementation,
+schema change, production migration or new release is performed by this planning
+update. Earlier rows below are historical; the revised SPEC and plan govern future
+M7.5/M8 work.
+
 Choices made where SPEC.md was silent or ambiguous. Newest last.
 
 | Date       | Milestone | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Why                                                                                                                                                                                                                                                                                                                   |
@@ -210,3 +239,43 @@ migration/schema, database and browser checks. Rewrite the public README around 
 concise setup paths and operational links, removing internal approval/workflow language. Keep the detailed
 server-specific walkthrough in the conversation as requested; no installation procedure is added to the
 repository by this follow-up. No application, deployment or security behavior changes.
+
+## M7.5 UI refinements (2026-10-16)
+
+- Board bucket creation and top-bar/keyboard reorder reuse the existing
+  board endpoints and MANAGE_BOARD permission, including personal owners.
+  Explicit peer connections isolate card lists from the outer horizontal bucket
+  list. Bucket mutations serialize; ordering reloads from the server and Settings
+  writes its bucket results back to the shared project context. No live sync,
+  schema or API change is introduced.
+- A real trailing non-draggable region enlarges the append target without adding
+  an ordering index. Existing visible-neighbor placement, rollback and drawer
+  keyboard alternatives remain. Empty labels use a separate full-width row.
+  Notifications move their existing presentation into the lazy page stylesheet
+  and share one content width with the header, preserving the bundle budgets.
+- The reusable user picker commits candidate identities through one outlined
+  search field and Material autocomplete. Search/Enter is explicit, multiple PM
+  chips survive searches, editing clears single selections, and generation checks
+  discard stale responses. Project creation keeps the admin active-user API;
+  member addition keeps scoped candidates; team addition searches active local
+  project members only. Existing local item assignment/filter selectors remain
+  member-scoped and keep their specialized multi-select interaction.
+- Bucket deletion clears the destination whenever a new source is chosen, uses a
+  labelled outlined field and confirms the destination move. Server deletion
+  semantics remain unchanged: no target entry rule runs and the last bucket is
+  protected. No release publication or M8 runtime implementation is included.
+
+- Owner refinement during M7.5: hold and drag the bucket top bar instead of a
+  separate handle and arrow row; double-click its name to rename. A compact
+  actions menu retains keyboard Rename/Move left/Move right. Renaming uses the
+  existing bucket PATCH and updates the same project bucket state as reordering,
+  so Settings receives both names and positions without extra synchronization.
+
+- Independent review identified an Enter-key ordering race in the Material picker:
+  after committing a highlighted option, the same event could start a blank
+  search. The handler now respects the consumed event; a DOM-level regression
+  verifies one request and a closed panel. Final reviews, including the compact
+  top-bar refinement, found no further actionable issues. Synthetic mock checks
+  covered light/dark presentation, phone/tablet layouts, actual top-bar and nested
+  card drags, double-click rename, keyboard selection and Settings consistency.
+  Database and full browser regressions remain CI-only; no local database ran.

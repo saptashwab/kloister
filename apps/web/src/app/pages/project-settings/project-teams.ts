@@ -1,3 +1,4 @@
+import { UserPicker } from '../../ui/user-picker';
 import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -6,6 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import {
   ProjectRole,
+  type MemberCandidateDto,
   type ProjectMemberDto,
   TEAM_NAME_MAX,
   type TeamDto,
@@ -26,7 +28,14 @@ import { ProjectsApiService } from '../../core/projects-api.service';
  */
 @Component({
   selector: 'app-project-teams',
-  imports: [MatButtonModule, MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [
+    UserPicker,
+    MatButtonModule,
+    MatCardModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+  ],
   template: `
     <mat-card>
       <mat-card-header><mat-card-title>Teams</mat-card-title></mat-card-header>
@@ -64,14 +73,12 @@ import { ProjectsApiService } from '../../core/projects-api.service';
                   }
                 </mat-select>
               </mat-form-field>
-              <mat-form-field>
-                <mat-label>Project member</mat-label>
-                <mat-select [value]="addUserId()" (valueChange)="addUserId.set($event)">
-                  @for (m of addableMembers(); track m.userId) {
-                    <mat-option [value]="m.userId">{{ m.displayName }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
+              <app-user-picker
+                label="Project member"
+                [searchUsers]="findMembers()"
+                [(selected)]="selectedMember"
+                (selectedChange)="addUserId.set($event[0]?.id ?? '')"
+              />
               <mat-form-field>
                 <mat-label>Team role</mat-label>
                 <mat-select [value]="addRole()" (valueChange)="addRole.set($event)">
@@ -174,7 +181,20 @@ export class ProjectTeamsComponent {
   protected readonly addableMembers = computed(() => {
     const team = this.teams().find((t) => t.id === this.addTeamId());
     const inTeam = new Set(team?.members.map((m) => m.userId) ?? []);
-    return this.members().filter((m) => !inTeam.has(m.userId));
+    return this.members().filter((m) => m.isActive && !inTeam.has(m.userId));
+  });
+
+  /** Committed local member choice; no system-directory access. */
+  protected readonly selectedMember = signal<MemberCandidateDto[]>([]);
+  /** Rebuild the scoped local search when eligible membership changes. */
+  protected readonly findMembers = computed(() => {
+    const members = this.addableMembers();
+    return (q: string): Promise<MemberCandidateDto[]> =>
+      Promise.resolve(
+        members
+          .filter((m) => (m.displayName + ' ' + m.email).toLowerCase().includes(q.toLowerCase()))
+          .map((m) => ({ id: m.userId, displayName: m.displayName, email: m.email })),
+      );
   });
 
   /**
@@ -270,6 +290,7 @@ export class ProjectTeamsComponent {
     await this.run(async () => {
       this.replace(await this.api.setTeamMember(this.projectId(), teamId, userId, { role }));
       this.addUserId.set('');
+      this.selectedMember.set([]);
     });
   }
 

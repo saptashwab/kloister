@@ -1,5 +1,7 @@
+import { Dialogs } from '../../ui/dialogs';
+import { CdkScrollable } from '@angular/cdk/scrolling';
 import { SnapshotAction } from '../../ui/snapshot-action';
-import { CdkDrag, type CdkDragDrop, CdkDropList, CdkDropListGroup } from '@angular/cdk/drag-drop';
+import { CdkDrag, type CdkDragDrop, CdkDropList, CdkDragHandle } from '@angular/cdk/drag-drop';
 import {
   Component,
   DestroyRef,
@@ -18,6 +20,8 @@ import { MatMenuModule } from '@angular/material/menu';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   type CreateItemRequest,
+  BOARD_NAME_MAX,
+  BucketRule,
   ItemType,
   ITEM_TITLE_MAX,
   ProjectPermission,
@@ -75,7 +79,8 @@ const QUICK_PEOPLE = 6;
   selector: 'app-board',
   imports: [
     SnapshotAction,
-    CdkDropListGroup,
+    CdkDragHandle,
+    CdkScrollable,
     CdkDropList,
     CdkDrag,
     RouterOutlet,
@@ -100,6 +105,9 @@ const QUICK_PEOPLE = 6;
       flex-wrap: wrap;
       align-items: center;
       gap: var(--k-space-2);
+    }
+    .bucket-add {
+      align-self: flex-start;
     }
     .search {
       display: flex;
@@ -140,7 +148,23 @@ const QUICK_PEOPLE = 6;
       border-radius: var(--k-radius-lg);
       background: var(--k-sunken);
     }
+    .column-head {
+      display: flex;
+      align-items: center;
+      gap: var(--k-space-1);
+    }
+    .bucket-head {
+      cursor: grab;
+    }
+    .bucket-head:active {
+      cursor: grabbing;
+    }
     .column h2 {
+      flex: 1;
+      min-width: 0;
+      min-height: var(--k-target);
+      margin: 0;
+      overflow-wrap: anywhere;
       display: flex;
       align-items: center;
       gap: var(--k-space-2);
@@ -156,6 +180,15 @@ const QUICK_PEOPLE = 6;
       flex-direction: column;
       gap: var(--k-size-10px);
       min-height: var(--k-size-48px);
+      border-bottom: var(--k-focus-width) solid transparent;
+    }
+    .drop-tail {
+      min-height: var(--k-size-48px);
+      flex: none;
+    }
+    .list.cdk-drop-list-receiving {
+      border-bottom-color: var(--k-primary);
+      background: var(--k-primary-soft);
     }
     .cdk-drag-preview {
       box-shadow: var(--k-lift);
@@ -447,6 +480,16 @@ const QUICK_PEOPLE = 6;
       </mat-button-toggle-group>
     </div>
 
+    @if (canManageBuckets()) {
+      <button
+        type="button"
+        class="k-chip bucket-add"
+        [disabled]="bucketBusy()"
+        (click)="addBucket()"
+      >
+        + Add bucket
+      </button>
+    }
     @if (!ctx.loaded()) {
       <app-skeleton kind="cards" label="Loading the board" />
     } @else if (ctx.buckets().length === 0) {
@@ -455,13 +498,48 @@ const QUICK_PEOPLE = 6;
         text="A PM or Lead adds buckets (the board's columns) in the project settings."
       />
     } @else {
-      <div class="columns" cdkDropListGroup>
+      <div
+        class="columns"
+        cdkScrollable
+        cdkDropList
+        cdkDropListOrientation="horizontal"
+        [cdkDropListData]="columns()"
+        [cdkDropListDisabled]="!canManageBuckets() || bucketBusy()"
+        (cdkDropListDropped)="dropBucket($event)"
+      >
         @for (column of columns(); track column.id) {
-          <section class="column" [attr.aria-label]="column.title">
-            <h2>
-              <span>{{ column.title }}</span>
-              <span class="k-pill count">{{ column.items.length }}</span>
-            </h2>
+          <section
+            class="column"
+            [attr.aria-label]="column.title"
+            cdkDrag
+            [cdkDragData]="column"
+            [cdkDragDisabled]="!canManageBuckets() || bucketBusy()"
+          >
+            <div class="column-head">
+              <h2
+                cdkDragHandle
+                [cdkDragHandleDisabled]="!canManageBuckets() || bucketBusy()"
+                [class.bucket-head]="canManageBuckets()"
+                [attr.title]="
+                  canManageBuckets() ? 'Drag to reorder; double-click the name to rename' : null
+                "
+              >
+                <span (dblclick)="renameBucket(column)">{{ column.title }}</span>
+                <span class="k-pill count">{{ column.items.length }}</span>
+              </h2>
+              @if (canManageBuckets()) {
+                <button
+                  type="button"
+                  class="k-icon-btn"
+                  [disabled]="bucketBusy()"
+                  [attr.aria-label]="'Bucket actions for ' + column.title"
+                  [matMenuTriggerFor]="bucketMenu"
+                  [matMenuTriggerData]="{ column, index: $index, first: $first, last: $last }"
+                >
+                  ⋯
+                </button>
+              }
+            </div>
             @if (canQuickAdd(column)) {
               <input
                 class="quick-add"
@@ -474,6 +552,8 @@ const QUICK_PEOPLE = 6;
             <div
               class="list"
               cdkDropList
+              [id]="'cards-' + column.id"
+              [cdkDropListConnectedTo]="cardListIds()"
               [cdkDropListData]="column"
               [cdkDropListEnterPredicate]="acceptsDrop"
               [cdkDropListSortingDisabled]="groupBy() !== 'bucket'"
@@ -498,12 +578,38 @@ const QUICK_PEOPLE = 6;
                   </div>
                 }
               }
+              <div class="drop-tail" aria-hidden="true"></div>
             </div>
           </section>
         }
       </div>
     }
 
+    <mat-menu #bucketMenu="matMenu">
+      <ng-template
+        matMenuContent
+        let-column="column"
+        let-index="index"
+        let-first="first"
+        let-last="last"
+      >
+        <button mat-menu-item (click)="renameBucket(column)">Rename bucket</button>
+        <button
+          mat-menu-item
+          [disabled]="first || bucketBusy()"
+          (click)="moveBucket(column.id, index - 1)"
+        >
+          Move left
+        </button>
+        <button
+          mat-menu-item
+          [disabled]="last || bucketBusy()"
+          (click)="moveBucket(column.id, index + 1)"
+        >
+          Move right
+        </button>
+      </ng-template>
+    </mat-menu>
     <router-outlet />
   `,
 })
@@ -515,6 +621,19 @@ export class BoardPage implements OnInit, PersonFilter {
   private readonly route = inject(ActivatedRoute);
   private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
+  private readonly dialogs = inject(Dialogs);
+  /** Serializes bucket mutations so reorder requests cannot overtake one another. */
+  protected readonly bucketBusy = signal(false);
+  /** Only project board managers and personal owners in Bucket grouping see these controls. */
+  protected readonly canManageBuckets = computed(
+    () =>
+      this.groupBy() === 'bucket' &&
+      this.ctx.loaded() &&
+      this.ctx.writable() &&
+      this.ctx.has(ProjectPermission.MANAGE_BOARD),
+  );
+  /** Explicit card connections keep nested bucket and card drags separate. */
+  protected readonly cardListIds = computed(() => this.columns().map((c) => 'cards-' + c.id));
 
   /** `?sprint=<id>`: show the sprint board (the board filtered to one sprint). */
   readonly sprint = input<string>();
@@ -682,6 +801,109 @@ export class BoardPage implements OnInit, PersonFilter {
       const sprint = this.sprint() ?? '';
       untracked(() => this.filter.update((f) => ({ ...f, sprintId: sprint })));
     });
+  }
+
+  /** Adds a named bucket with no entry rule using the existing board endpoint.
+   * @returns Resolves once created or cancelled.
+   */
+  protected async addBucket(): Promise<void> {
+    if (!this.canManageBuckets() || this.bucketBusy()) return;
+    const name = await this.dialogs.prompt({
+      title: 'Add bucket',
+      label: 'Bucket name',
+      confirm: 'Add bucket',
+      maxLength: BOARD_NAME_MAX,
+    });
+    const project = this.ctx.project();
+    if (!name?.trim() || !project || !this.canManageBuckets() || this.bucketBusy()) return;
+    this.bucketBusy.set(true);
+    try {
+      const bucket = await this.api.createBucket(project.id, {
+        name: name.trim(),
+        onEnterMode: BucketRule.NONE,
+        onEnterStatus: null,
+      });
+      this.ctx.buckets.update((list) => [...list, bucket]);
+      this.toast.show('Bucket added');
+    } catch (error) {
+      this.toast.error(error);
+    } finally {
+      this.bucketBusy.set(false);
+    }
+  }
+
+  /** Renames a bucket from its name or the keyboard-accessible actions menu.
+   * @param column Selected bucket column.
+   * @returns Resolves once renamed or cancelled.
+   */
+  protected async renameBucket(column: BoardColumn): Promise<void> {
+    const project = this.ctx.project();
+    if (!project || !this.canManageBuckets() || this.bucketBusy()) return;
+    const name = await this.dialogs.prompt({
+      title: 'Rename bucket',
+      label: 'Bucket name',
+      value: column.title,
+      confirm: 'Rename',
+      maxLength: BOARD_NAME_MAX,
+    });
+    if (
+      !name?.trim() ||
+      name.trim() === column.title ||
+      !this.canManageBuckets() ||
+      this.bucketBusy()
+    )
+      return;
+    this.bucketBusy.set(true);
+    try {
+      const updated = await this.api.updateBucket(project.id, column.id, { name: name.trim() });
+      this.ctx.buckets.update((list) => list.map((b) => (b.id === updated.id ? updated : b)));
+      this.toast.show('Bucket renamed');
+    } catch (error) {
+      this.toast.error(error);
+    } finally {
+      this.bucketBusy.set(false);
+    }
+  }
+
+  /** Converts a header drag to the same operation as the keyboard buttons.
+   * @param event Horizontal bucket drop, isolated from nested card drops.
+   * @returns Resolves after persistence.
+   */
+  protected async dropBucket(
+    event: CdkDragDrop<BoardColumn[], BoardColumn[], BoardColumn>,
+  ): Promise<void> {
+    await this.moveBucket(event.item.data.id, event.currentIndex);
+  }
+
+  /** Persists a new bucket position and reloads canonical server ordering.
+   * @param id Bucket identity.
+   * @param index Destination index.
+   * @returns Resolves once the order is confirmed or an error reported.
+   */
+  protected async moveBucket(id: string, index: number): Promise<void> {
+    const project = this.ctx.project();
+    const list = this.ctx.buckets();
+    if (
+      !project ||
+      !this.canManageBuckets() ||
+      this.bucketBusy() ||
+      index < 0 ||
+      index >= list.length ||
+      !list.some((b) => b.id === id) ||
+      list[index]?.id === id
+    )
+      return;
+    const others = list.filter((b) => b.id !== id);
+    this.bucketBusy.set(true);
+    try {
+      await this.api.moveBucket(project.id, id, index > 0 ? (others[index - 1]?.id ?? null) : null);
+      this.ctx.buckets.set(await this.api.buckets(project.id));
+      this.toast.show('Bucket order saved');
+    } catch (error) {
+      this.toast.error(error);
+    } finally {
+      this.bucketBusy.set(false);
+    }
   }
 
   /**

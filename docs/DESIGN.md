@@ -1,5 +1,20 @@
 # Design direction
 
+Status update (2026-10-16): M7.5 is implemented as recorded below. M8 remains
+future work in [the implementation plan](M8-PLAN.md).
+Empty labels must occupy a readable full-width region; notification header and
+content widths must align; destructive destination selects need a visible labelled
+field. Board lists need an ample trailing card-drop target. Bucket grouping gains
+permission-checked top-bar dragging, keyboard reorder and Add bucket, sharing state
+with Settings. User search uses one labelled picker with Search/Enter and a result
+dropdown, retaining selected chips when multiple people may be chosen.
+
+ADO transfer is a separate lazy project interface, preserving the existing
+Excel/offline Export dialog. Its preview distinguishes selected items, added parents,
+creates, updates, pending links, conflicts and omitted data. Incoming changes and
+ID reconciliation are PM-only. Per-project mappings avoid assuming one ADO process.
+Use the existing tokens, Material/CDK, keyboard/focus and responsive rules below.
+
 The owner approved this design direction on 2026-10-13. Milestone M4.5 implements it, M6 theming builds on its
 tokens, and M6.5 polishes every screen against it. SPEC.md stays the source of truth: if this document and the
 spec ever disagree, the spec wins and this document is corrected.
@@ -455,3 +470,18 @@ M6.8 adds (SPEC §6.1–6.3), without changing the approved artboards:
   the tour's lower-page panel keeps its focused instructions and controls visible at phone width.
   Help procedures remain separate from the short introduction. Export previews name effective filters
   in ordinary language, while the server calculates scope and item counts across every matching page.
+
+M7.5 implements the reported UI refinements:
+
+- Empty labels span the available row; populated label grids keep their layout.
+  Notification header and content share a responsive readable width. Delete bucket
+  destinations use outlined labelled fields, clear when the source changes and
+  retain confirmation.
+- Bucket boards offer Add bucket, a draggable top bar with double-click name editing and
+  a compact keyboard-accessible Rename/Move left/Move right menu for board managers and personal owners.
+  Card lists have generous trailing drop targets and separate drag connections.
+- Project manager, member and team-member searches use one outlined input plus
+  Search/Enter and Material autocomplete results with name/email. Committed users
+  appear as removable chips. Multi-person chips persist across queries; edited
+  single choices and outdated query responses are invalidated. Team search stays
+  local to active project members. ADO presentation remains planned for M8.

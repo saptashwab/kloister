@@ -1,3 +1,4 @@
+import { UserPicker } from '../../ui/user-picker';
 import { Component, computed, inject, input, type OnInit, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -51,6 +52,7 @@ import { ProjectTeamsComponent } from './project-teams';
   selector: 'app-project-settings',
   host: { class: 'k-page' },
   imports: [
+    UserPicker,
     ReactiveFormsModule,
     MatButtonModule,
     MatCardModule,
@@ -120,21 +122,12 @@ import { ProjectTeamsComponent } from './project-teams';
           <mat-card-content>
             @if (canAddMembers()) {
               <div class="row">
-                <mat-form-field>
-                  <mat-label>Find user</mat-label>
-                  <input matInput #search (keyup.enter)="searchCandidates(search.value)" />
-                </mat-form-field>
-                <button mat-button type="button" (click)="searchCandidates(search.value)">
-                  Search
-                </button>
-                <mat-form-field>
-                  <mat-label>User</mat-label>
-                  <mat-select [value]="newUserId()" (valueChange)="newUserId.set($event)">
-                    @for (c of candidates(); track c.id) {
-                      <mat-option [value]="c.id">{{ c.displayName }} ({{ c.email }})</mat-option>
-                    }
-                  </mat-select>
-                </mat-form-field>
+                <app-user-picker
+                  label="User"
+                  [searchUsers]="findCandidates"
+                  [(selected)]="selectedCandidate"
+                  (selectedChange)="newUserId.set($event[0]?.id ?? '')"
+                />
                 @if (pmOnly()) {
                   <button
                     mat-flat-button
@@ -285,6 +278,7 @@ import { ProjectTeamsComponent } from './project-teams';
       <app-project-board-settings
         [project]="project"
         [(buckets)]="buckets"
+        (bucketsChange)="ctx?.buckets.set($event)"
         [canManageBoard]="canManageBoard()"
         [canManageProject]="canManageProject() && !project.archivedAt"
         (projectChange)="boardSettingsSaved($event)"
@@ -300,7 +294,7 @@ export class ProjectSettingsPage implements OnInit {
   private readonly store = inject(SessionStore);
   private readonly itemsApi = inject(ItemsApiService);
   /** The project shell's shared state, kept in step with changes made here. */
-  private readonly ctx = inject(ProjectContext, { optional: true });
+  protected readonly ctx = inject(ProjectContext, { optional: true });
 
   /** Project key from the route (`/p/:key/settings`). */
   readonly key = input.required<string>();
@@ -325,7 +319,15 @@ export class ProjectSettingsPage implements OnInit {
   /** Buckets in column order, for the `BUCKETS` scope picker and board settings. */
   protected readonly buckets = signal<BucketDto[]>([]);
   /** Users found by the add-member search. */
-  protected readonly candidates = signal<MemberCandidateDto[]>([]);
+  protected readonly selectedCandidate = signal<MemberCandidateDto[]>([]);
+  /** Scoped active non-member search; administrators retain their existing candidate API.
+   * @param q Search text.
+   * @returns Authorized candidates.
+   */
+  protected readonly findCandidates = async (q: string): Promise<MemberCandidateDto[]> => {
+    const project = this.project();
+    return project ? this.api.candidates(project.id, q) : [];
+  };
   /** User chosen to add. */
   protected readonly newUserId = signal('');
   /** Role for the user being added. */
@@ -476,21 +478,6 @@ export class ProjectSettingsPage implements OnInit {
   }
 
   /**
-   * Searches users who can be added.
-   *
-   * @param q Search text.
-   * @returns Resolves once loaded.
-   */
-  protected async searchCandidates(q: string): Promise<void> {
-    const project = this.project();
-    if (project === null) return;
-    await this.run(async () => {
-      this.candidates.set(await this.api.candidates(project.id, q.trim()));
-      this.newUserId.set('');
-    });
-  }
-
-  /**
    * Adds the chosen user with the chosen role.
    *
    * @returns Resolves once added.
@@ -503,7 +490,7 @@ export class ProjectSettingsPage implements OnInit {
       const role = this.pmOnly() ? ProjectRole.PM : this.newRole();
       const member = await this.api.addMember(project.id, { userId, role });
       this.members.update((members) => [...members, member]);
-      this.candidates.update((list) => list.filter((c) => c.id !== userId));
+      this.selectedCandidate.set([]);
       this.newUserId.set('');
       // Adding yourself (an admin taking the PM role) changes what you may do.
       if (userId === this.store.user()?.id) this.setProject(await this.api.get(project.id));

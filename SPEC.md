@@ -23,7 +23,7 @@ applied after installation through admin theme settings.
 - In-app notifications only
 - My work: everything assigned to the user across their projects, plus their personal tasks, as a list or a status board
 - A private personal space per user for personal tasks (boards, buckets, labels, checklists), visible to its owner only
-- ADO CSV export
+- Selective ADO CSV export and import with reviewed updates and durable item mappings
 - Duplicate work items, including one fresh copy per selected person
 - Excel snapshots and optional offline file archives of visible work
 - A short first-login tour and searchable Help & FAQ
@@ -97,6 +97,7 @@ kloister/
 | Manage members, roles, visibility | ✔ | ✘ | ✘ | ✘ |
 | Project settings, ADO settings, archive project | ✔ | ✘ | ✘ | ✘ |
 | ADO export | ✔ | ✔ | ✘ | ✘ |
+| ADO import, ID reconciliation and transfer settings | ✔ | ✘ | ✘ | ✘ |
 | Excel / offline export of visible data | ✔ | ✔ | ✔ | ✔ |
 
 A project must always have at least one PM; removing or demoting the last PM is rejected.
@@ -198,6 +199,10 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - Checklists show progress (`3/7`) and never change status.
 - A new project gets default buckets: Backlog (NONE), To Do (NONE), In Progress
   (SET_IF_NOT_STARTED → IN_PROGRESS), Done (SET → DONE). The PM can edit or remove them.
+- PMs and project Leads can add and reorder buckets directly in the board's Bucket
+  grouping, with equivalent keyboard controls. Board and Settings share the same
+  order and configuration. Newly added board buckets use NONE; rules stay editable
+  in Settings. Personal-space owners have the equivalent controls.
 
 ---
 
@@ -357,18 +362,32 @@ Theming uses CSS custom properties only. Default palette is neutral (slate/indig
   has no timeout, covers phone/tablet layouts and never obscures the focused control. Detailed procedures live
   in FAQ articles, not in an expanded first-login tour. ADO instructions are added when M8 implements export.
 
-## 7. ADO CSV export
+## 7. ADO CSV transfers (M8, planned)
+
+These transfers are distinct from the existing Excel/offline reading snapshots.
+They use operator-carried CSV files, with no ADO API connection or credentials.
+Implement both directions together after the M7.5 UI fixes. The detailed behavior,
+file plan, verification and proposed persistence are in [the implementation plan](docs/M8-PLAN.md).
+The concrete storage proposal was approved on 2026-10-16; review it before M8
+schema edits and ask before materially changing it.
 
 ### 7.1 Selection modes
 - Entire project
 - One sprint
 - One subtree (an Epic, Feature or Story and everything under it)
 - Manual multi-select from the backlog view
+- Label filters with match-any or match-all, combined with the selected scope
+- Explicit item selection or all eligible items across every matching page
 
 Options:
 - **Include ancestors** (default on): adds the parents of selected items so the hierarchy survives
 - **Exclude Done items** (default off)
 - **Notes in description** (default off)
+
+Preview explicitly lists extra parents and losses. Ordinary selections do not add
+children or dependencies; subtree mode explicitly includes descendants. Excluded
+items remain untouched and need not exist in ADO. Import also offers all rows or
+an explicit subset, with reviewed parent handling and existing-bucket mappings.
 
 ### 7.2 Process presets (type mapping)
 
@@ -383,30 +402,95 @@ Options:
 \* Basic has only three levels. Under Basic, EPIC items are flattened (omitted, with their children promoted),
 and the export preview lists this as a warning.
 
-### 7.3 File format
+### 7.3 Profiles and file format
+
+Each ordinary Kloister project has one ADO organization/collection and project
+destination. Process and forward/reverse type, state, field and identity mappings
+are per project, with Basic/Agile/Scrum/CMMI presets and Custom configuration.
+The destination is not exclusive to that Kloister project: avoid a global unique
+constraint on the ADO organization/project tuple so a later many-Kloister-to-one-
+ADO extension is possible. Cross-project item routing and shared-item editing are
+not introduced by M8; every transfer remains scoped to its selected local project.
+Do not assume the ADO product/version or process is known, all optional fields are
+available, or that board column names equal work-item states. Basic's lossy
+flattening is an explicit previewed export transformation; reverse import must
+resolve ambiguous types and validate the ordinary hierarchy rules.
+
 - UTF-8 with BOM, comma-separated, RFC 4180 quoting, CRLF line endings
-- Columns, in order:
-  1. `ID`: always empty, so ADO creates new items
+- Generate separate creation and update workflows; profile and mode determine columns:
+  1. `ID`: omitted for purely new trees; actual confirmed ADO IDs for updates.
+     New children of existing parents use a mixed hierarchy-create file with
+     ID-bearing ancestor context rows and empty IDs for new children. Context
+     rows preserve freshly reviewed ADO values for every emitted field.
   2. `Work Item Type`
   3. `Title 1` … `Title N`: hierarchy expressed by which Title column holds the title (N = deepest level used)
-  4. `Assigned To`: email of the first assignee
+  4. `Assigned To`: explicit single-assignee mapping using an ADO-recognized identity,
+     only in update mode; stage initial assignments for the post-creation pass
   5. `Priority`
   6. `Tags`: label names joined with `; `
-  7. `Description`: HTML; description + checklist rendered as `<ul>` with ☐/☑ + other assignees' names + optional notes
+  7. `Description`: sanitized HTML, readable checklist/additional-assignee text and
+     optional notes, plus a visible issued Kloister reference for ID reconciliation
   8. `Iteration Path`: `sprint.adoIterationPath` if set, else `<project ado iteration root>\<sprint name>`; empty if no sprint
   9. `Area Path`: from project ADO settings; empty if unset
-  10. Due date column: header configurable per project. Default `Target Date`, alternative `Due Date`, or omitted.
-      This mapping is unverified against a live ADO import. docs/ADO-EXPORT.md must say so and ask users to report field mismatches.
+  10. Date columns: configurable per profile/type and omitted until confirmed;
+      offer headers such as `Target Date` or `Due Date` without assuming support.
+      docs/ADO-EXPORT.md must identify live field compatibility as unverified.
   11. Extra constant columns: project setting, list of (header, value), for org-mandated custom fields
+  12. `State`: mapped value in update mode; omitted for initial creation
 - Rows ordered depth-first so each child follows its parent
-- Maximum 1,000 rows per file. Larger exports are split only at top-level boundaries (a tree is never split across files)
-  and delivered as a zip `kloister-<key>-<yyyymmdd-hhmm>-partN.csv`.
+- Maximum 1,000 rows per file. Create exports split only at complete top-level
+  boundaries; a single tree over that limit blocks with guidance rather than
+  truncating or breaking hierarchy. Flat updates can split by row count. Multiple
+  files are delivered in a ZIP, with names identifying create/update mode and batch.
 - **Preview step** before download: row count, files, type mapping, and warnings:
   multiple assignees, checklists flattened, attachments not exported, Basic flattening, missing iteration path, rows that would be split
-- ADO imports everything with State = New. This is documented in `docs/ADO-EXPORT.md`.
+- ADO initially uses its process/type default state; initial state and assignment
+  transfer can need a second ID-based update pass. Document this workflow honestly.
 - Automated tests validate exports against Microsoft's documented import rules:
-  `Work Item Type` and a Title column present, `ID` empty, at most 1,000 rows per file,
+  `Work Item Type` and a Title column present, IDs appropriate to the mode, at most 1,000 rows per file,
   each child's title one Title column deeper than its parent's, depth-first order, valid UTF-8 with BOM.
+
+### 7.4 Identity, repeated updates and conflicts
+
+- Persist destination-scoped item mappings and pending export intent. A PM brings
+  a return ADO CSV containing assigned IDs and Description to confirm initial links.
+  A small visible issued reference in Description avoids mandatory custom fields
+  or tag creation permissions. If absent, require explicit PM ID matching; never
+  match by title or silently create a copy during reconciliation.
+- ADO-origin rows map by destination plus ADO ID. Importing the same file again or
+  retrying apply must not create duplicates. Do not issue new create files for
+  items awaiting returned IDs. Generating/downloading is not confirmation of import.
+- Show local, incoming and confirmed values and require explicit conflict choices.
+  Revalidate local data/config/permissions before applying a preview. Update files
+  use a fresh operator-supplied ADO observation with an explicit freshness warning;
+  no live lock or detection of subsequent external edits can be promised.
+- A PM supplies/reviews remote CSV observations; Leads can consume them for export
+  but cannot perform incoming preview/reconciliation through an export endpoint.
+  Validate project provenance when supplied; if the CSV lacks it, require explicit
+  destination acknowledgement because IDs alone do not prove file origin.
+- CSV cannot stop someone manually reimporting a create file in ADO. Explain that
+  limitation and the reconcile-before-update workflow; do not promise automatic sync.
+- Missing rows never delete either system's items. Never create user accounts or
+  memberships. Unknown assignees require existing-member mapping or an explicit
+  unassigned choice. Missing columns preserve values; clearing supplied empty
+  values requires review. Preserve fields outside the selected transfer scope.
+
+### 7.5 Incoming data and permissions
+
+- Export is PM/project Lead only; incoming preview/apply, ID linking and settings
+  are project PM only. System administrators receive no extra transfer reach.
+  Personal spaces are excluded and archived projects accept no transfer writes.
+- Support the approved core fields in both directions where configured. Map states
+  to Kloister statuses and existing buckets; do not create buckets automatically.
+  Validate hierarchy, assignments and every reference using ordinary project rules.
+  Labels may be created only through an explicit PM-reviewed mapping choice.
+- One ADO assignee must not silently erase additional Kloister assignees. Readable
+  checklist/note text is not parsed back into structured entities. Files, embedded
+  images, native comments and non-parent dependency links have explicit limitations.
+  Imported rich text is sanitized; remote resources are never fetched.
+- Verify with synthetic fixtures and documented Microsoft contracts, not a live
+  ADO connection. Both directions require an operator acceptance checklist and
+  honest disclosure that target-version/process compatibility is unverified.
   
 ---
 
@@ -533,7 +617,8 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M6.7 | My work as list and status board across projects (filters, "also items I created", group by project), the same views for "all their work", and the private personal space per user (3.6) with its per-user quota setting, plus the permission tests proving nobody else, admins included, can reach it |
 | M6.8 | Same-space item duplication (including one copy per selected person), permission-scoped Excel snapshots and optional offline file archives, a skippable 2–3 minute first-login tour composed from current capabilities, manual replay and searchable sidebar Help & FAQ (6.1–6.3); endpoint permission tests, export-content/file safety tests and browser coverage for roles, first-login/replay, accessibility and responsive screens |
 | M7 | Deploy scripts, release workflow, public root README with product overview/screenshots and generic installation/run steps (9.6), INSTALL/UPGRADE/ADMIN docs, end-to-end install test on a RHEL 8 VM (first usable release, v1.0) |
-| M8 | ADO export plus preview, validated by tests against the documented import rules (v1.1) |
+| M7.5 | Reported empty-state/select layout fixes, easier bottom card drops, board bucket creation/reorder, unified searchable user pickers; preserve permissions and add browser regression coverage |
+| M8 | Selective ADO CSV export and import, per-project process mappings, durable IDs, reconciliation and reviewed conflicts; documentation-based tests and operator acceptance (v1.1) |
 
 ---
 

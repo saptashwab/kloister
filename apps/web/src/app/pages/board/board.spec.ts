@@ -1,3 +1,4 @@
+import { Dialogs } from '../../ui/dialogs';
 import type { CdkDragDrop } from '@angular/cdk/drag-drop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
@@ -24,9 +25,85 @@ interface BoardInternals {
   drop(event: CdkDragDrop<BoardColumn, BoardColumn, WorkItemDto>): Promise<void>;
   toggle(userId: string): void;
   active(): string | null;
+  addBucket(): Promise<void>;
+  renameBucket(column: BoardColumn): Promise<void>;
+  moveBucket(id: string, index: number): Promise<void>;
+  groupBy: { set(value: string): void };
 }
 
 describe('BoardPage', () => {
+  it('creates a board bucket with no rule and updates canonical state', async () => {
+    const { board, ctx, itemsApi } = await render([]);
+    vi.spyOn(TestBed.inject(Dialogs), 'prompt').mockResolvedValue(' Review ');
+    const added = makeBucket('b3', 'Review', 3);
+    itemsApi.createBucket.mockResolvedValue(added);
+    await board.addBucket();
+    expect(itemsApi.createBucket).toHaveBeenCalledWith('p1', {
+      name: 'Review',
+      onEnterMode: 'NONE',
+      onEnterStatus: null,
+    });
+    expect(ctx.buckets()).toEqual([...buckets, added]);
+  });
+
+  it('renames through double-click and the same API, updating shared state only on success', async () => {
+    const { board, root, fixture, ctx, itemsApi, showError } = await render([]);
+    const prompt = vi.spyOn(TestBed.inject(Dialogs), 'prompt').mockResolvedValue('New name');
+    itemsApi.updateBucket.mockResolvedValue({ ...buckets[0], name: 'New name' });
+    root
+      .querySelector('section.column h2 span')
+      ?.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    await settle(fixture);
+    expect(itemsApi.updateBucket).toHaveBeenCalledWith('p1', 'b1', { name: 'New name' });
+    expect(ctx.buckets()[0].name).toBe('New name');
+    prompt.mockResolvedValue('Refused name');
+    itemsApi.updateBucket.mockRejectedValue(new Error('Refused'));
+    await board.renameBucket(board.columns()[0]);
+    expect(ctx.buckets()[0].name).toBe('New name');
+    expect(showError).toHaveBeenCalled();
+  });
+
+  it('uses the existing reorder endpoint and refreshes order, retaining state on refusal', async () => {
+    const { board, ctx, itemsApi, showError } = await render([]);
+    itemsApi.moveBucket.mockResolvedValue(buckets[1]);
+    itemsApi.buckets.mockResolvedValue([buckets[1], buckets[0]]);
+    await board.moveBucket('b2', 0);
+    expect(itemsApi.moveBucket).toHaveBeenCalledWith('p1', 'b2', null);
+    expect(ctx.buckets().map((b) => b.id)).toEqual(['b2', 'b1']);
+    itemsApi.moveBucket.mockRejectedValue(new Error('Refused'));
+    await board.moveBucket('b2', 1);
+    expect(ctx.buckets().map((b) => b.id)).toEqual(['b2', 'b1']);
+    expect(showError).toHaveBeenCalled();
+  });
+
+  it('hides bucket mutation in other groupings, read-only views and archived projects', async () => {
+    const { board, ctx, fixture, root, itemsApi } = await render([]);
+    board.groupBy.set('status');
+    await settle(fixture);
+    expect(root.querySelector('[aria-label="Bucket actions for To Do"]')).toBeNull();
+    await board.moveBucket('b2', 0);
+    expect(itemsApi.moveBucket).not.toHaveBeenCalled();
+    board.groupBy.set('bucket');
+    ctx.project.update((p) => (p ? { ...p, archivedAt: '2026-01-01' } : p));
+    await settle(fixture);
+    expect(root.textContent).not.toContain('Add bucket');
+    ctx.project.update((p) => (p ? { ...p, archivedAt: null, myPermissions: ['VIEW_ITEMS'] } : p));
+    await settle(fixture);
+    expect(root.textContent).not.toContain('Add bucket');
+  });
+
+  it('appends after the last visible card under a filter without changing hidden neighbors', async () => {
+    const moving = makeItem(1, { assigneeIds: ['u1'] });
+    const visible = makeItem(2, { bucketId: 'b2', assigneeIds: ['u1'] });
+    const hidden = makeItem(3, { bucketId: 'b2', assigneeIds: ['u2'] });
+    const { board, ctx, itemsApi } = await render([moving, visible, hidden]);
+    board.toggle('u1');
+    const [todo, done] = board.columns();
+    itemsApi.move.mockResolvedValue({ ...moving, bucketId: 'b2', position: 2.5 });
+    await board.drop(dropEvent(moving, todo, done, 1));
+    expect(itemsApi.move).toHaveBeenCalledWith('p1', 'i1', { bucketId: 'b2', afterId: 'i2' });
+    expect(ctx.itemsById().get('i3')).toEqual(hidden);
+  });
   const buckets = [makeBucket('b1', 'To Do', 1), makeBucket('b2', 'Done', 2)];
 
   async function render(
@@ -52,6 +129,9 @@ describe('BoardPage', () => {
       move: vi.fn(),
       update: vi.fn(),
       create: vi.fn(),
+      createBucket: vi.fn(),
+      moveBucket: vi.fn(),
+      updateBucket: vi.fn(),
     };
     await TestBed.configureTestingModule({
       imports: [BoardPage],

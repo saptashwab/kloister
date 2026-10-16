@@ -80,7 +80,7 @@ describe('ProjectSettingsPage', () => {
     const { root } = await render(['VIEW_ITEMS', 'MANAGE_PROJECT', 'MANAGE_MEMBERS']);
     expect(root.querySelector('form')).not.toBeNull();
     expect(root.textContent).toContain('Remove');
-    expect(root.textContent).toContain('Find user');
+    expect(root.textContent).toContain('User');
   });
 
   it('gives admins who are not PMs PM-role controls only, even when archived', async () => {

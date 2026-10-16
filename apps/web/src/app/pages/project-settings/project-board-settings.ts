@@ -58,6 +58,9 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
     LabelPill,
   ],
   styles: `
+    .bucket-destination {
+      width: min(100%, var(--k-size-288px));
+    }
     .labels-card {
       display: flex;
       flex-direction: column;
@@ -96,7 +99,7 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
       align-items: center;
       gap: var(--k-size-6px);
     }
-    .label-list li {
+    .label-list li:not(.labels-empty) {
       display: grid;
       width: min(100%, var(--k-label-row-width));
       grid-template-columns: var(--k-target) minmax(0, 1fr) var(--k-label-preview-width) var(
@@ -116,7 +119,7 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
       overflow: hidden;
     }
     @media (max-width: 599px) {
-      .label-list li {
+      .label-list li:not(.labels-empty) {
         grid-template-columns: var(--k-target) minmax(0, 1fr) var(--k-target);
       }
       .label-list app-label-pill {
@@ -235,7 +238,7 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
                         mat-button
                         type="button"
                         [disabled]="buckets().length < 2"
-                        (click)="deleting.set(b)"
+                        (click)="moveTarget.set(''); deleting.set(b)"
                       >
                         Delete
                       </button>
@@ -254,17 +257,21 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
         @if (deleting(); as b) {
           <div class="row" role="group" [attr.aria-label]="'Delete ' + b.name">
             <span>Delete {{ b.name }} and move its cards to</span>
-            <mat-select
-              aria-label="Bucket receiving the cards"
-              [value]="moveTarget()"
-              (valueChange)="moveTarget.set($event)"
-            >
-              @for (o of buckets(); track o.id) {
-                @if (o.id !== b.id) {
-                  <mat-option [value]="o.id">{{ o.name }}</mat-option>
+            <mat-form-field appearance="outline" class="bucket-destination">
+              <mat-label>Destination bucket</mat-label>
+              <mat-select
+                aria-label="Bucket receiving the cards"
+                placeholder="Choose destination bucket"
+                [value]="moveTarget()"
+                (valueChange)="moveTarget.set($event)"
+              >
+                @for (o of buckets(); track o.id) {
+                  @if (o.id !== b.id) {
+                    <mat-option [value]="o.id">{{ o.name }}</mat-option>
+                  }
                 }
-              }
-            </mat-select>
+              </mat-select>
+            </mat-form-field>
             <button
               mat-flat-button
               type="button"
@@ -395,7 +402,7 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
               }
             </li>
           } @empty {
-            <li>
+            <li class="labels-empty">
               <app-empty-state
                 title="No labels yet"
                 [text]="
@@ -657,6 +664,16 @@ export class ProjectBoardSettings {
    */
   protected async deleteBucket(bucket: BucketDto): Promise<void> {
     const target = this.moveTarget();
+    if (!target || target === bucket.id || !this.buckets().some((b) => b.id === target)) return;
+    if (
+      !(await this.dialogs.confirm({
+        title: `Delete ${bucket.name}?`,
+        message: 'Its cards move to the selected bucket without applying its entry rule.',
+        confirm: 'Delete bucket',
+        danger: true,
+      }))
+    )
+      return;
     await this.run(async () => {
       await this.api.deleteBucket(this.project().id, bucket.id, target || undefined);
       this.buckets.update((list) => list.filter((b) => b.id !== bucket.id));

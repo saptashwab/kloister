@@ -6,7 +6,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
+import { UserPicker } from '../../ui/user-picker';
 import { RouterLink } from '@angular/router';
 import {
   MAX_INITIAL_PMS,
@@ -14,7 +14,7 @@ import {
   PROJECT_KEY_PATTERN,
   PROJECT_NAME_MAX,
   type ProjectDto,
-  type UserDto,
+  type MemberCandidateDto,
 } from '@kloister/shared';
 import { AdminApiService } from '../../core/admin-api.service';
 import { errorMessage } from '../../core/api';
@@ -48,7 +48,7 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
     MatCheckboxModule,
     MatFormFieldModule,
     MatInputModule,
-    MatSelectModule,
+    UserPicker,
   ],
   template: `
     <header class="k-page-head">
@@ -89,21 +89,13 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
               <mat-label>Description</mat-label>
               <input matInput formControlName="description" />
             </mat-form-field>
-            <mat-form-field>
-              <mat-label>Find Project Managers</mat-label>
-              <input matInput #pmSearch (keyup.enter)="searchPm(pmSearch.value)" />
-            </mat-form-field>
-            <button mat-button type="button" (click)="searchPm(pmSearch.value)">Search</button>
-            <mat-form-field>
-              <mat-label>Project Managers</mat-label>
-              <mat-select formControlName="pmUserIds" multiple>
-                @for (user of pmOptions(); track user.id) {
-                  <mat-option [value]="user.id"
-                    >{{ user.displayName }} ({{ user.email }})</mat-option
-                  >
-                }
-              </mat-select>
-            </mat-form-field>
+            <app-user-picker
+              label="Project Managers"
+              [multiple]="true"
+              [searchUsers]="findPms"
+              [(selected)]="selectedPms"
+              (selectedChange)="createForm.controls.pmUserIds.setValue($event.map(userId))"
+            />
             <button mat-flat-button type="submit" [disabled]="createForm.invalid || busy()">
               Create
             </button>
@@ -180,7 +172,18 @@ export class ProjectsPage implements OnInit {
   /** Whether archived projects are listed. */
   protected readonly includeArchived = signal(false);
   /** Users found by the PM search. */
-  protected readonly pmOptions = signal<UserDto[]>([]);
+  protected readonly selectedPms = signal<MemberCandidateDto[]>([]);
+  /** Maps committed choices to the create request.
+   * @param user Committed candidate.
+   * @returns Candidate identity.
+   */
+  protected readonly userId = (user: MemberCandidateDto): string => user.id;
+  /** Admin-only active directory search for initial project managers.
+   * @param q Search text.
+   * @returns Active matching candidates.
+   */
+  protected readonly findPms = async (q: string): Promise<MemberCandidateDto[]> =>
+    (await this.adminApi.listUsers(q, undefined)).items.filter((user) => user.isActive);
   /** Last error message, if any. */
   protected readonly error = signal('');
   /** True while the list is being replaced. */
@@ -241,23 +244,6 @@ export class ProjectsPage implements OnInit {
   }
 
   /**
-   * Finds active users to choose the Project Managers from. Users already
-   * chosen stay in the list so the selection survives a new search.
-   *
-   * @param q Search text.
-   * @returns Resolves once loaded.
-   */
-  protected async searchPm(q: string): Promise<void> {
-    await this.run(async () => {
-      const page = await this.adminApi.listUsers(q.trim(), undefined);
-      const chosen = new Set(this.createForm.controls.pmUserIds.value);
-      const kept = this.pmOptions().filter((user) => chosen.has(user.id));
-      const found = page.items.filter((user) => user.isActive && !chosen.has(user.id));
-      this.pmOptions.set([...kept, ...found]);
-    });
-  }
-
-  /**
    * Creates the project and lists it.
    *
    * @returns Resolves once done.
@@ -270,6 +256,7 @@ export class ProjectsPage implements OnInit {
     await this.run(async () => {
       await this.api.create({ ...value, key });
       this.createForm.reset();
+      this.selectedPms.set([]);
       await this.reload();
       void this.nav.refresh();
     });

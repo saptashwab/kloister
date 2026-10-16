@@ -28,8 +28,9 @@ import { ToastService } from '../../ui/toast.service';
     Icon,
     Skeleton,
   ],
+  styleUrl: './notifications.scss',
   template: `
-    <div class="k-page">
+    <div class="k-page notifications-page">
       <header class="k-page-head">
         <h1>Notifications</h1>
         <span class="spacer"></span>

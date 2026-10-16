@@ -81,6 +81,42 @@ describe('personal spaces and My work (db)', () => {
     expect(await prisma.bucket.count({ where: { projectId: personal.id } })).toBe(4);
   });
 
+  it('permits owner bucket creation/reorder while hiding the same operations from others', async () => {
+    const base = `/api/v1/projects/${personal.id}/buckets`;
+    const created = await call(app, 'POST', base, {
+      sid: sessions.owner,
+      body: { name: 'Review', onEnterMode: 'NONE', onEnterStatus: null },
+    });
+    expect(created.statusCode).toBe(201);
+    const bucket = created.json() as { id: string; onEnterMode: string; onEnterStatus: null };
+    expect(bucket.onEnterMode).toBe('NONE');
+    expect(bucket.onEnterStatus).toBeNull();
+    for (const caller of ['other', 'admin'] as const) {
+      expect(
+        (
+          await call(app, 'POST', `${base}/${bucket.id}/move`, {
+            sid: sessions[caller],
+            body: { afterId: null },
+          })
+        ).statusCode,
+      ).toBe(404);
+    }
+    expect(
+      (
+        await call(app, 'POST', `${base}/${bucket.id}/move`, {
+          sid: sessions.owner,
+          body: { afterId: null },
+        })
+      ).statusCode,
+    ).toBe(200);
+    const first = await prisma.bucket.findFirstOrThrow({
+      where: { projectId: personal.id },
+      orderBy: { position: 'asc' },
+    });
+    expect(first.id).toBe(bucket.id);
+    expect(await prisma.projectMember.count({ where: { projectId: personal.id } })).toBe(0);
+  });
+
   for (const caller of ['owner', 'other', 'admin'] as const) {
     it(`${caller}: me/personal always resolves the caller's own space`, async () => {
       const sid = sessions[caller];
