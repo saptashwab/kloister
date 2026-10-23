@@ -14,8 +14,9 @@
   previews were stored indefinitely. M8.1 fixes these; see docs/M8.1-PLAN.md.
 - Verification adds a disposable Azure DevOps Services organization (Agile, Scrum
   and Basic projects) for real export fixtures and manual web-UI imports. The app,
-  CI and automated tests still make no ADO connection. Proposed new limit: unapplied
-  preview content expires after 7 days (awaiting owner approval).
+  CI and automated tests still make no ADO connection. The owner approved the plan,
+  including 7-day expiry of unapplied preview content, on the condition that nothing
+  outside ADO transfers changes in a breaking way.
 
 ## M8 transfer implementation (2026-10-16)
 
