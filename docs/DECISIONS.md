@@ -27,6 +27,28 @@
 
 ## M8.1 transfer implementation (2026-10-23)
 
+Scrum and Basic drill (2026-10-23): the create → link-only → follow-up update drill
+was repeated in the disposable organization's Scrum and Basic projects, with files
+built from the compiled API and imported/exported through the ADO web UI. ADO
+reported no errors or warnings at any step.
+
+- Scrum: a four-level create (Epic > Feature > Product Backlog Item > Task) with a
+  tag, a noon-UTC Target Date on the Feature and a title starting with "-" saved
+  all rows; the date kept its calendar day. The returned export linked every row by
+  reference without blocking. Update files (PBI State, Task State plus Assigned To)
+  changed exactly those cells.
+- Basic: the Kloister Epic was omitted with its children promoted (Epic > Issue >
+  Task), the Basic Epic kept its Target Date, every returned row linked by
+  reference, and the update files (Issue State, Task State plus Assigned To)
+  changed exactly those cells.
+- Two Basic-only defects found offline, not yet fixed: the create intent records an
+  item's real parent while the file uses the promoted parent, so a Quick review of
+  the returned export reads ADO's empty parent as an ADO change and would clear
+  the local parent of a promoted Feature; and update previews compare the observed
+  parent with the real parent instead of the promoted one, warning on every
+  promoted item. The service/database apply path, CMMI and Azure DevOps Server
+  remain unverified live.
+
 M8.1 CI (2026-10-23): `630b259` is green on run 39940353809 after two re-runs that
 stopped only because the Postgres image pull from ECR Public hit its data limit:
 614 API and 280 web unit tests, 673 database tests, all 49 browser scenarios,
