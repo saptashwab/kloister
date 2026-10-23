@@ -172,7 +172,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **WorkItem**: projectId, number (per-project sequence), type (`EPIC|FEATURE|STORY|TASK|BUG`), parentId,
   title, description (sanitized HTML), status (`NOT_STARTED|IN_PROGRESS|BLOCKED|DONE`), priority (1–4),
   bucketId (required for STORY/TASK/BUG; optional for EPIC/FEATURE), sprintId, teamId (nullable), startDate,
-  dueDate, position (fractional index for ordering), createdById, completedAt
+  dueDate, dueTime (optional minutes after midnight, wall-clock with no time zone; needs a dueDate; M8.5),
+  position (fractional index for ordering), createdById, completedAt
 - **WorkItemAssignee**: workItemId, userId (many-to-many)
 - **WorkItemDependency**: blockedItemId, blockingItemId (same project, may cross teams; no cycles)
 - **Team**: projectId, name (unique per project), description
@@ -251,7 +252,9 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - columns are buckets, with a Group-by switch: Bucket (default), Status, Assignee, Sprint
   - drag-drop between and within columns
   - filters: assignee, label, sprint, type, due (overdue / this week), text search
-  - cards show type icon, key-number, title, labels, assignee avatars (initials), due date (red if overdue), checklist progress
+  - cards show type icon, key-number, title, labels, assignee avatars (initials), due date and optional due time (red if overdue), checklist progress
+  - an item with a due time is overdue once that time has passed; one without a time, from the day after its due date.
+    Within one due day, timed items sort first, earliest first, then untimed items, then by priority (M8.5)
   - labels use the project's label style (solid by default; tinted or cover bar), with text contrast chosen automatically
   - hovering an assignee avatar shows their name and email; clicking it filters the board to that person, and
     "View all their work" lists their items across the viewer's own unarchived projects, limited by the viewer's access in
@@ -260,7 +263,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
     only people who share a project with them (404 otherwise)
   - quick-add card at the top of each column
 - **Item detail** (side drawer, deep-linkable `/<app>/p/:key/items/:number`):
-  title, type, parent picker, status, bucket, sprint, assignees, labels, priority, start and due dates,
+  title, type, parent picker, status, bucket, sprint, assignees, labels, priority, start and due dates, optional due time,
   description editor (images can be pasted or dropped in; notes too), checklist (add, reorder, tick), notes thread with `@mention`, attachments,
   children list, activity history (from AuditLog)
 - **Backlog / hierarchy view**: tree of Epic → Feature → Story → Task with expand/collapse,
@@ -654,7 +657,7 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M7.5 | Reported empty-state/select layout fixes, easier bottom card drops, board bucket creation/reorder, unified searchable user pickers; preserve permissions and add browser regression coverage |
 | M8 | Selective ADO CSV export and import, per-project process mappings, durable IDs, reconciliation and reviewed conflicts; documentation-based tests and operator acceptance (v1.1) |
 | M8.1 | ADO transfer fidelity fixes, Quick/Detailed review modes (7.6), profile setup from a sample ADO export, readable review screens, preview expiry; fixtures and manual import checks from a disposable Azure DevOps Services organization |
-| M8.5 | App-wide UI/UX fixes from the 2026-10-23 review ([plan](docs/M8.5-PLAN.md)): stacked-card phone layouts for wide tables, a readable Audit log, one date picker and date format, Project settings in section tabs, Projects list counts and last activity, a page-actions area for Export…, a lighter My work status control, the drawer's board order, branded sign-in pages; no breaking change, additive API only |
+| M8.5 | App-wide UI/UX fixes from the 2026-10-23 review ([plan](docs/M8.5-PLAN.md)): stacked-card phone layouts for wide tables, a readable Audit log, one date picker and date format, Project settings in section tabs, Projects list counts and last activity, a page-actions area for Export…, a lighter My work status control, the drawer's board order, branded sign-in pages, an optional due time; no breaking change, additive API only |
 
 ---
 

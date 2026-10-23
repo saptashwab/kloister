@@ -12,6 +12,13 @@
   requests, refused attempts and export downloads are always recorded as their own
   entries, and entries stay append-only. SPEC §3.1, §6 and §6.2 are updated; the
   alternative of keeping every entry and grouping only in the viewer was not chosen.
+- Owner request and decision: items get an optional due time (no start time), a
+  wall-clock time with no time zone like due dates, stored as an additive nullable
+  `WorkItem.dueTime`. Timed items are overdue once the time passes and sort before
+  untimed items of the same day, then by priority. ADO files stay date-only with a
+  preview warning; notifications stay daily. An app time zone is deferred: the
+  owner does not expect to need it within 6–12 months, and it can be added later
+  without converting stored times.
 - Approved with the plan: the
   audit viewer resolves item keys, never current item titles; Projects list counts
   follow the caller's visibility and are omitted for admin non-members, and last
