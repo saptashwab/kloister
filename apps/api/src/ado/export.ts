@@ -12,6 +12,7 @@ import type { AdoItemLink } from '../generated/prisma/client.js';
 import { writeCsv } from './csv.js';
 import { selectItems } from './selection.js';
 import {
+  adoParent,
   differences,
   localValues,
   FIELD_NAMES,
@@ -120,6 +121,7 @@ export function exportPlan(
   if (!request.selection.ancestors)
     warnings.push('Ancestors excluded: hierarchy outside this selection will be lost.');
   const byId = new Map(selection.items.map((i) => [i.id, i]));
+  const allById = new Map(all.map((i) => [i.id, i]));
   const linked = new Map(links.map((l) => [l.itemId, l]));
   const omitted = new Set(selection.items.filter((i) => p.types[i.type] === null).map((i) => i.id));
   const effectiveParent = (i: TransferItem): string | null => {
@@ -214,7 +216,12 @@ export function exportPlan(
     delete remote.type;
     delete remote.bucketId;
     const observedParent = (link.observation as { values?: Values }).values?.parentId;
-    if (observedParent !== undefined && observedParent !== item.parentId)
+    // A promoted item (Basic) shows its nearest exported ancestor as parent in ADO.
+    if (
+      observedParent !== undefined &&
+      observedParent !== item.parentId &&
+      observedParent !== adoParent(item.parentId, allById, p)
+    )
       row.warnings.push(
         'The parent differs from ADO. Update files do not move items; change the parent in ADO.',
       );

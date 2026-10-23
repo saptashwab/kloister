@@ -41,13 +41,19 @@ reported no errors or warnings at any step.
   Task), the Basic Epic kept its Target Date, every returned row linked by
   reference, and the update files (Issue State, Task State plus Assigned To)
   changed exactly those cells.
-- Two Basic-only defects found offline, not yet fixed: the create intent records an
+- Two Basic-only defects found offline and then fixed with regression tests: the create intent records an
   item's real parent while the file uses the promoted parent, so a Quick review of
   the returned export reads ADO's empty parent as an ADO change and would clear
   the local parent of a promoted Feature; and update previews compare the observed
   parent with the real parent instead of the promoted one, warning on every
-  promoted item. The service/database apply path, CMMI and Azure DevOps Server
-  remain unverified live.
+  promoted item. Both comparisons now express the local parent, baselines and
+  intent in ADO terms (the nearest ancestor whose type the profile exports, passing
+  only through known omitted items), so ADO showing the promoted parent counts as
+  unchanged while a real parent change made in ADO still applies. Stored
+  observations and baselines keep ADO's own view, as before the fix, so existing
+  records need no conversion and mixed create files with linked promoted parents
+  keep working. The service/database apply path, CMMI and Azure DevOps Server remain unverified
+  live.
 
 M8.1 CI (2026-10-23): `630b259` is green on run 39940353809 after two re-runs that
 stopped only because the Postgres image pull from ECR Public hit its data limit:

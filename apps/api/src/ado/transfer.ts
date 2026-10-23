@@ -142,6 +142,54 @@ export function localValues(item: TransferItem): Values {
 }
 
 /**
+ * A local parent id in ADO terms: the nearest ancestor whose type the profile exports.
+ * Under Basic, an EPIC is omitted and its children are promoted, so their ADO parent differs
+ * from their local parent without anything having changed. The walk passes only through known
+ * omitted items; an unknown id is returned unchanged rather than treated as no parent.
+ * @param parentId Local parent id, or null.
+ * @param byId Readable local items by id.
+ * @param profile Destination profile.
+ * @returns The id ADO shows as parent, or null.
+ */
+export function adoParent(
+  parentId: string | null,
+  byId: Map<string, TransferItem>,
+  profile: AdoProfile,
+): string | null {
+  let id = parentId;
+  // The visited set guards against a corrupt parent cycle.
+  const seen = new Set<string>();
+  for (let parent = byId.get(id ?? ''); parent && profile.types[parent.type] === null;) {
+    if (seen.has(parent.id)) break;
+    seen.add(parent.id);
+    id = parent.parentId;
+    parent = byId.get(id ?? '');
+  }
+  return id;
+}
+
+/**
+ * Expresses the parent in local values, baselines and intents in ADO terms, so a promoted parent
+ * is compared with what ADO can show. Other fields are unchanged.
+ * @param values Stored or current values.
+ * @param byId Readable local items by id.
+ * @param profile Destination profile.
+ * @returns A copy with the parent projected, when present.
+ */
+function inAdoTerms<T extends Record<string, unknown>>(
+  values: T,
+  byId: Map<string, TransferItem>,
+  profile: AdoProfile,
+): T {
+  if (!('parentId' in values)) return values;
+  const parentId = values['parentId'];
+  return {
+    ...values,
+    parentId: adoParent(typeof parentId === 'string' ? parentId : null, byId, profile),
+  };
+}
+
+/**
  * Builds three-way differences. In Quick review a difference is resolved automatically when only
  * one side changed since the last confirmed sync; a field ADO never received (State, Assigned To
  * after a create) only holds ADO's defaults, so the local value wins there. Changes on both sides,
@@ -437,18 +485,35 @@ export function incomingPlan(
           row.warnings.push('Parent intentionally omitted; hierarchy is lost for this row.');
       }
       const choices = request.choices[id] ?? {};
+      // The parent is compared in ADO terms; incoming stays ADO's own view, as stored.
+      const project = <T extends Record<string, unknown>>(v: T): T => inAdoTerms(v, byItem, p);
       row.differences = differences(
-        current ? localValues(current) : {},
+        current ? project(localValues(current)) : {},
         incoming,
-        link,
+        link && {
+          ...link,
+          localBaseline: project((link.localBaseline ?? {}) as Values),
+          intent: project((link.intent ?? {}) as Values),
+        },
         choices,
         review,
         // A new item takes every incoming value in Quick review.
-      ).map((d) =>
-        !current && review === 'quick' && choices[d.field] === undefined
-          ? { ...d, choice: 'incoming' as const, auto: true, conflict: false }
-          : d,
-      );
+      )
+        .map((d) =>
+          // Review screens show the real local parent, not its ADO projection.
+          d.field === 'parentId' && current
+            ? {
+                ...d,
+                local: current.parentId,
+                baselineLocal: ((link?.localBaseline ?? {}) as Values).parentId ?? null,
+              }
+            : d,
+        )
+        .map((d) =>
+          !current && review === 'quick' && choices[d.field] === undefined
+            ? { ...d, choice: 'incoming' as const, auto: true, conflict: false }
+            : d,
+        );
       const changes: Values = {};
       if (request.mode === 'import')
         for (const d of row.differences) {

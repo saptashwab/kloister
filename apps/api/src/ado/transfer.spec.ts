@@ -15,7 +15,7 @@ import { readCsv, remoteId, writeCsv } from './csv.js';
 import { preset, validateProfile } from './profiles.js';
 import { selectItems } from './selection.js';
 import { exportPlan } from './export.js';
-import { incomingPlan, type TransferItem } from './transfer.js';
+import { adoParent, incomingPlan, localValues, type TransferItem } from './transfer.js';
 import { adoDate, parseAdoDate, stripFooter } from './values.js';
 
 const bucket = '11111111-1111-4111-8111-111111111111';
@@ -862,5 +862,147 @@ describe('fields sent by an update file', () => {
     task.dueDate = new Date('2026-12-25T00:00:00Z');
     const rows = readCsv(exportPlan(d, outgoing(), [feature, task], []).files[0].csv).rows;
     expect(rows.map((r) => r['Target Date'])).toEqual(['2026-12-24T12:00:00Z', '']);
+  });
+});
+
+describe('Basic flattening keeps the local hierarchy', () => {
+  /** Basic profile with explicit reverse types for the promoted levels. */
+  function basic(): AdoDestinationDto {
+    const d = destination();
+    d.profile = preset('Basic');
+    d.profile.fields = {};
+    d.profile.reverseTypes = { Epic: 'FEATURE', Issue: 'STORY' };
+    return d;
+  }
+  const tree = (): TransferItem[] => [
+    item('e', 'EPIC'),
+    item('f', 'FEATURE', 'e'),
+    item('s', 'STORY', 'f'),
+  ];
+  const created = (target: TransferItem, reference: string): AdoItemLink =>
+    link(target.id, {
+      reference,
+      remoteId: null,
+      pendingBatchId: randomUUID(),
+      observation: null,
+      observedAt: null,
+      intent: { ...localValues(target) },
+    });
+  const returned =
+    'ID,Work Item Type,Title 1,Title 2,Description\n' +
+    `20,Epic,Item f,,Kloister reference: ${'b'.repeat(64)}\n` +
+    `21,Issue,,Item s,Kloister reference: ${'c'.repeat(64)}`;
+
+  it('does not clear the parent of a promoted item in any mode or review', () => {
+    const items = tree();
+    const links = [created(items[1], 'b'.repeat(64)), created(items[2], 'c'.repeat(64))];
+    for (const mode of ['reconcile', 'observe', 'import'] as const)
+      for (const review of ['quick', 'detailed'] as const) {
+        const request = incoming(returned);
+        request.mode = mode;
+        request.review = review;
+        const plan = incomingPlan(basic(), request, items, links);
+        const promoted = plan.rows.find((r) => r.itemId === 'f')!;
+        expect(promoted.differences.map((d) => d.field)).not.toContain('parentId');
+        const op = plan.operations.find((o) => o.itemId === 'f')!;
+        expect(op.changes).not.toHaveProperty('parentId');
+        // The stored observation keeps ADO's own view of the hierarchy.
+        expect(op.incoming.parentId).toBeNull();
+      }
+    const quick = incomingPlan(basic(), incoming(returned), items, links);
+    expect(quick.errors).toEqual([]);
+    // The child's parent is the row above, resolved to the same local item when applied.
+    expect(quick.operations.find((o) => o.itemId === 's')!.changes.parentId).toBe('remote:20');
+  });
+
+  it('still applies a parent change made in ADO to a promoted item', () => {
+    const items = [...tree(), item('g', 'FEATURE')];
+    const l = link('s', {
+      reference: 'c'.repeat(64),
+      remoteId: '21',
+      intent: { ...localValues(items[2]) },
+    });
+    const other = link('g', { reference: 'd'.repeat(64), remoteId: '30' });
+    const plan = incomingPlan(
+      basic(),
+      incoming(
+        'ID,Work Item Type,Title,Parent,Description\n' +
+          `21,Issue,Item s,30,Kloister reference: ${'c'.repeat(64)}`,
+      ),
+      items,
+      [l, other],
+    );
+    expect(plan.errors).toEqual([]);
+    expect(plan.operations[0].changes.parentId).toBe('g');
+    // A shown parent difference names the real local parent, not its ADO projection.
+    const feature = link('f', {
+      reference: 'b'.repeat(64),
+      remoteId: '20',
+      intent: { ...localValues(items[1]) },
+    });
+    const detailed = incoming(
+      'ID,Work Item Type,Title,Parent,Description\n' +
+        `20,Epic,Item f,30,Kloister reference: ${'b'.repeat(64)}`,
+    );
+    detailed.review = 'detailed';
+    const shown = incomingPlan(basic(), detailed, items, [feature, other]).rows[0].differences;
+    expect(shown.find((d) => d.field === 'parentId')).toMatchObject({ local: 'e', incoming: 'g' });
+  });
+
+  it('applies a parent removed in ADO even when the local parent is not in the list', () => {
+    const task = item('1', 'TASK', 'hidden');
+    const l = link('1', { remoteId: '21', intent: { ...localValues(task) } });
+    const plan = incomingPlan(
+      destination(),
+      incoming(
+        `ID,Work Item Type,Title,Parent,Description\n21,Task,Item 1,,Kloister reference: ${l.reference}`,
+      ),
+      [task],
+      [l],
+    );
+    expect(plan.errors).toEqual([]);
+    expect(plan.operations[0].changes.parentId).toBeNull();
+  });
+
+  it('skips every omitted level and keeps unknown parents', () => {
+    const items = tree();
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const profile = basic().profile;
+    expect(adoParent('e', byId, profile)).toBeNull();
+    expect(adoParent('f', byId, profile)).toBe('f');
+    profile.types.FEATURE = null;
+    expect(adoParent('f', byId, profile)).toBeNull();
+    expect(adoParent('unknown', byId, profile)).toBe('unknown');
+    items[0].parentId = 'unknown';
+    expect(adoParent('f', byId, profile)).toBe('unknown');
+  });
+
+  it('does not warn about promoted parents and keeps context rows after a returned export', () => {
+    const items = tree();
+    const [, feature, story] = items;
+    feature.title = 'Renamed locally';
+    const f = synced(feature, { 'Work Item Type': 'Epic', Title: 'Item f' }, { title: 'Item f' });
+    const s = synced(story, { 'Work Item Type': 'Issue' });
+    s.reference = 'c'.repeat(64);
+    s.remoteId = '22';
+    // ADO's view (no parent) as stored now, and the local parent as a hand-made observation.
+    for (const observed of [null, 'e']) {
+      (f.observation as { values: Record<string, unknown> }).values['parentId'] = observed;
+      const plan = exportPlan(basic(), outgoing(), items, [f, s], undefined, members);
+      expect(plan.errors).toEqual([]);
+      for (const row of plan.rows) expect(row.warnings.join()).not.toMatch(/parent differs/);
+      expect(readCsv(plan.files[0].csv).rows[0]['Title']).toBe('Renamed locally');
+    }
+    // A new child under the linked promoted Feature uses it as an ID-bearing context row.
+    (f.observation as { values: Record<string, unknown> }).values['parentId'] = null;
+    (f.observation as { raw: Record<string, string> }).raw['Description'] = '<p>remote</p>';
+    feature.title = 'Item f';
+    const child = item('n', 'STORY', 'f');
+    const request = outgoing();
+    request.selection.scope = 'manual';
+    request.selection.itemIds = ['n'];
+    const plan = exportPlan(basic(), request, [...items, child], [f, s], undefined, members);
+    expect(plan.errors).toEqual([]);
+    expect(readCsv(plan.files[0].csv).rows.map((r) => r['ID'])).toEqual(['21', '']);
   });
 });
