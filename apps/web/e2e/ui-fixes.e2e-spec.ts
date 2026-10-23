@@ -108,6 +108,8 @@ test('board bucket top bars and keyboard controls persist the same order as Sett
     'Review renamed',
   );
   // Empty labels use a full-width row; populated labels retain their normal layout.
+  // Labels have their own settings tab (M8.5).
+  await page.getByRole('tab', { name: 'Labels', exact: true }).click();
   const empty = page.locator('.labels-empty');
   await expect(empty).toContainText('No labels yet');
   expect((await empty.boundingBox())?.width).toBeGreaterThan(250);
