@@ -362,14 +362,14 @@ Theming uses CSS custom properties only. Default palette is neutral (slate/indig
   has no timeout, covers phone/tablet layouts and never obscures the focused control. Detailed procedures live
   in FAQ articles, not in an expanded first-login tour. ADO instructions are added when M8 implements export.
 
-## 7. ADO CSV transfers (M8, planned)
+## 7. ADO CSV transfers (M8; simplified in M8.1)
 
 These transfers are distinct from the existing Excel/offline reading snapshots.
 They use operator-carried CSV files, with no ADO API connection or credentials.
-Implement both directions together after the M7.5 UI fixes. The detailed behavior,
-file plan, verification and proposed persistence are in [the implementation plan](docs/M8-PLAN.md).
-The concrete storage proposal was approved on 2026-10-16; review it before M8
-schema edits and ask before materially changing it.
+M8 implemented both directions. The detailed behavior, file plan, verification and
+persistence are in [the M8 plan](docs/M8-PLAN.md); M8.1 adds a quick default review,
+fidelity fixes and setup from a sample export, described in [the M8.1 plan](docs/M8.1-PLAN.md).
+The concrete storage proposal was approved on 2026-10-16; ask before materially changing it.
 
 ### 7.1 Selection modes
 - Entire project
@@ -446,6 +446,11 @@ resolve ambiguous types and validate the ordinary hierarchy rules.
   multiple assignees, checklists flattened, attachments not exported, Basic flattening, missing iteration path, rows that would be split
 - ADO initially uses its process/type default state; initial state and assignment
   transfer can need a second ID-based update pass. Document this workflow honestly.
+- Update files never overwrite remote values Kloister cannot represent (M8.1). A field is
+  emitted only when its local value changed since the last confirmed sync; otherwise the
+  column is left out, or carries the observed remote cell unchanged where the file needs it.
+  Lossy mappings (an assignee or tag mapped to "none", several remote states mapped to one
+  status, the profile Area Path, removed embedded images) never write back over remote data.
 - Automated tests validate exports against Microsoft's documented import rules:
   `Work Item Type` and a Title column present, IDs appropriate to the mode, at most 1,000 rows per file,
   each child's title one Title column deeper than its parent's, depth-first order, valid UTF-8 with BOM.
@@ -460,7 +465,9 @@ resolve ambiguous types and validate the ordinary hierarchy rules.
 - ADO-origin rows map by destination plus ADO ID. Importing the same file again or
   retrying apply must not create duplicates. Do not issue new create files for
   items awaiting returned IDs. Generating/downloading is not confirmation of import.
-- Show local, incoming and confirmed values and require explicit conflict choices.
+- Review follows the selected mode (7.6): Quick applies one-sided changes after one summary
+  confirmation and asks only about fields changed on both sides; Detailed shows local,
+  incoming and confirmed values and requires explicit choices for every difference.
   Revalidate local data/config/permissions before applying a preview. Update files
   use a fresh operator-supplied ADO observation with an explicit freshness warning;
   no live lock or detection of subsequent external edits can be promised.
@@ -488,9 +495,33 @@ resolve ambiguous types and validate the ordinary hierarchy rules.
   checklist/note text is not parsed back into structured entities. Files, embedded
   images, native comments and non-parent dependency links have explicit limitations.
   Imported rich text is sanitized; remote resources are never fetched.
-- Verify with synthetic fixtures and documented Microsoft contracts, not a live
-  ADO connection. Both directions require an operator acceptance checklist and
-  honest disclosure that target-version/process compatibility is unverified.
+- Verify with synthetic fixtures and documented Microsoft contracts; automated tests
+  never contact ADO. From M8.1, fixtures also come from real exports of a disposable
+  Azure DevOps Services organization (Agile, Scrum and Basic projects), and generated
+  files are imported there by hand through the web UI. The app itself still makes no
+  ADO connection. Both directions keep an operator acceptance checklist; compatibility
+  with other processes, customized processes and Azure DevOps Server stays unverified
+  until an operator runs it.
+
+### 7.6 Review modes (M8.1)
+
+- **Quick** (default for every transfer):
+  - Returned rows link automatically when their Description carries a valid issued
+    reference for this project and destination. Unknown, duplicate or conflicting
+    references still block, and rows without a reference still need a manual match
+    or explicit confirmation as new.
+  - Fields changed on only one side since the last confirmed sync take that side's
+    value. Fields changed on both sides are listed for an explicit keep/take/skip choice.
+  - One summary (counts per field and per kind: create, link, update, unchanged) is
+    confirmed before apply. Link-only returns never block on unmapped State, Assigned
+    To, Tags or Iteration values; they are reported as warnings.
+  - After linking, the follow-up update file (State, Assigned To) is offered at once.
+- **Detailed** (per-transfer toggle): the M8 review, with explicit choices for every
+  difference, manual link confirmation, row selection, three-way values, parent
+  omission, label creation and per-item assignee choice.
+- A project PM may require Detailed review for every transfer in the project.
+- Both modes keep the same permissions, idempotency, staleness checks, tombstones and
+  "missing rows never delete" rules. Applying incoming changes stays PM-only.
   
 ---
 
@@ -619,6 +650,7 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M7 | Deploy scripts, release workflow, public root README with product overview/screenshots and generic installation/run steps (9.6), INSTALL/UPGRADE/ADMIN docs, end-to-end install test on a RHEL 8 VM (first usable release, v1.0) |
 | M7.5 | Reported empty-state/select layout fixes, easier bottom card drops, board bucket creation/reorder, unified searchable user pickers; preserve permissions and add browser regression coverage |
 | M8 | Selective ADO CSV export and import, per-project process mappings, durable IDs, reconciliation and reviewed conflicts; documentation-based tests and operator acceptance (v1.1) |
+| M8.1 | ADO transfer fidelity fixes, Quick/Detailed review modes (7.6), profile setup from a sample ADO export, readable review screens, preview expiry; fixtures and manual import checks from a disposable Azure DevOps Services organization |
 
 ---
 

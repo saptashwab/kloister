@@ -1,5 +1,22 @@
 # Decisions
 
+## Planning update: M8.1 (2026-10-23)
+
+- Owner decision: ADO transfers default to a Quick review (automatic linking by
+  validated reference, one-sided changes applied after one summary, explicit
+  choices only for fields changed on both sides). The M8 review stays available as
+  a per-transfer Detailed toggle, and a project PM can make Detailed mandatory.
+  SPEC §7.4 and §7.6 record this; it replaces the M8 rule that every difference and
+  link needs an explicit choice.
+- A post-M8 review against Microsoft's CSV guide found that update files could
+  overwrite ADO values produced by lossy mappings, that real export formats (dates,
+  `Name <email>` identities, blank cells) were not accepted, and that unapplied
+  previews were stored indefinitely. M8.1 fixes these; see docs/M8.1-PLAN.md.
+- Verification adds a disposable Azure DevOps Services organization (Agile, Scrum
+  and Basic projects) for real export fixtures and manual web-UI imports. The app,
+  CI and automated tests still make no ADO connection. Proposed new limit: unapplied
+  preview content expires after 7 days (awaiting owner approval).
+
 ## M8 transfer implementation (2026-10-16)
 
 - The approved destination/link/tombstone/batch/row design is additive. Original
