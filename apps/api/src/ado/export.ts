@@ -4,6 +4,7 @@ import {
   type AdoField,
   type AdoPreviewRow,
   type AdoReview,
+  type ItemStatus,
   type ItemType,
 } from '@kloister/shared';
 import { invalidField } from '../common/api-exception.js';
@@ -70,6 +71,42 @@ const UPDATE_FIELDS: AdoField[] = [
   'startDate',
   'dueDate',
 ];
+
+/**
+ * The ADO state to send for a local status on a row of a given ADO type. When
+ * the row's type is the one the profile exports for the local type, the
+ * forward mapping applies. A row ADO created with another type (a custom type
+ * imported as a Story, say) has its own states: the forward state is used only
+ * if the reviewed incoming mapping lists it for that type with the same status,
+ * otherwise the first reviewed state of that type mapped to the status (in the
+ * profile's order). When none is reviewed and the row's type is what another
+ * local type exports (an item retyped locally), that type's forward state
+ * applies. Without any, nothing is sent and the ADO state is kept.
+ *
+ * @param p Destination profile.
+ * @param adoType The row's ADO work item type, from the returned export.
+ * @param localType The local item type.
+ * @param status The local status to send.
+ * @returns The ADO state, or null when none is known for that type.
+ */
+export function outgoingState(
+  p: AdoDestinationDto['profile'],
+  adoType: string,
+  localType: ItemType,
+  status: ItemStatus,
+): string | null {
+  const forward = p.states[localType][status];
+  if (adoType === p.types[localType]) return forward;
+  const prefix = `${adoType}\n`;
+  const own = Object.entries(p.incomingStates)
+    .filter(([key, mapped]) => key.startsWith(prefix) && mapped.status === status)
+    .map(([key]) => key.slice(prefix.length))
+    .filter((state) => state !== '');
+  if (forward !== null && own.includes(forward)) return forward;
+  if (own.length > 0) return own[0];
+  const other = (Object.keys(p.types) as ItemType[]).find((t) => p.types[t] === adoType);
+  return other === undefined ? null : p.states[other][status];
+}
 
 /**
  * Builds separate create and update files without changing local data or accepting incoming CSV.
@@ -269,9 +306,12 @@ export function exportPlan(
       }
       if (d.choice !== 'local') continue;
       const type = item.type;
-      if (d.field === 'status' && p.states[type][item.status] === null) {
+      if (
+        d.field === 'status' &&
+        outgoingState(p, raw['Work Item Type'] ?? '', type, item.status) === null
+      ) {
         row.warnings.push(
-          `${STATUS_NAMES[item.status]} has no ADO state for this type; the ADO state is kept.`,
+          `${STATUS_NAMES[item.status]} has no ADO state for ${raw['Work Item Type'] || 'this type'}; the ADO state is kept.`,
         );
         continue;
       }
@@ -539,7 +579,7 @@ export function exportPlan(
               case 'assigneeIds':
                 return identity(item, (value.assigneeIds as string[])[0]);
               case 'status':
-                return p.states[item.type][item.status] ?? '';
+                return outgoingState(p, type, item.type, item.status) ?? '';
               case 'priority':
                 return String(value.priority);
               case 'labelIds': {

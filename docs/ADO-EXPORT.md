@@ -25,6 +25,8 @@ Who can do what:
      processes; customized processes may differ),
    - each ADO state's status and existing bucket (no buckets, sprints, accounts or memberships are
      ever created),
+     including the states of any extra or custom ADO types you import; update files send a
+     state of the row's own ADO type and keep the ADO state when that type has none for the status,
    - tags (a tag without a label stays in ADO only and is kept when Kloister updates tags),
    - iterations, and the date order of the exported dates.
 3. Save. People are matched by email; add a row only for someone who uses another address in ADO.

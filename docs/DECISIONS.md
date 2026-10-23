@@ -105,11 +105,16 @@ User Story state, a custom text field and a custom work item type was created in
 disposable organization with a new project. A Kloister create file (with the custom
 field as a constant column) saved all rows; ADO kept the constant only on the types
 that have the field. The returned export linked every row by reference, and the
-follow-up update set the extra state and Assigned To. One defect is open: update
-files pick State from the local type's mapping, so an ADO-created custom-type row
-imported as a local Story received a Story state that its own type does not allow
-(ADO refused that row). A link-only Quick return is also blocked by ADO-created rows
-in the file until they are confirmed as new, which works only in Import mode.
+follow-up update set the extra state and Assigned To. One defect was found and then
+fixed with regression tests: update files picked State from the local type's
+mapping, so an ADO-created custom-type row imported as a local Story received a
+Story state that its own type does not allow (ADO refused that row). The State now
+follows the row's ADO type: the forward mapping when that type is the one Kloister
+exports, otherwise a state the reviewed incoming mapping lists for that type with
+the same status, or, for an item retyped locally, the forward mapping of the local
+type that exports as the row's type; without one, State is not sent and a preview
+warning says so. A link-only Quick return is also blocked by ADO-created rows in
+the file until they are confirmed as new, which works only in Import mode.
 
 M8.1 CI (2026-10-23): `630b259` is green on run 39940353809 after two re-runs that
 stopped only because the Postgres image pull from ECR Public hit its data limit:

@@ -14,7 +14,7 @@ import type { AdoItemLink } from '../generated/prisma/client.js';
 import { readCsv, remoteId, writeCsv } from './csv.js';
 import { preset, validateProfile } from './profiles.js';
 import { selectItems } from './selection.js';
-import { exportPlan } from './export.js';
+import { exportPlan, outgoingState } from './export.js';
 import { adoParent, incomingPlan, localValues, type TransferItem } from './transfer.js';
 import { adoDate, parseAdoDate, stripFooter } from './values.js';
 
@@ -1016,5 +1016,64 @@ describe('Basic flattening keeps the local hierarchy', () => {
     const plan = exportPlan(basic(), request, [...items, child], [f, s], undefined, members);
     expect(plan.errors).toEqual([]);
     expect(readCsv(plan.files[0].csv).rows.map((r) => r['ID'])).toEqual(['21', '']);
+  });
+});
+
+describe('update files use the states of the row’s own ADO type', () => {
+  /** Agile profile where ADO also has a custom Spike type, imported as Story. */
+  function custom(): AdoDestinationDto {
+    const d = destination();
+    d.profile.reverseTypes = { ...d.profile.reverseTypes, Spike: 'STORY' };
+    d.profile.incomingStates = {
+      ...d.profile.incomingStates,
+      'User Story\nNew': { status: 'NOT_STARTED', bucketId: bucket },
+      'User Story\nActive': { status: 'IN_PROGRESS', bucketId: bucket },
+      'Spike\nNew': { status: 'NOT_STARTED', bucketId: bucket },
+      'Spike\nInvestigating': { status: 'IN_PROGRESS', bucketId: bucket },
+      'Spike\nConcluded': { status: 'DONE', bucketId: bucket },
+    };
+    return d;
+  }
+
+  it('picks the forward state for the exported type and the reviewed state for others', () => {
+    const p = custom().profile;
+    expect(outgoingState(p, 'User Story', 'STORY', 'IN_PROGRESS')).toBe('Active');
+    expect(outgoingState(p, 'Spike', 'STORY', 'IN_PROGRESS')).toBe('Investigating');
+    // The forward state is kept when the other type has it for the same status.
+    expect(outgoingState(p, 'Spike', 'STORY', 'NOT_STARTED')).toBe('New');
+    expect(outgoingState(p, 'Spike', 'STORY', 'BLOCKED')).toBeNull();
+    expect(outgoingState(p, 'Unknown type', 'STORY', 'IN_PROGRESS')).toBeNull();
+    // An empty-state key ("Task" with no State) never becomes a state to send.
+    p.incomingStates['Spike\n'] = { status: 'BLOCKED', bucketId: bucket };
+    expect(outgoingState(p, 'Spike', 'STORY', 'BLOCKED')).toBeNull();
+  });
+
+  it('uses another local type’s forward state for a retyped item, and keeps Basic promotions', () => {
+    const p = custom().profile;
+    // A local Bug whose ADO row is still a User Story, with no reviewed User Story states.
+    p.incomingStates = {};
+    expect(outgoingState(p, 'User Story', 'BUG', 'IN_PROGRESS')).toBe(p.states.STORY.IN_PROGRESS);
+    const basic = preset('Basic');
+    // A Feature promoted to a Basic Epic is the type Basic exports for it.
+    expect(basic.types.FEATURE).toBe('Epic');
+    expect(outgoingState(basic, 'Epic', 'FEATURE', 'IN_PROGRESS')).toBe(
+      basic.states.FEATURE.IN_PROGRESS,
+    );
+  });
+
+  it('sends a custom type’s own state and keeps ADO’s when it has none', () => {
+    const story = item('1', 'STORY');
+    const l = synced(story, { 'Work Item Type': 'Spike', State: 'New' }, { status: 'NOT_STARTED' });
+    story.status = 'IN_PROGRESS';
+    let plan = exportPlan(custom(), outgoing(), [story], [l], undefined, members);
+    expect(plan.errors).toEqual([]);
+    expect(readCsv(plan.files[0].csv).rows[0]).toMatchObject({
+      'Work Item Type': 'Spike',
+      State: 'Investigating',
+    });
+    story.status = 'BLOCKED';
+    plan = exportPlan(custom(), outgoing(), [story], [l], undefined, members);
+    expect(plan.files).toEqual([]);
+    expect(plan.rows[0].warnings.join()).toMatch(/Blocked has no ADO state for Spike/);
   });
 });
