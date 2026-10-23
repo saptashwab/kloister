@@ -1,5 +1,23 @@
 # Decisions
 
+## Planning approval: M8.5 (2026-10-23)
+
+- The app-wide UI/UX review of 2026-10-23 becomes M8.5, planned in
+  docs/M8.5-PLAN.md. The owner approved the plan on 2026-10-23.
+- Same condition as M8.1: no breaking change, existing routes and deep links keep
+  working, API changes are additive, migrations additive only.
+- Owner decision (security/audit behaviour): `ADMIN_CROSS_PROJECT_ACCESS` reads are
+  written once per visit (per admin, project and session, with a new entry once the
+  visit's last entry is 30 minutes old) instead of once per API call. State-changing
+  requests, refused attempts and export downloads are always recorded as their own
+  entries, and entries stay append-only. SPEC §3.1, §6 and §6.2 are updated; the
+  alternative of keeping every entry and grouping only in the viewer was not chosen.
+- Approved with the plan: the
+  audit viewer resolves item keys, never current item titles; Projects list counts
+  follow the caller's visibility and are omitted for admin non-members, and last
+  activity comes from audit entries of visible items; dates display as
+  `23 Oct 2026`; the drawer's board order select is replaced by move to top/bottom.
+
 ## M8.1 transfer implementation (2026-10-23)
 
 M8.1 CI (2026-10-23): `630b259` is green on run 39940353809 after two re-runs that

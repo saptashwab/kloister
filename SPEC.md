@@ -76,8 +76,11 @@ kloister/
 - **Admin**: manages users (create, deactivate, reset password, promote to Admin), creates projects
   with one or more PMs, assigns, reassigns or removes PMs in any existing project at any time (a project
   may have several PMs; the last active PM rule in 3.2 still applies), edits app settings, views the audit log. Has a header toggle,
-  "All projects" vs "My projects", that only filters the UI. Every time an admin opens or reads a project
-  they are not a member of, an audit entry `ADMIN_CROSS_PROJECT_ACCESS` is written.
+  "All projects" vs "My projects", that only filters the UI. When an admin opens or reads a project
+  they are not a member of, an audit entry `ADMIN_CROSS_PROJECT_ACCESS` is written. From M8.5 reads are
+  recorded once per visit: one entry per admin, project and session, and a new one when the last entry for
+  that visit is 30 minutes old. Every state-changing request (including refused attempts) and every export
+  download is always recorded as its own entry. Entries are never updated.
 - **User**: everything else is decided per project.
 
 ### 3.2 Project roles
@@ -253,7 +256,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - hovering an assignee avatar shows their name and email; clicking it filters the board to that person, and
     "View all their work" lists their items across the viewer's own unarchived projects, limited by the viewer's access in
     each. Projects a system admin is not a member of are never included (no cross-project reads, so no
-    `ADMIN_CROSS_PROJECT_ACCESS` entries); admins open such projects directly, audited as in 3.1. Non-admins can look up
+    `ADMIN_CROSS_PROJECT_ACCESS` entries); admins open such projects directly, audited per visit as in 3.1. Non-admins can look up
     only people who share a project with them (404 otherwise)
   - quick-add card at the top of each column
 - **Item detail** (side drawer, deep-linkable `/<app>/p/:key/items/:number`):
@@ -314,7 +317,7 @@ Theming uses CSS custom properties only. Default palette is neutral (slate/indig
   included. Archived projects can be read/exported but not duplicated.
 - Every project role, including Viewers, may export readable data. ADO export remains PM/Lead only (3.2, 7).
   My work uses the same project-membership and visibility limits as its list, including for admins. Direct
-  project exports retain the existing admin cross-project access auditing; they never expose personal spaces.
+  project exports retain the admin cross-project access auditing, one entry per download (3.1); they never expose personal spaces.
 - The .xlsx workbook is a readable snapshot with a Summary sheet (scope, filters, export time), Items sheet
   (hierarchy, all assignees, status, bucket, sprint, team, labels, priority, dates, description and progress),
   and linked sheets for Checklists, Notes, Dependencies, Files and readable activity history. Include related
@@ -651,6 +654,7 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M7.5 | Reported empty-state/select layout fixes, easier bottom card drops, board bucket creation/reorder, unified searchable user pickers; preserve permissions and add browser regression coverage |
 | M8 | Selective ADO CSV export and import, per-project process mappings, durable IDs, reconciliation and reviewed conflicts; documentation-based tests and operator acceptance (v1.1) |
 | M8.1 | ADO transfer fidelity fixes, Quick/Detailed review modes (7.6), profile setup from a sample ADO export, readable review screens, preview expiry; fixtures and manual import checks from a disposable Azure DevOps Services organization |
+| M8.5 | App-wide UI/UX fixes from the 2026-10-23 review ([plan](docs/M8.5-PLAN.md)): stacked-card phone layouts for wide tables, a readable Audit log, one date picker and date format, Project settings in section tabs, Projects list counts and last activity, a page-actions area for Export…, a lighter My work status control, the drawer's board order, branded sign-in pages; no breaking change, additive API only |
 
 ---
 
