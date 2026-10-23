@@ -96,6 +96,7 @@ test('board bucket top bars and keyboard controls persist the same order as Sett
     'Review renamed',
   );
   await page.getByRole('tab', { name: 'Settings', exact: true }).click();
+  await page.getByRole('tab', { name: 'Buckets', exact: true }).click();
   await expect(
     page.getByRole('textbox', { name: 'Name of Review renamed', exact: true }),
   ).toBeVisible();

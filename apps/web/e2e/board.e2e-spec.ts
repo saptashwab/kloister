@@ -119,6 +119,8 @@ test('a PM bulk-edits the backlog and opens the sprint board', async ({ page }) 
   await snap(page, 'sprint board');
 
   await page.getByRole('tab', { name: 'Settings' }).click();
+  // Buckets and status moves are on their own settings tab (M8.5).
+  await page.getByRole('tab', { name: 'Buckets', exact: true }).click();
   await expect(page.getByText('Status moves cards')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Add bucket' })).toBeVisible();
   await snap(page, 'settings');
@@ -136,8 +138,13 @@ test('a Member limited to own items sees hidden ancestors as titles only', async
   await expect(crumbs).toContainText('Checkout');
   await expect(crumbs).toContainText('Pay by invoice');
   await expect(crumbs.locator('a')).toHaveCount(0);
-  // Delete lives in the drawer's "More actions" menu, shown only to those who may delete.
-  await expect(page.getByRole('button', { name: 'More actions' })).toHaveCount(0);
+  // The drawer's "More actions" menu lets an assignee move the card (M8.5), but
+  // Delete is offered only to those who may delete.
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await expect(page.getByRole('menuitem', { name: 'Move to top of bucket' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: /Delete item/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toHaveCount(0);
   await snap(page, 'member drawer');
 
   // Items outside the scope are 404 even by direct link.

@@ -2,6 +2,15 @@
 
 ## M8.5 implementation (2026-10-23)
 
+M8.5 CI (2026-10-24): run 40010850119 (`7eea93b`, which includes M8.5) passed every
+gate up to the browser tests, including all database tests; 46 of 53 browser
+scenarios passed. Six failures were tests still expecting the old layout (settings
+content now on its own tab, the drawer menu shown to people who may move a card,
+the Material time input and tab nav roles, a heading locator that also matched the
+new sign-in heading); the Member drawer still proves Delete is not offered. One was
+a real 320 px overflow on the Audit log date range, which now wraps. Earlier runs
+stopped only on the ECR Public image limit and a stalled Playwright download.
+
 - Additive migration `20261023150000_due_time_and_audit_visits`: nullable
   `WorkItem.dueTime` (minutes after midnight) and an index on audit actor, action,
   project and time. API changes are optional fields (`dueTime`, project list

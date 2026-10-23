@@ -116,7 +116,8 @@ test('due dates take a time from the drawer and cards show it', async ({ page })
   expect((await savedDate).status()).toBe(200);
   await expect(due).toHaveValue('15 Mar 2030');
   await drawer.getByRole('button', { name: 'Add time', exact: true }).click();
-  const time = drawer.getByRole('textbox', { name: 'Due time', exact: true });
+  // The Material time input is a combobox with its list of times.
+  const time = drawer.getByRole('combobox', { name: 'Due time', exact: true });
   const savedTime = page.waitForResponse(
     (r) => r.request().method() === 'PATCH' && r.url().includes(`/items/`),
   );
@@ -143,7 +144,8 @@ test('settings tabs, bucket menus, header Export… and project counts', async (
   await snap(page, 'projects list with counts');
   await page.goto(`/p/${PROJECT_KEY}/settings`);
   await expect(page).toHaveURL(new RegExp(`/p/${PROJECT_KEY}/settings/general$`));
-  const sections = page.getByRole('navigation', { name: 'Settings sections', exact: true });
+  // Material's tab nav bar exposes itself as a tab list.
+  const sections = page.getByRole('tablist', { name: 'Settings sections', exact: true });
   await expect(sections.getByRole('tab')).toHaveText([
     'General',
     'Members',

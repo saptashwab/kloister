@@ -227,7 +227,8 @@ test('an admin brands the app with a name, logo, font and default theme', async 
   // The sign-in page shows the branding before anyone signs in.
   await page.context().clearCookies();
   await page.goto('/login');
-  await expect(page.getByRole('heading', { name: 'Team Board' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Team Board', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sign in to Team Board' })).toBeVisible();
   await expect(page.locator('main img.k-logo')).toBeVisible();
   await expect(page).toHaveTitle('Team Board');
   expect(await bodyFont(page)).toContain('k-uploaded-ui-font');

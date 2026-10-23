@@ -69,6 +69,7 @@ interface AuditRow {
     }
     .dates {
       display: inline-flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: var(--k-space-2);
     }
