@@ -10,6 +10,10 @@ the Material time input and tab nav roles, a heading locator that also matched t
 new sign-in heading); the Member drawer still proves Delete is not offered. One was
 a real 320 px overflow on the Audit log date range, which now wraps. Earlier runs
 stopped only on the ECR Public image limit and a stalled Playwright download.
+The repair run found one more test of the same kind (empty labels now on the
+Labels tab), fixed in `b4f66d6`. CI run 40036501902 on `b4f66d6` is green: 624 API
+unit tests, 680 database tests, all 53 browser scenarios and every earlier gate,
+covering M8.5, the ADO State fix `7eea93b` and both test repairs.
 
 - Additive migration `20261023150000_due_time_and_audit_visits`: nullable
   `WorkItem.dueTime` (minutes after midnight) and an index on audit actor, action,
