@@ -14,6 +14,7 @@ import { ProjectContext } from '../../core/project-context';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { SessionStore } from '../../core/session.store';
 import { BacklogPage } from './backlog';
+import { PageActions } from '../../core/page-actions';
 
 /** The protected backlog members the tests drive directly. */
 interface BacklogInternals {
@@ -44,6 +45,7 @@ describe('BacklogPage', () => {
       providers: [
         provideRouter([]),
         ProjectContext,
+        PageActions,
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
       ],

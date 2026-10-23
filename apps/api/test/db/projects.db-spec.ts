@@ -14,6 +14,7 @@ import {
   login,
   resetDb,
   seedBucket,
+  seedItem,
   seedProject,
   seedUser,
   startApp,
@@ -174,7 +175,7 @@ describe('projects and members (db)', () => {
       },
     );
 
-    it('audits every request by a non-member admin and none by members (SPEC §3.1)', async () => {
+    it('audits a non-member admin once per visit plus every write, and no members (SPEC §3.1)', async () => {
       const admin = await sid('admin');
       await call(app, 'GET', `/api/v1/projects/${projectId}`, { sid: admin });
       await call(app, 'GET', `/api/v1/projects/${projectId}/members`, { sid: admin });
@@ -187,14 +188,59 @@ describe('projects and members (db)', () => {
 
       const entries = await prisma.auditLog.findMany({
         where: { action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS },
+        orderBy: { createdAt: 'asc' },
       });
-      // Sorted: entries written within the same millisecond have no stable order.
+      // The members read belongs to the visit opened by the first read; the refused write is its own entry.
       expect(
         entries.map((e) => [e.actorId, e.projectId, (e.meta as { via: string }).via]).sort(),
       ).toEqual([
         [ids.admin, projectId, 'GET /api/v1/projects/:id'],
-        [ids.admin, projectId, 'GET /api/v1/projects/:id/members'],
         [ids.admin, projectId, 'PATCH /api/v1/projects/:id'],
+      ]);
+      const sessions = new Set(entries.map((e) => (e.meta as { sessionId: string }).sessionId));
+      expect(sessions.size).toBe(1);
+      expect([...sessions][0]).toMatch(/^[0-9a-f-]{36}$/);
+    });
+
+    it('writes one entry for parallel first reads, and a new one after 30 minutes or a new sign-in', async () => {
+      const admin = await sid('admin');
+      const read = () => call(app, 'GET', `/api/v1/projects/${projectId}/members`, { sid: admin });
+      await Promise.all([read(), read(), read(), read()]);
+      const count = () =>
+        prisma.auditLog.count({ where: { action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS } });
+      expect(await count()).toBe(1);
+      await read();
+      expect(await count()).toBe(1);
+      // Ageing the entry past the window starts a new visit; the old entry is left as written.
+      await prisma.auditLog.updateMany({
+        where: { action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS },
+        data: { createdAt: new Date(Date.now() - 31 * 60_000) },
+      });
+      await read();
+      expect(await count()).toBe(2);
+      const again = await sid('admin');
+      await call(app, 'GET', `/api/v1/projects/${projectId}`, { sid: again });
+      expect(await count()).toBe(3);
+    });
+
+    it('records every export download by a non-member admin (SPEC §6.2)', async () => {
+      const admin = await sid('admin');
+      await call(app, 'GET', `/api/v1/projects/${projectId}`, { sid: admin });
+      for (let i = 0; i < 2; i++) {
+        const res = await call(app, 'GET', `/api/v1/projects/${projectId}/snapshots`, {
+          sid: admin,
+        });
+        expect(res.statusCode).toBe(200);
+      }
+      const vias = (
+        await prisma.auditLog.findMany({
+          where: { action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS },
+        })
+      ).map((e) => (e.meta as { via: string }).via);
+      expect(vias.sort()).toEqual([
+        'GET /api/v1/projects/:id',
+        'GET /api/v1/projects/:id/snapshots',
+        'GET /api/v1/projects/:id/snapshots',
       ]);
     });
 
@@ -481,6 +527,56 @@ describe('projects and members (db)', () => {
       expect(await keys('newbie')).toEqual({ status: 200, keys: [] });
       // An admin's "mine" is their memberships too.
       expect(await keys('admin')).toEqual({ status: 200, keys: [] });
+    });
+
+    it('summarizes only what each caller can see, and nothing for admin non-members (M8.5)', async () => {
+      const day = (offset: number): Date => {
+        const d = new Date();
+        return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + offset));
+      };
+      const mine = await seedItem(prisma, projectId, {
+        createdById: ids.pm,
+        bucketId,
+        assigneeIds: [ids.viewer],
+      });
+      await prisma.workItem.update({ where: { id: mine.id }, data: { dueDate: day(-1) } });
+      const hidden = await seedItem(prisma, projectId, { createdById: ids.lead, bucketId });
+      await prisma.workItem.update({ where: { id: hidden.id }, data: { dueDate: day(1) } });
+      await seedItem(prisma, projectId, { createdById: ids.pm, bucketId, status: 'DONE' });
+      const at = (minutes: number) => new Date(Date.UTC(2026, 0, 1, 0, minutes));
+      for (const [item, minutes] of [
+        [mine, 1],
+        [hidden, 2],
+      ] as const)
+        await prisma.auditLog.create({
+          data: {
+            actorId: ids.pm,
+            action: AuditAction.ITEM_UPDATED,
+            entityType: 'WorkItem',
+            entityId: item.id,
+            projectId,
+            createdAt: at(minutes),
+          },
+        });
+      const summary = async (name: keyof typeof ids, query = '') => {
+        const res = await call(app, 'GET', `/api/v1/projects${query}`, { sid: await sid(name) });
+        return (res.json() as Page<ProjectDto>).items.find((p) => p.key === 'KLO')?.summary;
+      };
+      expect(await summary('pm')).toEqual({
+        open: 2,
+        overdue: 1,
+        lastActivityAt: at(2).toISOString(),
+      });
+      // OWN scope: only the assigned item, and the hidden item's newer change stays hidden.
+      expect(await summary('viewer')).toEqual({
+        open: 1,
+        overdue: 1,
+        lastActivityAt: at(1).toISOString(),
+      });
+      expect(await summary('admin', '?scope=all')).toBeNull();
+      expect(
+        await prisma.auditLog.count({ where: { action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS } }),
+      ).toBe(0);
     });
 
     it('lists all projects for admins only, without auditing', async () => {

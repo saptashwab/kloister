@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { NOTE_BODY_MAX, type NoteDto } from '@kloister/shared';
 import { AnnotationsApiService } from '../../core/annotations-api.service';
@@ -9,6 +8,7 @@ import { Icon } from '../../ui/icon';
 import { ViewImages } from '../../ui/image-viewer';
 import { ToastService } from '../../ui/toast.service';
 import { type ImageUploader, RichTextEditor } from './rich-text-editor';
+import { AppDatePipe } from '../../ui/app-date.pipe';
 
 /**
  * One note in an item's thread (SPEC §6): author, time, the sanitized body
@@ -19,7 +19,7 @@ import { type ImageUploader, RichTextEditor } from './rich-text-editor';
  */
 @Component({
   selector: 'app-item-note',
-  imports: [DatePipe, Icon, RichTextEditor, StaticAvatar, ViewImages],
+  imports: [AppDatePipe, Icon, RichTextEditor, StaticAvatar, ViewImages],
   host: { class: 'note' },
   template: `
     @let n = note();
@@ -27,7 +27,7 @@ import { type ImageUploader, RichTextEditor } from './rich-text-editor';
     <article class="note-main" [attr.aria-label]="'Note by ' + n.authorName">
       <div class="note-head">
         <strong>{{ n.authorName }}</strong>
-        <span class="when">{{ n.createdAt | date: 'medium' }}</span>
+        <span class="when">{{ n.createdAt | appDate }}</span>
         @if (n.editedAt) {
           <span class="when">(edited)</span>
         }

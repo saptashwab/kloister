@@ -15,6 +15,14 @@ import { apiUrl } from './api';
 export interface AuditFilter {
   /** Only this action. */
   action?: string;
+  /** Only this actor (user id). */
+  actorId?: string;
+  /** Only this project (uuid). */
+  projectId?: string;
+  /** Only entries at or after this ISO time. */
+  from?: string;
+  /** Only entries before this ISO time. */
+  to?: string;
   /** Cursor from the previous page. */
   cursor?: string;
 }
@@ -79,13 +87,15 @@ export class AdminApiService {
   /**
    * Lists audit entries, newest first.
    *
-   * @param filter Optional action filter and cursor.
+   * @param filter Optional action, actor, project and time filters, and the cursor.
    * @returns One page of entries.
    */
   listAudit(filter: AuditFilter = {}): Promise<Page<AuditEntryDto>> {
     let params = new HttpParams();
-    if (filter.action) params = params.set('action', filter.action);
-    if (filter.cursor) params = params.set('cursor', filter.cursor);
+    for (const key of ['action', 'actorId', 'projectId', 'from', 'to', 'cursor'] as const) {
+      const value = filter[key];
+      if (value) params = params.set(key, value);
+    }
     return firstValueFrom(this.http.get<Page<AuditEntryDto>>(apiUrl('admin/audit'), { params }));
   }
 }

@@ -67,9 +67,24 @@ h3 {
 h3 {
   font-size: var(--k-body);
 }
-.card mat-form-field {
-  width: 100%;
+/* The card's status is the pill itself, opening a small menu (M8.5). */
+.status-menu {
+  display: inline-flex;
   margin-top: var(--k-space-3);
+  padding: 0;
+  border: 0;
+  border-radius: var(--k-radius-full);
+  background: transparent;
+  cursor: pointer;
+
+  &:hover:not(:disabled) .k-pill {
+    filter: brightness(0.95);
+  }
+
+  &:disabled {
+    cursor: progress;
+    opacity: 0.7;
+  }
 }
 .cdk-drag-preview {
   box-shadow: var(--k-lift);

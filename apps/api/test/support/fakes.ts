@@ -125,6 +125,11 @@ export function fakeAudit(): FakeAudit {
       records.push(record);
       return Promise.resolve();
     },
+    // Visits are not de-duplicated here; database tests cover the window.
+    recordVisit: (record: FakeAudit['records'][number], sessionId: string) => {
+      records.push({ ...record, meta: { ...(record.meta as object), sessionId } });
+      return Promise.resolve(true);
+    },
   } as unknown as AuditService;
   return { records, service };
 }

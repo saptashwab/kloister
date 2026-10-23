@@ -1,5 +1,50 @@
 # Decisions
 
+## M8.5 implementation (2026-10-23)
+
+- Additive migration `20261023150000_due_time_and_audit_visits`: nullable
+  `WorkItem.dueTime` (minutes after midnight) and an index on audit actor, action,
+  project and time. API changes are optional fields (`dueTime`, project list
+  `summary`, audit `actorName`/`projectKey`/`projectName`/`entityLabel`); older
+  clients that never send `dueTime` keep the stored time, and clearing a due date
+  clears its time.
+- Cross-project visits: reads go through `AuditService.recordVisit`, which takes a
+  transaction advisory lock on (admin, project), looks for an entry of the same
+  session in the last 30 minutes and otherwise appends one with `meta.sessionId`
+  (the session row id). Writes, refused attempts, `/snapshots` downloads and ADO
+  batch downloads call `record` directly. Older entries without `sessionId` never
+  count as a current visit. Database tests cover parallel first reads, the window,
+  a new sign-in and repeated exports.
+- Projects list counts use the caller's member accesses (archived projects
+  included) and the ordinary visibility filter. Overdue follows the server clock,
+  like the daily check. Last activity is the newest audit entry about a visible
+  item, so renumbering caused by a hidden card's move cannot show through.
+- Audit names are resolved per page at read time; item entities show their key
+  only. Entries already store some titles and names in `meta` (item create/delete
+  titles, bucket/label/sprint/team names); the viewer shows what is stored, as the
+  raw JSON did.
+- Due times: wall-clock, no time zone; overdue once passed; ordering by date, time
+  (untimed last), priority, id for My work including its cursor. ADO files stay
+  date-only with a preview warning; snapshots add a Due time column; duplication
+  keeps the time with kept dates; activity history records time changes.
+- UI choices while building: the settings tab is Buckets (not Board, which is the
+  project's own tab), ADO transfer keeps its project tab, Export… sits in the
+  project header and wraps at phone width, the pre-sign-in shell was already
+  branded so only the headings and a branding retry were added, and My work due
+  groups stay calendar-based. See docs/M8.5-PLAN.md section 13 and DESIGN §15.
+- Phone cards: `ui/row-cards.ts` provides the breakpoint signal and card styles;
+  each page writes its own card markup and shares row controls with its table
+  through `ng-template`s. The snapshot Items sheet appends Due time as its last
+  column so earlier columns keep their positions. Card overdue colours update on
+  the next render after a due time passes, not on a timer.
+- Independent review fixes: deleted-entity wording only for named uuid entities,
+  Projects summaries in parallel with batched last-activity reads, a single change
+  for a picked due time, strict month names when typing dates, and docs on visits
+  that start with a change and on ADO imports keeping local due times.
+- The shared package is marked `"sideEffects": false`; without it the bundler kept
+  the audit labels in the first download (initial bundle back to about 498 kB
+  under the unchanged 500 kB budget).
+
 ## Planning approval: M8.5 (2026-10-23)
 
 - The app-wide UI/UX review of 2026-10-23 becomes M8.5, planned in
@@ -54,6 +99,17 @@ reported no errors or warnings at any step.
   records need no conversion and mixed create files with linked promoted parents
   keep working. The service/database apply path, CMMI and Azure DevOps Server remain unverified
   live.
+
+Customized process drill (2026-10-23): an inherited Agile process with an extra
+User Story state, a custom text field and a custom work item type was created in the
+disposable organization with a new project. A Kloister create file (with the custom
+field as a constant column) saved all rows; ADO kept the constant only on the types
+that have the field. The returned export linked every row by reference, and the
+follow-up update set the extra state and Assigned To. One defect is open: update
+files pick State from the local type's mapping, so an ADO-created custom-type row
+imported as a local Story received a Story state that its own type does not allow
+(ADO refused that row). A link-only Quick return is also blocked by ADO-created rows
+in the file until they are confirmed as new, which works only in Import mode.
 
 M8.1 CI (2026-10-23): `630b259` is green on run 39940353809 after two re-runs that
 stopped only because the Postgres image pull from ECR Public hit its data limit:

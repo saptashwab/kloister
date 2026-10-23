@@ -19,10 +19,35 @@ const member: ProjectMemberDto = {
 };
 
 describe('ProjectSettingsPage', () => {
+  /**
+   * Renders each settings tab in turn and joins their text.
+   *
+   * @param permissions The caller's permissions.
+   * @param archived Whether the project is archived.
+   * @param sections Tabs to render.
+   * @returns The combined text and whether any tab had a form.
+   */
+  async function tabs(
+    permissions: ProjectPermission[],
+    archived: boolean,
+    sections: string[],
+  ): Promise<{ text: string; form: boolean }> {
+    let text = '';
+    let form = false;
+    for (const section of sections) {
+      TestBed.resetTestingModule();
+      const { root } = await render(permissions, archived, [member], section);
+      text += root.textContent ?? '';
+      form ||= root.querySelector('form') !== null;
+    }
+    return { text, form };
+  }
+
   async function render(
     permissions: ProjectPermission[],
     archived = false,
     members: ProjectMemberDto[] = [member],
+    section = 'members',
   ) {
     const project: ProjectDto = {
       id: 'p1',
@@ -61,6 +86,7 @@ describe('ProjectSettingsPage', () => {
     }).compileComponents();
     const fixture = TestBed.createComponent(ProjectSettingsPage);
     fixture.componentRef.setInput('key', 'KLO');
+    fixture.componentRef.setInput('section', section);
     await settle(fixture);
     return { root: fixture.nativeElement as HTMLElement, api };
   }
@@ -77,10 +103,13 @@ describe('ProjectSettingsPage', () => {
   });
 
   it('shows editing controls to PMs', async () => {
-    const { root } = await render(['VIEW_ITEMS', 'MANAGE_PROJECT', 'MANAGE_MEMBERS']);
-    expect(root.querySelector('form')).not.toBeNull();
-    expect(root.textContent).toContain('Remove');
-    expect(root.textContent).toContain('User');
+    const { text, form } = await tabs(['VIEW_ITEMS', 'MANAGE_PROJECT', 'MANAGE_MEMBERS'], false, [
+      'general',
+      'members',
+    ]);
+    expect(form).toBe(true);
+    expect(text).toContain('Remove');
+    expect(text).toContain('User');
   });
 
   it('gives admins who are not PMs PM-role controls only, even when archived', async () => {
@@ -93,15 +122,16 @@ describe('ProjectSettingsPage', () => {
   });
 
   it('hides member editing on archived projects', async () => {
-    const { root } = await render(
+    const { text } = await tabs(
       ['VIEW_ITEMS', 'MANAGE_PROJECT', 'MANAGE_MEMBERS', 'MANAGE_BOARD'],
       true,
+      ['general', 'members', 'buckets', 'labels'],
     );
-    expect(root.textContent).toContain('Unarchive');
-    expect(root.textContent).not.toContain('Remove');
+    expect(text).toContain('Unarchive');
+    expect(text).not.toContain('Remove');
     // Buckets, labels and the status map are read-only too.
-    expect(root.textContent).not.toContain('Add bucket');
-    expect(root.textContent).not.toContain('Add label');
+    expect(text).not.toContain('Add bucket');
+    expect(text).not.toContain('Add label');
   });
 
   it('offers a bucket picker for members with the BUCKETS scope', async () => {
@@ -125,15 +155,22 @@ describe('ProjectSettingsPage', () => {
   });
 
   it('shows board settings, editable with MANAGE_BOARD only', async () => {
-    const viewer = await render(['VIEW_ITEMS']);
-    expect(viewer.root.textContent).toContain('To Do');
-    expect(viewer.root.textContent).toContain('urgent');
-    expect(viewer.root.textContent).not.toContain('Add bucket');
-    TestBed.resetTestingModule();
-    const lead = await render(['VIEW_ITEMS', 'MANAGE_BOARD']);
-    expect(lead.root.textContent).toContain('Add bucket');
-    expect(lead.root.textContent).toContain('Add label');
+    const viewer = await tabs(['VIEW_ITEMS'], false, ['buckets', 'labels']);
+    expect(viewer.text).toContain('To Do');
+    expect(viewer.text).toContain('urgent');
+    expect(viewer.text).not.toContain('Add bucket');
+    const lead = await tabs(['VIEW_ITEMS', 'MANAGE_BOARD'], false, ['buckets', 'labels']);
+    expect(lead.text).toContain('Add bucket');
+    expect(lead.text).toContain('Add label');
     // The status → bucket map is a project setting (PM only).
-    expect(lead.root.textContent).not.toContain('Save status moves');
+    expect(lead.text).not.toContain('Save status moves');
+  });
+
+  it('offers section tabs and shows General for unknown sections', async () => {
+    const { root } = await render(['VIEW_ITEMS'], false, [member], 'nowhere');
+    const tabs = [...root.querySelectorAll('a[mat-tab-link]')].map((a) => a.textContent?.trim());
+    expect(tabs).toEqual(['General', 'Members', 'Teams', 'Buckets', 'Labels']);
+    expect(root.textContent).toContain('About');
+    expect(root.textContent).not.toContain('Ann');
   });
 });

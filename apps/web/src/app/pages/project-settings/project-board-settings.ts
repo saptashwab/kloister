@@ -171,324 +171,342 @@ const DEFAULT_LABEL_COLOUR = '#3E63DD';
       <p class="error" role="alert">{{ error() }}</p>
     }
 
-    <mat-card>
-      <mat-card-header><mat-card-title>Buckets</mat-card-title></mat-card-header>
-      <mat-card-content>
-        <p>Moving a card into a bucket can set its status.</p>
-        <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
-          <table class="data">
-            <thead>
-              <tr>
-                <th scope="col">Bucket</th>
-                <th scope="col">When a card enters</th>
-                <th scope="col"><span class="visually-hidden">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Tracked by object: rows are rebuilt from the stored values after a refusal. -->
-              @for (b of buckets(); track b; let first = $first, last = $last) {
+    <mat-menu #bucketMenu="matMenu">
+      <ng-template matMenuContent let-b="b" let-first="first" let-last="last">
+        <button mat-menu-item type="button" [disabled]="first" (click)="moveBucket(b, -1)">
+          <app-icon name="up" />&nbsp;Move up
+        </button>
+        <button mat-menu-item type="button" [disabled]="last" (click)="moveBucket(b, 1)">
+          <app-icon name="down" />&nbsp;Move down
+        </button>
+        <button
+          mat-menu-item
+          type="button"
+          [disabled]="buckets().length < 2"
+          (click)="moveTarget.set(''); deleting.set(b)"
+        >
+          <app-icon name="trash" />&nbsp;Delete…
+        </button>
+      </ng-template>
+    </mat-menu>
+    @if (section() === 'board') {
+      <mat-card>
+        <mat-card-header><mat-card-title>Buckets</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <p>Moving a card into a bucket can set its status.</p>
+          <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
+            <table class="data">
+              <thead>
                 <tr>
-                  @if (canManageBoard()) {
-                    <td>
-                      <input
-                        class="quick-add"
-                        [value]="b.name"
-                        [attr.maxlength]="nameMax"
-                        [attr.aria-label]="'Name of ' + b.name"
-                        (change)="renameBucket(b, $any($event.target))"
-                      />
-                    </td>
-                    <td>
-                      <div class="row">
-                        <mat-select
-                          [aria-label]="'Rule of ' + b.name"
-                          [value]="b.onEnterMode"
-                          (valueChange)="setRule(b, $event, b.onEnterStatus)"
-                        >
-                          @for (r of rules; track r) {
-                            <mat-option [value]="r">{{ ruleLabels[r] }}</mat-option>
-                          }
-                        </mat-select>
-                        @if (b.onEnterMode !== none) {
+                  <th scope="col">Bucket</th>
+                  <th scope="col">When a card enters</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Tracked by object: rows are rebuilt from the stored values after a refusal. -->
+                @for (b of buckets(); track b; let first = $first, last = $last) {
+                  <tr>
+                    @if (canManageBoard()) {
+                      <td>
+                        <input
+                          class="quick-add"
+                          [value]="b.name"
+                          [attr.maxlength]="nameMax"
+                          [attr.aria-label]="'Name of ' + b.name"
+                          (change)="renameBucket(b, $any($event.target))"
+                        />
+                      </td>
+                      <td>
+                        <div class="row">
                           <mat-select
-                            [aria-label]="'Status set by ' + b.name"
-                            [value]="b.onEnterStatus"
-                            (valueChange)="setRule(b, b.onEnterMode, $event)"
+                            [aria-label]="'Rule of ' + b.name"
+                            [value]="b.onEnterMode"
+                            (valueChange)="setRule(b, $event, b.onEnterStatus)"
                           >
-                            @for (s of statuses; track s) {
-                              <mat-option [value]="s">{{ statusLabels[s] }}</mat-option>
+                            @for (r of rules; track r) {
+                              <mat-option [value]="r">{{ ruleLabels[r] }}</mat-option>
                             }
                           </mat-select>
-                        }
-                      </div>
-                    </td>
-                    <td class="actions">
-                      <button
-                        mat-button
-                        type="button"
-                        [disabled]="first"
-                        (click)="moveBucket(b, -1)"
-                      >
-                        Up
-                      </button>
-                      <button mat-button type="button" [disabled]="last" (click)="moveBucket(b, 1)">
-                        Down
-                      </button>
-                      <button
-                        mat-button
-                        type="button"
-                        [disabled]="buckets().length < 2"
-                        (click)="moveTarget.set(''); deleting.set(b)"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  } @else {
-                    <td>{{ b.name }}</td>
-                    <td>{{ describeRule(b) }}</td>
-                    <td></td>
-                  }
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-
-        @if (deleting(); as b) {
-          <div class="row" role="group" [attr.aria-label]="'Delete ' + b.name">
-            <span>Delete {{ b.name }} and move its cards to</span>
-            <mat-form-field appearance="outline" floatLabel="always" class="bucket-destination">
-              <mat-label>Destination bucket</mat-label>
-              <mat-select
-                aria-label="Bucket receiving the cards"
-                placeholder="Choose destination bucket"
-                [value]="moveTarget()"
-                (valueChange)="moveTarget.set($event)"
-              >
-                @for (o of buckets(); track o.id) {
-                  @if (o.id !== b.id) {
-                    <mat-option [value]="o.id">{{ o.name }}</mat-option>
-                  }
+                          @if (b.onEnterMode !== none) {
+                            <mat-select
+                              [aria-label]="'Status set by ' + b.name"
+                              [value]="b.onEnterStatus"
+                              (valueChange)="setRule(b, b.onEnterMode, $event)"
+                            >
+                              @for (s of statuses; track s) {
+                                <mat-option [value]="s">{{ statusLabels[s] }}</mat-option>
+                              }
+                            </mat-select>
+                          }
+                        </div>
+                      </td>
+                      <td class="actions">
+                        <button
+                          type="button"
+                          class="k-icon-btn"
+                          [attr.aria-label]="'Actions for ' + b.name"
+                          [matMenuTriggerFor]="bucketMenu"
+                          [matMenuTriggerData]="{ b: b, first: first, last: last }"
+                        >
+                          <app-icon name="more" [size]="17" [stroke]="3" />
+                        </button>
+                      </td>
+                    } @else {
+                      <td>{{ b.name }}</td>
+                      <td>{{ describeRule(b) }}</td>
+                      <td></td>
+                    }
+                  </tr>
                 }
-              </mat-select>
-            </mat-form-field>
-            <button
-              mat-flat-button
-              type="button"
-              [disabled]="!moveTarget()"
-              (click)="deleteBucket(b)"
-            >
-              Delete bucket
-            </button>
-            <button mat-button type="button" (click)="deleting.set(null)">Cancel</button>
+              </tbody>
+            </table>
           </div>
-        }
 
-        @if (canManageBoard()) {
-          <div class="row">
-            <mat-form-field>
-              <mat-label>New bucket name</mat-label>
-              <input
-                matInput
-                #bucketName
-                [attr.maxlength]="nameMax"
-                (keyup.enter)="createBucket(bucketName)"
-              />
-            </mat-form-field>
-            <button mat-button type="button" (click)="createBucket(bucketName)">Add bucket</button>
-          </div>
-        }
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card>
-      <mat-card-header><mat-card-title>Status moves cards</mat-card-title></mat-card-header>
-      <mat-card-content>
-        <p>When an item's status changes in its details, its card can move to a bucket.</p>
-        <div class="row">
-          @for (s of statuses; track s) {
-            <mat-form-field>
-              <mat-label>{{ statusLabels[s] }}</mat-label>
-              <mat-select
-                [value]="map()[s] ?? noMove"
-                [disabled]="!canManageProject()"
-                (valueChange)="setMapping(s, $event)"
-              >
-                <mat-option [value]="noMove">Don't move</mat-option>
-                @for (b of buckets(); track b.id) {
-                  <mat-option [value]="b.id">{{ b.name }}</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
-          }
-        </div>
-        @if (canManageProject() && mapChanged()) {
-          <button mat-flat-button type="button" (click)="saveMap()">Save status moves</button>
-        }
-      </mat-card-content>
-    </mat-card>
-
-    <mat-card>
-      <mat-card-header><mat-card-title>Labels</mat-card-title></mat-card-header>
-      <mat-card-content class="labels-card">
-        <div role="radiogroup" aria-labelledby="label-style-title" class="styles">
-          <div id="label-style-title" class="muted">
-            Label style for this project{{ canManageProject() ? '' : ' (set by PMs)' }}
-          </div>
-          <div class="style-options">
-            @for (option of styleOptions; track option.value) {
-              <label
-                class="style-option"
-                [class.on]="project().settings.labelStyle === option.value"
-              >
-                <input
-                  type="radio"
-                  name="label-style"
-                  [value]="option.value"
-                  [checked]="project().settings.labelStyle === option.value"
-                  [disabled]="!canManageProject()"
-                  (change)="setLabelStyle(option.value)"
-                />
-                <span class="style-name">{{ option.name }}</span>
-                <span class="style-text">{{ option.text }}</span>
-                <span class="sample">
-                  @for (l of sampleLabels(); track l.name) {
-                    <app-label-pill [name]="l.name" [colour]="l.hex" [labelStyle]="option.value" />
+          @if (deleting(); as b) {
+            <div class="row" role="group" [attr.aria-label]="'Delete ' + b.name">
+              <span>Delete {{ b.name }} and move its cards to</span>
+              <mat-form-field appearance="outline" floatLabel="always" class="bucket-destination">
+                <mat-label>Destination bucket</mat-label>
+                <mat-select
+                  aria-label="Bucket receiving the cards"
+                  placeholder="Choose destination bucket"
+                  [value]="moveTarget()"
+                  (valueChange)="moveTarget.set($event)"
+                >
+                  @for (o of buckets(); track o.id) {
+                    @if (o.id !== b.id) {
+                      <mat-option [value]="o.id">{{ o.name }}</mat-option>
+                    }
                   }
-                </span>
-              </label>
-            }
-          </div>
-        </div>
-
-        <ul class="plain label-list">
-          @for (l of labels(); track l.id) {
-            <li>
-              @if (canManageBoard()) {
-                <button
-                  type="button"
-                  class="swatch"
-                  [style.background]="l.colour"
-                  [matMenuTriggerFor]="palette"
-                  [matMenuTriggerData]="{ label: l }"
-                  [attr.aria-label]="'Colour of ' + l.name"
-                ></button>
-                <input
-                  class="quick-add"
-                  [value]="l.name"
-                  [attr.maxlength]="nameMax"
-                  [attr.aria-label]="'Name of label ' + l.name"
-                  (change)="renameLabel(l, $any($event.target))"
-                />
-                <app-label-pill
-                  [name]="l.name"
-                  [colour]="l.colour"
-                  [labelStyle]="project().settings.labelStyle"
-                />
-                <button
-                  type="button"
-                  class="k-icon-btn sm"
-                  [attr.aria-label]="'Delete label ' + l.name"
-                  (click)="deleteLabel(l)"
-                >
-                  <app-icon name="trash" />
-                </button>
-              } @else {
-                <app-label-pill
-                  [name]="l.name"
-                  [colour]="l.colour"
-                  [labelStyle]="project().settings.labelStyle"
-                />
-              }
-            </li>
-          } @empty {
-            <li class="labels-empty">
-              <app-empty-state
-                title="No labels yet"
-                [text]="
-                  canManageBoard()
-                    ? 'Labels give cards a coloured tag, such as frontend or customer.'
-                    : ''
-                "
-              />
-            </li>
+                </mat-select>
+              </mat-form-field>
+              <button
+                mat-flat-button
+                type="button"
+                [disabled]="!moveTarget()"
+                (click)="deleteBucket(b)"
+              >
+                Delete bucket
+              </button>
+              <button mat-button type="button" (click)="deleting.set(null)">Cancel</button>
+            </div>
           }
-        </ul>
 
-        <mat-menu #palette="matMenu">
-          <ng-template matMenuContent let-label="label">
-            <div class="palette" role="group" [attr.aria-label]="'Colours for ' + label.name">
-              @for (c of paletteColours; track c.hex) {
-                <button
-                  type="button"
-                  mat-menu-item
-                  class="palette-item"
-                  [attr.aria-label]="c.name"
-                  (click)="updateLabel(label, { colour: c.hex })"
-                >
-                  <span class="swatch small" [style.background]="c.hex"></span>{{ c.name }}
-                </button>
-              }
-            </div>
-            <label class="custom">
-              Custom colour
-              <input
-                type="color"
-                [value]="label.colour"
-                [attr.aria-label]="'Custom colour of ' + label.name"
-                (click)="$event.stopPropagation()"
-                (keydown)="$event.stopPropagation()"
-                (change)="updateLabel(label, { colour: $any($event.target).value })"
-              />
-            </label>
-          </ng-template>
-        </mat-menu>
-
-        @if (canManageBoard()) {
-          <div class="new-label">
-            <div class="palette-row" role="radiogroup" aria-label="New label colour">
-              @for (c of paletteColours; track c.hex) {
-                <button
-                  type="button"
-                  role="radio"
-                  class="swatch"
-                  [class.on]="newColour() === c.hex"
-                  [style.background]="c.hex"
-                  [attr.aria-checked]="newColour() === c.hex"
-                  [attr.aria-label]="c.name"
-                  (click)="newColour.set(c.hex)"
-                ></button>
-              }
-              <input
-                type="color"
-                class="custom-input"
-                aria-label="Custom colour for the new label"
-                [value]="newColour()"
-                (change)="newColour.set($any($event.target).value)"
-              />
-            </div>
+          @if (canManageBoard()) {
             <div class="row">
               <mat-form-field>
-                <mat-label>New label name</mat-label>
+                <mat-label>New bucket name</mat-label>
                 <input
                   matInput
-                  #labelName
+                  #bucketName
                   [attr.maxlength]="nameMax"
-                  (input)="newName.set(labelName.value)"
-                  (keyup.enter)="createLabel(labelName)"
+                  (keyup.enter)="createBucket(bucketName)"
                 />
               </mat-form-field>
-              <app-label-pill
-                [name]="newName() || 'Preview'"
-                [colour]="newColour()"
-                [labelStyle]="project().settings.labelStyle"
-              />
-              <button mat-button type="button" (click)="createLabel(labelName)">Add label</button>
+              <button mat-button type="button" (click)="createBucket(bucketName)">
+                Add bucket
+              </button>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card>
+        <mat-card-header><mat-card-title>Status moves cards</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <p>When an item's status changes in its details, its card can move to a bucket.</p>
+          <div class="row">
+            @for (s of statuses; track s) {
+              <mat-form-field>
+                <mat-label>{{ statusLabels[s] }}</mat-label>
+                <mat-select
+                  [value]="map()[s] ?? noMove"
+                  [disabled]="!canManageProject()"
+                  (valueChange)="setMapping(s, $event)"
+                >
+                  <mat-option [value]="noMove">Don't move</mat-option>
+                  @for (b of buckets(); track b.id) {
+                    <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
+          </div>
+          @if (canManageProject() && mapChanged()) {
+            <button mat-flat-button type="button" (click)="saveMap()">Save status moves</button>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
+
+    @if (section() === 'labels') {
+      <mat-card>
+        <mat-card-header><mat-card-title>Labels</mat-card-title></mat-card-header>
+        <mat-card-content class="labels-card">
+          <div role="radiogroup" aria-labelledby="label-style-title" class="styles">
+            <div id="label-style-title" class="muted">
+              Label style for this project{{ canManageProject() ? '' : ' (set by PMs)' }}
+            </div>
+            <div class="style-options">
+              @for (option of styleOptions; track option.value) {
+                <label
+                  class="style-option"
+                  [class.on]="project().settings.labelStyle === option.value"
+                >
+                  <input
+                    type="radio"
+                    name="label-style"
+                    [value]="option.value"
+                    [checked]="project().settings.labelStyle === option.value"
+                    [disabled]="!canManageProject()"
+                    (change)="setLabelStyle(option.value)"
+                  />
+                  <span class="style-name">{{ option.name }}</span>
+                  <span class="style-text">{{ option.text }}</span>
+                  <span class="sample">
+                    @for (l of sampleLabels(); track l.name) {
+                      <app-label-pill
+                        [name]="l.name"
+                        [colour]="l.hex"
+                        [labelStyle]="option.value"
+                      />
+                    }
+                  </span>
+                </label>
+              }
             </div>
           </div>
-        }
-      </mat-card-content>
-    </mat-card>
+
+          <ul class="plain label-list">
+            @for (l of labels(); track l.id) {
+              <li>
+                @if (canManageBoard()) {
+                  <button
+                    type="button"
+                    class="swatch"
+                    [style.background]="l.colour"
+                    [matMenuTriggerFor]="palette"
+                    [matMenuTriggerData]="{ label: l }"
+                    [attr.aria-label]="'Colour of ' + l.name"
+                  ></button>
+                  <input
+                    class="quick-add"
+                    [value]="l.name"
+                    [attr.maxlength]="nameMax"
+                    [attr.aria-label]="'Name of label ' + l.name"
+                    (change)="renameLabel(l, $any($event.target))"
+                  />
+                  <app-label-pill
+                    [name]="l.name"
+                    [colour]="l.colour"
+                    [labelStyle]="project().settings.labelStyle"
+                  />
+                  <button
+                    type="button"
+                    class="k-icon-btn sm"
+                    [attr.aria-label]="'Delete label ' + l.name"
+                    (click)="deleteLabel(l)"
+                  >
+                    <app-icon name="trash" />
+                  </button>
+                } @else {
+                  <app-label-pill
+                    [name]="l.name"
+                    [colour]="l.colour"
+                    [labelStyle]="project().settings.labelStyle"
+                  />
+                }
+              </li>
+            } @empty {
+              <li class="labels-empty">
+                <app-empty-state
+                  title="No labels yet"
+                  [text]="
+                    canManageBoard()
+                      ? 'Labels give cards a coloured tag, such as frontend or customer.'
+                      : ''
+                  "
+                />
+              </li>
+            }
+          </ul>
+
+          <mat-menu #palette="matMenu">
+            <ng-template matMenuContent let-label="label">
+              <div class="palette" role="group" [attr.aria-label]="'Colours for ' + label.name">
+                @for (c of paletteColours; track c.hex) {
+                  <button
+                    type="button"
+                    mat-menu-item
+                    class="palette-item"
+                    [attr.aria-label]="c.name"
+                    (click)="updateLabel(label, { colour: c.hex })"
+                  >
+                    <span class="swatch small" [style.background]="c.hex"></span>{{ c.name }}
+                  </button>
+                }
+              </div>
+              <label class="custom">
+                Custom colour
+                <input
+                  type="color"
+                  [value]="label.colour"
+                  [attr.aria-label]="'Custom colour of ' + label.name"
+                  (click)="$event.stopPropagation()"
+                  (keydown)="$event.stopPropagation()"
+                  (change)="updateLabel(label, { colour: $any($event.target).value })"
+                />
+              </label>
+            </ng-template>
+          </mat-menu>
+
+          @if (canManageBoard()) {
+            <div class="new-label">
+              <div class="palette-row" role="radiogroup" aria-label="New label colour">
+                @for (c of paletteColours; track c.hex) {
+                  <button
+                    type="button"
+                    role="radio"
+                    class="swatch"
+                    [class.on]="newColour() === c.hex"
+                    [style.background]="c.hex"
+                    [attr.aria-checked]="newColour() === c.hex"
+                    [attr.aria-label]="c.name"
+                    (click)="newColour.set(c.hex)"
+                  ></button>
+                }
+                <input
+                  type="color"
+                  class="custom-input"
+                  aria-label="Custom colour for the new label"
+                  [value]="newColour()"
+                  (change)="newColour.set($any($event.target).value)"
+                />
+              </div>
+              <div class="row">
+                <mat-form-field>
+                  <mat-label>New label name</mat-label>
+                  <input
+                    matInput
+                    #labelName
+                    [attr.maxlength]="nameMax"
+                    (input)="newName.set(labelName.value)"
+                    (keyup.enter)="createLabel(labelName)"
+                  />
+                </mat-form-field>
+                <app-label-pill
+                  [name]="newName() || 'Preview'"
+                  [colour]="newColour()"
+                  [labelStyle]="project().settings.labelStyle"
+                />
+                <button mat-button type="button" (click)="createLabel(labelName)">Add label</button>
+              </div>
+            </div>
+          }
+        </mat-card-content>
+      </mat-card>
+    }
   `,
 })
 export class ProjectBoardSettings {
@@ -496,6 +514,8 @@ export class ProjectBoardSettings {
   private readonly dialogs = inject(Dialogs);
   private readonly projectsApi = inject(ProjectsApiService);
 
+  /** Which settings tab this shows: buckets and status moves, or labels and label style. */
+  readonly section = input<'board' | 'labels'>('board');
   /** The project. */
   readonly project = input.required<ProjectDto>();
   /** Buckets in column order; shared with the members section's bucket picker. */

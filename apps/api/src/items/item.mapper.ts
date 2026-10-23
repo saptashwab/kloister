@@ -4,7 +4,7 @@ import type {
   ItemRefDto,
   WorkItemDto,
 } from '@kloister/shared';
-import { fromDbDate } from '../common/dates.js';
+import { fromDbDate, fromDbTime } from '../common/dates.js';
 import type { ChecklistItem, Prisma } from '../generated/prisma/client.js';
 import type { ItemFacts } from '../projects/project-access.service.js';
 
@@ -108,6 +108,7 @@ export function toItemDto(
     teamId: row.teamId,
     startDate: fromDbDate(row.startDate),
     dueDate: fromDbDate(row.dueDate),
+    dueTime: fromDbTime(row.dueTime),
     position: row.position,
     createdById: row.createdById,
     assigneeIds: row.assignees.map((a) => a.userId),

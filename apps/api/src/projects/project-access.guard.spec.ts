@@ -114,7 +114,7 @@ describe('ProjectAccessGuard', () => {
     expect(audit.records).toEqual([
       expect.objectContaining({
         action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS,
-        meta: { via: 'PATCH /api/v1/projects/:id' },
+        meta: { via: 'PATCH /api/v1/projects/:id', sessionId: 's' },
       }),
     ]);
   });

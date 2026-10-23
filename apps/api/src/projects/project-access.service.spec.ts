@@ -6,6 +6,7 @@ import {
   type ProjectAccess,
   ProjectAccessService,
   parseProjectRef,
+  isVisitRead,
 } from './project-access.service.js';
 
 // Full permission matrix (SPEC §3.2, §3.3, §3.4). The expected table below is
@@ -223,7 +224,7 @@ describe('ProjectAccessService', () => {
           action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS,
           actorId: ME,
           entityId: PROJECT_ID,
-          meta: { via: 'GET /test' },
+          meta: { via: 'GET /test', sessionId: 's' },
         }),
       ]);
     });
@@ -668,5 +669,17 @@ describe('ProjectAccessService', () => {
         expect(service.canSetTeam(access, null, TEAM_A, true)).toBe(false);
       });
     });
+  });
+});
+
+describe('isVisitRead (SPEC §3.1, M8.5)', () => {
+  it('groups ordinary reads into a visit and records writes and export downloads each time', () => {
+    expect(isVisitRead('GET /api/v1/projects/:id')).toBe(true);
+    expect(isVisitRead('GET /api/v1/projects/:id/items/:item/attachments/:attachment')).toBe(true);
+    expect(isVisitRead('GET /api/v1/projects/:id/snapshots/preview')).toBe(true);
+    expect(isVisitRead('GET /api/v1/projects/:id/snapshots')).toBe(false);
+    expect(isVisitRead('GET /api/v1/projects/:id/ado/batches/:batchId/download')).toBe(false);
+    expect(isVisitRead('PATCH /api/v1/projects/:id')).toBe(false);
+    expect(isVisitRead('POST /api/v1/projects/:id/members')).toBe(false);
   });
 });

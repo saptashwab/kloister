@@ -126,7 +126,7 @@ test('sign-in and forced password screens reflow with accessible headings', asyn
     await page.emulateMedia({ colorScheme: mode });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/login');
-    await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^Sign in to / })).toBeVisible();
     await snap(page, `sign-in, phone, ${mode}`);
     await page.setViewportSize({ width: 320, height: 844 });
     await reflow(page);
@@ -139,7 +139,7 @@ test('sign-in and forced password screens reflow with accessible headings', asyn
     await route.fulfill({ response, json: { ...user, mustChangePassword: true } });
   });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: 'Change password', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Change your .+ password$/ })).toBeVisible();
   await expect(page.getByText('You signed in with a temporary password.')).toBeVisible();
   await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
   await reflow(page);
@@ -150,23 +150,21 @@ test('every main screen reflows at phone width and in dark mode', async ({ page 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await signIn(page, USERS.admin);
   const me = (await (await page.request.get('api/v1/me')).json()) as { id: string };
-  const screens = [
+  const screens: [string, string, string | RegExp][] = [
     ['projects', '/', 'Projects'],
     ['board', `/p/${PROJECT_KEY}`, 'Demo project'],
     ['backlog', `/p/${PROJECT_KEY}/backlog`, 'Demo project'],
     ['sprints', `/p/${PROJECT_KEY}/sprints`, 'Demo project'],
-    ['project settings', `/p/${PROJECT_KEY}/settings`, 'Demo project'],
+    ['project settings', `/p/${PROJECT_KEY}/settings/members`, 'Demo project'],
     ['work', `/people/${me.id}`, 'My work'],
     ['notifications', '/notifications', 'Notifications'],
     ['account settings', '/settings', 'Settings and theme'],
     ['users', '/admin/users', 'Users'],
     ['audit', '/admin/audit', 'Audit log'],
-    ...['branding', 'security', 'storage', 'backups', 'logs'].map((tab) => [
-      `admin ${tab}`,
-      `/admin/settings/${tab}`,
-      'Settings',
-    ]),
-    ['password', '/change-password', 'Change password'],
+    ...['branding', 'security', 'storage', 'backups', 'logs'].map(
+      (tab): [string, string, string] => [`admin ${tab}`, `/admin/settings/${tab}`, 'Settings'],
+    ),
+    ['password', '/change-password', /^Change your .+ password$/],
   ];
   const roots: Record<string, string> = {
     projects: 'app-projects',
@@ -215,9 +213,12 @@ test('keyboard order controls and caret mentions work without dragging', async (
   await signIn(page, USERS.pm);
   await page.goto(`/p/${PROJECT_KEY}/items/${ITEMS.taskA}`);
   const drawer = page.getByRole('dialog', { name: 'Item details', exact: true });
-  const order = drawer.getByRole('combobox', { name: 'Position in bucket', exact: true });
-  await order.click();
-  await page.getByRole('option', { name: 'At the top', exact: true }).click();
+  // M8.5: the drawer's actions menu moves the card to the top or bottom of its bucket.
+  await drawer.getByRole('button', { name: 'More actions', exact: true }).press('Enter');
+  const top = page.getByRole('menuitem', { name: 'Move to top of bucket', exact: true });
+  const bottom = page.getByRole('menuitem', { name: 'Move to bottom of bucket', exact: true });
+  await expect(top).toBeVisible();
+  await ((await top.isDisabled()) ? bottom : top).click();
   await expect(
     page.locator('.k-toast', { hasText: `${PROJECT_KEY}-${ITEMS.taskA} reordered` }),
   ).toBeVisible();
@@ -269,7 +270,7 @@ test('keyboard order controls and caret mentions work without dragging', async (
   await signIn(page, USERS.viewer);
   await page.goto(`/p/${PROJECT_KEY}/items/${ITEMS.taskA}`);
   await expect(drawer.getByRole('heading', { level: 1 })).toBeVisible();
-  await expect(drawer.getByRole('combobox', { name: 'Position in bucket' })).toHaveCount(0);
+  await expect(drawer.getByRole('button', { name: 'More actions', exact: true })).toHaveCount(0);
   await expect(drawer.getByRole('button', { name: /Move (up|down):/ })).toHaveCount(0);
   await snap(page, 'read-only drawer without ordering controls');
 });

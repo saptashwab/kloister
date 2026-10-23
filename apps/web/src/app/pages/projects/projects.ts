@@ -25,6 +25,8 @@ import { SessionStore } from '../../core/session.store';
 import { required } from '../../core/validators';
 
 import { EmptyState, Skeleton } from '../../ui/feedback';
+import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
+import { formatMoment } from '../../core/format';
 
 /**
  * Projects list (SPEC §6), the landing page after sign-in.
@@ -37,7 +39,14 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
 @Component({
   selector: 'app-projects',
   host: { class: 'k-page' },
+  styles: `
+    .num {
+      text-align: end;
+      font-variant-numeric: tabular-nums;
+    }
+  `,
   imports: [
+    RowCardStyles,
     EmptyState,
     Skeleton,
     ReactiveFormsModule,
@@ -111,43 +120,78 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
     @if (loading()) {
       <app-skeleton label="Loading the list" />
     } @else {
-      <div class="k-panel k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
-        <table class="data">
-          <thead>
-            <tr>
-              <th scope="col">Key</th>
-              <th scope="col">Name</th>
-              <th scope="col">Your role</th>
-              <th scope="col">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (project of projects(); track project.id) {
+      <app-row-card-styles />
+      @if (projects().length === 0) {
+        <app-empty-state
+          [title]="
+            scope() === 'all' ? 'No projects yet.' : 'You are not a member of any project yet.'
+          "
+          text="An admin can create a project and add its project managers."
+        />
+      } @else if (phone()) {
+        <ul class="k-row-cards" aria-label="Projects">
+          @for (project of projects(); track project.id) {
+            <li class="k-row-card">
+              <div class="k-row-card-title">
+                <a class="k-key" [routerLink]="['/p', project.key]">{{ project.key }}</a>
+                {{ project.name }}
+              </div>
+              <dl>
+                <dt>Your role</dt>
+                <dd>{{ project.myRole ? roleLabels[project.myRole] : 'Not a member' }}</dd>
+                <dt>Open</dt>
+                <dd>{{ project.summary?.open ?? '—' }}</dd>
+                <dt>Overdue</dt>
+                <dd [class.error]="(project.summary?.overdue ?? 0) > 0">
+                  {{ project.summary?.overdue ?? '—' }}
+                </dd>
+                <dt>Last activity</dt>
+                <dd>{{ activity(project) }}</dd>
+                <dt>Status</dt>
+                <dd>{{ project.archivedAt ? 'Archived' : 'Active' }}</dd>
+              </dl>
+            </li>
+          }
+        </ul>
+      } @else {
+        <div
+          class="k-panel k-table-scroll"
+          tabindex="0"
+          role="region"
+          aria-label="Scrollable table"
+        >
+          <table class="data">
+            <thead>
               <tr>
-                <td>
-                  <a class="k-key" [routerLink]="['/p', project.key]">{{ project.key }}</a>
-                </td>
-                <td>{{ project.name }}</td>
-                <td>{{ project.myRole ? roleLabels[project.myRole] : 'Not a member' }}</td>
-                <td>{{ project.archivedAt ? 'Archived' : 'Active' }}</td>
+                <th scope="col">Key</th>
+                <th scope="col">Name</th>
+                <th scope="col">Your role</th>
+                <th scope="col" class="num">Open</th>
+                <th scope="col" class="num">Overdue</th>
+                <th scope="col">Last activity</th>
+                <th scope="col">Status</th>
               </tr>
-            } @empty {
-              <tr>
-                <td colspan="4">
-                  <app-empty-state
-                    [title]="
-                      scope() === 'all'
-                        ? 'No projects yet.'
-                        : 'You are not a member of any project yet.'
-                    "
-                    text="An admin can create a project and add its project managers."
-                  />
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              @for (project of projects(); track project.id) {
+                <tr>
+                  <td>
+                    <a class="k-key" [routerLink]="['/p', project.key]">{{ project.key }}</a>
+                  </td>
+                  <td>{{ project.name }}</td>
+                  <td>{{ project.myRole ? roleLabels[project.myRole] : 'Not a member' }}</td>
+                  <td class="num">{{ project.summary?.open ?? '—' }}</td>
+                  <td class="num" [class.error]="(project.summary?.overdue ?? 0) > 0">
+                    {{ project.summary?.overdue ?? '—' }}
+                  </td>
+                  <td>{{ activity(project) }}</td>
+                  <td>{{ project.archivedAt ? 'Archived' : 'Active' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
     }
     @if (nextCursor()) {
       <button mat-button type="button" (click)="loadMore()">Load more</button>
@@ -155,6 +199,8 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
   `,
 })
 export class ProjectsPage implements OnInit {
+  /** True at phone width, where rows become cards. */
+  protected readonly phone = phoneLayout();
   private readonly api = inject(ProjectsApiService);
   private readonly nav = inject(ProjectsNav);
   private readonly adminApi = inject(AdminApiService);
@@ -233,6 +279,19 @@ export class ProjectsPage implements OnInit {
    *
    * @returns Resolves once loaded.
    */
+  /**
+   * The project's last activity for the list, or a dash without a summary.
+   *
+   * @param project A listed project.
+   * @returns E.g. "23 Oct 2026, 14:05", "No activity yet" or "—".
+   */
+  protected activity(project: ProjectDto): string {
+    if (!project.summary) return '—';
+    return project.summary.lastActivityAt === null
+      ? 'No activity yet'
+      : formatMoment(project.summary.lastActivityAt);
+  }
+
   protected async loadMore(): Promise<void> {
     const cursor = this.nextCursor();
     if (cursor === null) return;

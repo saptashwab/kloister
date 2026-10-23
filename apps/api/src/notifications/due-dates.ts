@@ -14,6 +14,10 @@ export interface DueWindows {
   overdueTo: string;
   /** Midnight at the start of today, server time. */
   startOfToday: Date;
+  /** Today, whose items with a passed due time are also overdue (M8.5). */
+  today: string;
+  /** Minutes after midnight when the check runs, server time. */
+  minutes: number;
 }
 
 /**
@@ -31,8 +35,8 @@ export function localDate(now: Date, offsetDays = 0): string {
 
 /**
  * Works out which due dates the daily check notifies about. Due dates are
- * calendar days without a time, compared with the server's local date, the
- * same clock the 09:00 schedule runs on.
+ * calendar days, and due times wall-clock times, compared with the server's
+ * local clock, the same clock the 09:00 schedule runs on.
  *
  * @param now When the check runs.
  * @returns The windows.
@@ -43,5 +47,7 @@ export function dueWindows(now: Date): DueWindows {
     overdueFrom: localDate(now, -OVERDUE_LOOKBACK_DAYS),
     overdueTo: localDate(now, -1),
     startOfToday: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+    today: localDate(now),
+    minutes: now.getHours() * 60 + now.getMinutes(),
   };
 }

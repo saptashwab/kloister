@@ -18,7 +18,7 @@ import { AuditService, type DbClient } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { statusOnEnter } from '../board/bucket-rules.js';
 import { conflict, forbidden, invalidField, notFound } from '../common/api-exception.js';
-import { fromDbDate, toDbDate } from '../common/dates.js';
+import { fromDbDate, fromDbTime, toDbDate, toDbTime } from '../common/dates.js';
 import { type PageQueryDto, pageArgs, toPage } from '../common/pagination.js';
 import { placeAfter, POSITION_STEP } from '../common/positions.js';
 import { isForeignKeyViolation } from '../common/prisma-errors.js';
@@ -241,6 +241,8 @@ export class ItemsService {
     const startDate = dto.startDate ?? null;
     const dueDate = dto.dueDate ?? null;
     assertDateOrder(startDate, dueDate);
+    const dueTime = dto.dueTime ?? null;
+    assertTimeHasDate(dueDate, dueTime);
 
     // Read committed: taking the next number locks the project row, which
     // serializes creates without making concurrent creates fail. References
@@ -301,6 +303,7 @@ export class ItemsService {
           teamId,
           startDate: startDate === null ? null : toDbDate(startDate),
           dueDate: dueDate === null ? null : toDbDate(dueDate),
+          dueTime: toDbTime(dueTime),
           position: first === null ? POSITION_STEP : first.position - POSITION_STEP,
           createdById: auth.user.id,
           completedAt: status === ItemStatus.DONE ? new Date() : null,
@@ -457,6 +460,18 @@ export class ItemsService {
       if (dueDate !== fromDbDate(current.dueDate)) {
         note('dueDate', fromDbDate(current.dueDate), dueDate);
         data.dueDate = dueDate === null ? null : toDbDate(dueDate);
+      }
+      // Clearing the due date clears the time; a new time needs a date.
+      if (dto.dueTime !== undefined) assertTimeHasDate(dueDate, dto.dueTime);
+      const dueTime =
+        dueDate === null
+          ? null
+          : dto.dueTime === undefined
+            ? fromDbTime(current.dueTime)
+            : dto.dueTime;
+      if (dueTime !== fromDbTime(current.dueTime)) {
+        note('dueTime', fromDbTime(current.dueTime), dueTime);
+        data.dueTime = toDbTime(dueTime);
       }
       const sprintId = dto.sprintId === undefined ? current.sprintId : dto.sprintId;
       if (sprintId !== current.sprintId) {
@@ -1212,6 +1227,17 @@ export async function assertLabels(
   if (labelIds.length === 0) return;
   const count = await db.label.count({ where: { projectId, id: { in: [...labelIds] } } });
   if (count !== labelIds.length) throw invalidField('labelIds', 'Label not found');
+}
+
+/**
+ * Throws 400 if a due time is given without a due date (SPEC §4 `dueTime`).
+ *
+ * @param dueDate `YYYY-MM-DD` or null.
+ * @param dueTime `HH:MM` or null.
+ */
+export function assertTimeHasDate(dueDate: string | null, dueTime: string | null): void {
+  if (dueDate === null && dueTime !== null)
+    throw invalidField('dueTime', 'A due time needs a due date');
 }
 
 /**

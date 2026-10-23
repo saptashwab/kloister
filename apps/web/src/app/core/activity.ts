@@ -27,6 +27,7 @@ const FIELD_LABELS: Record<string, string> = {
   priority: 'priority',
   startDate: 'start date',
   dueDate: 'due date',
+  dueTime: 'due time',
   sprintId: 'sprint',
   teamId: 'team',
   bucketId: 'bucket',

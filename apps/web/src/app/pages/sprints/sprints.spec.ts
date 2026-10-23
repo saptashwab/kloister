@@ -6,6 +6,7 @@ import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { SprintsPage } from './sprints';
+import { PageActions } from '../../core/page-actions';
 
 /** The protected page members the tests drive directly. */
 interface SprintsInternals {
@@ -47,6 +48,7 @@ describe('SprintsPage', () => {
       providers: [
         provideRouter([]),
         ProjectContext,
+        PageActions,
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
       ],

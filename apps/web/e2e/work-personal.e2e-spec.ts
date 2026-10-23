@@ -107,7 +107,10 @@ test('My work shares list/board filters, shows personal tasks, and changes statu
     await choose(page, 'Source', 'Personal');
     await expect(page.locator('app-work')).not.toContainText('Invoice form');
     await page.getByRole('radio', { name: 'Board', exact: true }).click();
-    const status = page.getByRole('combobox', { name: `Status for ${item.title}`, exact: true });
+    const status = page.getByRole('button', {
+      name: `Status for ${item.title}: Not started. Change`,
+      exact: true,
+    });
     await status.focus();
     await status.press('Enter');
     const savedStatus = page.waitForResponse(
@@ -115,7 +118,7 @@ test('My work shares list/board filters, shows personal tasks, and changes statu
         response.request().method() === 'PATCH' &&
         response.url().includes(`/projects/${project.id}/items/${item.id}`),
     );
-    await page.getByRole('option', { name: 'In progress', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'In progress', exact: true }).click();
     expect((await savedStatus).status()).toBe(200);
     const progress = page.locator('.column', {
       has: page.getByRole('heading', { name: /In progress/ }),
@@ -164,9 +167,9 @@ test('all their work keeps project Viewers read-only in both views', async ({ pa
   await expect(page.locator('app-work')).toContainText('Invoice form');
   await snap(page, 'Viewer all their work list');
   await page.getByRole('radio', { name: 'Board', exact: true }).click();
-  await expect(
-    page.locator('app-work').getByRole('combobox', { name: /^Status for / }),
-  ).toHaveCount(0);
+  await expect(page.locator('app-work').getByRole('button', { name: /^Status for / })).toHaveCount(
+    0,
+  );
   await expect(page.locator('article.card').first()).toHaveClass(/cdk-drag-disabled/);
   await snap(page, 'Viewer all their work board without edit controls');
 });

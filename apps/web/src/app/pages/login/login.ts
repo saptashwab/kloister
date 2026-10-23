@@ -8,6 +8,8 @@ import { Router } from '@angular/router';
 import { errorMessage } from '../../core/api';
 import { required } from '../../core/validators';
 import { AuthService } from '../../core/auth.service';
+import { ThemeService } from '../../core/theme.service';
+import { DEFAULT_APP_NAME } from '@kloister/shared';
 
 /**
  * Sign-in screen. Accounts are created by admins, so there is no sign-up
@@ -25,7 +27,9 @@ import { AuthService } from '../../core/auth.service';
   template: `
     <mat-card class="auth-card">
       <mat-card-header
-        ><mat-card-title><h1>Sign in</h1></mat-card-title></mat-card-header
+        ><mat-card-title
+          ><h1>Sign in to {{ theme.appName() }}</h1></mat-card-title
+        ></mat-card-header
       >
       <mat-card-content>
         <form [formGroup]="form" (ngSubmit)="submit()">
@@ -52,6 +56,19 @@ import { AuthService } from '../../core/auth.service';
   `,
 })
 export class LoginPage {
+  /** Branding shown in the heading; the sign-in pages retry it if its first load timed out. */
+  protected readonly theme = inject(ThemeService);
+
+  /**
+   * Retries the public branding when the first load before rendering gave
+   * up (it waits only a few seconds), so the page still updates to the
+   * admin's name and logo.
+   */
+  constructor() {
+    if (this.theme.appName() === DEFAULT_APP_NAME && this.theme.logoUrl() === null)
+      void this.theme.loadBranding();
+  }
+
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
 

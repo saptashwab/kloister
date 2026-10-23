@@ -125,8 +125,11 @@ export const routes: Routes = [
         path: 'sprints',
         loadComponent: () => import('./pages/sprints/sprints').then((m) => m.SprintsPage),
       },
+      // Settings sections are tabs with their own URLs (M8.5); the old
+      // `settings` link opens the first one.
+      { path: 'settings', pathMatch: 'full', redirectTo: 'settings/general' },
       {
-        path: 'settings',
+        path: 'settings/:section',
         loadComponent: () =>
           import('./pages/project-settings/project-settings').then((m) => m.ProjectSettingsPage),
       },

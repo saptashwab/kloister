@@ -292,6 +292,32 @@ describe('all their work (db)', () => {
     expect((hidden.json() as UserWorkDto).items).toEqual([]);
   });
 
+  it('orders a day by due time first, then untimed items by priority, across pages (M8.5)', async () => {
+    const day = new Date('2026-11-05T00:00:00.000Z');
+    await prisma.workItem.update({ where: { id: items.a1 }, data: { dueDate: day, priority: 3 } });
+    await prisma.workItem.update({
+      where: { id: items.a2 },
+      data: { dueDate: day, dueTime: 17 * 60, priority: 4 },
+    });
+    await prisma.workItem.update({
+      where: { id: items.a3 },
+      data: { dueDate: day, priority: 1, status: 'NOT_STARTED' },
+    });
+    const expected = [items.o1, items.a2, items.a3, items.a1];
+    expect(await workOf('pm')).toEqual(expected);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const query: string = `?limit=1${cursor === null ? '' : `&cursor=${cursor}`}`;
+      const pageOf = (await get('pm', `/users/${ids.dev}/work${query}`)).json() as UserWorkDto;
+      seen.push(...pageOf.items.map((i) => i.id));
+      cursor = pageOf.nextCursor;
+    } while (cursor !== null && seen.length < 10);
+    expect(seen).toEqual(expected);
+    const first = (await get('pm', `/users/${ids.dev}/work`)).json() as UserWorkDto;
+    expect(first.items[1]).toMatchObject({ dueDate: '2026-11-05', dueTime: '17:00' });
+  });
+
   it('rejects bad input and anonymous callers', async () => {
     expect((await get('pm', '/users/not-a-uuid/work')).statusCode).toBe(400);
     expect((await get('pm', `/users/${ids.dev}/work?includeDone=maybe`)).statusCode).toBe(400);

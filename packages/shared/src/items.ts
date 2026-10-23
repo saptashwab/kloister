@@ -201,6 +201,8 @@ export interface WorkItemDto {
   startDate: string | null;
   /** `YYYY-MM-DD`, or null. */
   dueDate: string | null;
+  /** Optional due time `HH:MM` on the due date, or null (M8.5). */
+  dueTime: string | null;
   /** Order within the bucket, ascending. */
   position: number;
   /** Creator's user id. */
@@ -269,6 +271,8 @@ export interface CreateItemRequest {
   startDate?: string | null;
   /** `YYYY-MM-DD`. */
   dueDate?: string | null;
+  /** `HH:MM` on the due date; needs a due date. */
+  dueTime?: string | null;
   /** Assignees: project members. */
   assigneeIds?: string[];
   /** Labels of the project. */
@@ -299,8 +303,10 @@ export interface UpdateItemRequest {
   teamId?: string | null;
   /** New start date, or null. */
   startDate?: string | null;
-  /** New due date, or null. */
+  /** New due date, or null; clearing it also clears the due time. */
   dueDate?: string | null;
+  /** New due time `HH:MM`, or null; needs a due date. */
+  dueTime?: string | null;
   /** The full new assignee list. */
   assigneeIds?: string[];
   /** The full new label list. */

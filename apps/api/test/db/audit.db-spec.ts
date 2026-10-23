@@ -1,7 +1,17 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AuditAction, type AuditEntryDto, ErrorCode, type Page } from '@kloister/shared';
 import type { PrismaService } from '../../src/prisma/prisma.service.js';
-import { call, codeOf, login, resetDb, seedUser, startApp } from './support.js';
+import {
+  call,
+  codeOf,
+  login,
+  resetDb,
+  seedBucket,
+  seedItem,
+  seedProject,
+  seedUser,
+  startApp,
+} from './support.js';
 
 describe('audit log viewer (db)', () => {
   let app: NestFastifyApplication;
@@ -88,5 +98,52 @@ describe('audit log viewer (db)', () => {
     expect((await call(app, 'GET', '/api/v1/admin/audit?limit=1000', { sid })).statusCode).toBe(
       400,
     );
+  });
+
+  it('names actors, projects and entities at read time without item titles (M8.5)', async () => {
+    await seedUser(prisma, { email: 'admin@example.org', systemRole: 'ADMIN' });
+    const pm = await seedUser(prisma, { email: 'pm@example.org' });
+    const project = await seedProject(prisma, 'KLO', [{ userId: pm.id, role: 'PM' }]);
+    const bucket = await seedBucket(prisma, project.id, 'Doing');
+    const item = await seedItem(prisma, project.id, {
+      createdById: pm.id,
+      bucketId: bucket.id,
+      title: 'Secret plan',
+    });
+    const entries = [
+      { entityType: 'WorkItem', entityId: item.id },
+      { entityType: 'Bucket', entityId: bucket.id },
+      { entityType: 'User', entityId: pm.id },
+      { entityType: 'Label', entityId: '00000000-0000-4000-8000-000000000000' },
+      { entityType: 'AppSetting', entityId: 'theme' },
+    ];
+    for (const [i, e] of entries.entries())
+      await prisma.auditLog.create({
+        data: {
+          actorId: pm.id,
+          action: AuditAction.ITEM_UPDATED,
+          projectId: project.id,
+          meta: {},
+          createdAt: new Date(Date.UTC(2026, 0, 1, 0, i)),
+          ...e,
+        },
+      });
+    const sid = await login(app, 'admin@example.org');
+    const page = (
+      await call(app, 'GET', `/api/v1/admin/audit?projectId=${project.id}`, { sid })
+    ).json() as Page<AuditEntryDto>;
+    const byType = new Map(page.items.map((e) => [e.entityType, e]));
+    expect(byType.get('WorkItem')).toMatchObject({
+      actorName: 'pm',
+      projectKey: 'KLO',
+      projectName: 'Project KLO',
+      entityLabel: 'KLO-1',
+    });
+    expect(byType.get('Bucket')?.entityLabel).toBe('Doing');
+    expect(byType.get('User')?.entityLabel).toBe('pm');
+    // A deleted entity and a non-uuid id are not resolved.
+    expect(byType.get('Label')?.entityLabel).toBeNull();
+    expect(byType.get('AppSetting')?.entityLabel).toBeNull();
+    expect(JSON.stringify(page.items)).not.toContain('Secret plan');
   });
 });

@@ -18,6 +18,7 @@ import { ProjectContext } from '../../core/project-context';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { ToastService } from '../../ui/toast.service';
 import { BoardPage } from './board';
+import { PageActions } from '../../core/page-actions';
 
 /** The protected board members the tests drive directly. */
 interface BoardInternals {
@@ -138,6 +139,7 @@ describe('BoardPage', () => {
       providers: [
         provideRouter([]),
         ProjectContext,
+        PageActions,
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
       ],

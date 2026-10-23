@@ -236,6 +236,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 
 - **Login / forced password change**
 - **Projects list**: the user's projects. Admins also get the All/My toggle. Personal spaces are never listed here.
+  From M8.5 each row shows open items, overdue items and last activity counted within the caller's visibility; rows an
+  admin sees only through All projects show no counts and are not read.
 - **My work** (sidebar): everything assigned to the signed-in user across their unarchived projects, limited by their
   access in each, plus all open items of their personal space.
   - List view (default) grouped by due date: Overdue, Today, This week, Later, No date.
@@ -269,7 +271,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Backlog / hierarchy view**: tree of Epic → Feature → Story → Task with expand/collapse,
   multi-select (also used to choose what to export), bulk set sprint/bucket/assignee
 - **Sprints**: create and edit, set active, sprint board (the board filtered to one sprint), close sprint with an option to move unfinished items
-- **Project settings** (PM): general, members (role and visibility per member), teams (optional), buckets (with rules),
+- **Project settings** (PM), one tab each from M8.5 (General, Members, Teams, Buckets, Labels): general, members (role and visibility per member), teams (optional), buckets (with rules),
   labels, label style, statusToBucket map, ADO export settings
 - **Notifications**: bell with unread count, polled every 60s. Notification types:
   assigned to you, mentioned, due tomorrow, overdue, status change on items you created. Due tomorrow and overdue also
@@ -310,7 +312,7 @@ Theming uses CSS custom properties only. Default palette is neutral (slate/indig
 
 ### 6.2 Excel snapshots and offline archives (M6.8)
 
-- My work and project screens offer "Export…": current filtered view or all eligible items in that source
+- My work and project screens offer "Export…" in the page header (M8.5): current filtered view or all eligible items in that source
   view, with a preview of scope, filters, item count and included details. "All my work" keeps My work's
   assigned/created-item rules, chosen All/Projects/Personal source, Done option and unarchived-project limits;
   it never becomes a search of every visible project item. "All visible project items" stays inside the

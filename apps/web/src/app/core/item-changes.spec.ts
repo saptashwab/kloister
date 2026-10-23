@@ -42,6 +42,23 @@ describe('item changes', () => {
     expect(dueText({ dueDate: null, status: 'DONE' }, today)).toBe('');
   });
 
+  it('makes a timed item overdue once its time passes and words the time (M8.5)', () => {
+    const open = 'NOT_STARTED' as const;
+    const timed = (dueDate: string, dueTime: string, minutes: number): string =>
+      dueText({ dueDate, dueTime, status: open }, today, minutes);
+    expect(timed('2026-10-15', '17:00', 9 * 60)).toBe('Due today 17:00');
+    expect(
+      dueState({ dueDate: '2026-10-15', dueTime: '17:00', status: open }, today, 18 * 60),
+    ).toBe('overdue');
+    expect(timed('2026-10-15', '17:00', 18 * 60)).toBe('Overdue since 17:00');
+    expect(timed('2026-10-16', '09:30', 0)).toBe('Due tomorrow 09:30');
+    expect(timed('2026-10-18', '09:30', 0)).toBe('Due in 3 days, 09:30');
+    expect(timed('2026-10-24', '09:30', 0)).toBe('Sat 24 Oct, 09:30');
+    expect(timed('2026-10-14', '09:30', 0)).toBe('1 day overdue');
+    // Without a time, today is never overdue, whatever the hour.
+    expect(dueState({ dueDate: '2026-10-15', status: open }, today, 23 * 60)).toBe('soon');
+  });
+
   it('builds the PATCH that reverts changed fields only', () => {
     const before = makeItem(1, {
       status: 'NOT_STARTED',

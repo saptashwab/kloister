@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { Component, inject, type OnInit, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -20,6 +19,9 @@ interface IssuedPassword {
 }
 
 import { EmptyState, Skeleton } from '../../ui/feedback';
+import { AppDatePipe } from '../../ui/app-date.pipe';
+import { NgTemplateOutlet } from '@angular/common';
+import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
 
 /**
  * Admin user management: create users, promote/demote, deactivate/reactivate
@@ -32,9 +34,11 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
   selector: 'app-admin-users',
   host: { class: 'k-page' },
   imports: [
+    NgTemplateOutlet,
+    RowCardStyles,
     EmptyState,
     Skeleton,
-    DatePipe,
+    AppDatePipe,
     ReactiveFormsModule,
     MatButtonModule,
     MatCardModule,
@@ -96,8 +100,47 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
       <p class="error" role="alert">{{ error() }}</p>
     }
 
+    <ng-template #userActions let-user>
+      @if (user.systemRole === roles.ADMIN) {
+        <button mat-button type="button" (click)="update(user, { systemRole: roles.USER })">
+          Make user
+        </button>
+      } @else {
+        <button mat-button type="button" (click)="update(user, { systemRole: roles.ADMIN })">
+          Make admin
+        </button>
+      }
+      <button mat-button type="button" (click)="update(user, { isActive: !user.isActive })">
+        {{ user.isActive ? 'Deactivate' : 'Reactivate' }}
+      </button>
+      @if (user.id !== store.user()?.id) {
+        <button mat-button type="button" (click)="resetPassword(user)">Reset password</button>
+      }
+    </ng-template>
+    <app-row-card-styles />
     @if (loading()) {
       <app-skeleton label="Loading the list" />
+    } @else if (phone() && users().length > 0) {
+      <ul class="k-row-cards" aria-label="Users">
+        @for (user of users(); track user.id) {
+          <li class="k-row-card">
+            <div class="k-row-card-title">{{ user.displayName }}</div>
+            <dl>
+              <dt>Email</dt>
+              <dd>{{ user.email }}</dd>
+              <dt>Role</dt>
+              <dd>{{ user.systemRole === roles.ADMIN ? 'Admin' : 'User' }}</dd>
+              <dt>Status</dt>
+              <dd>{{ user.isActive ? 'Active' : 'Deactivated' }}</dd>
+              <dt>Last sign-in</dt>
+              <dd>{{ user.lastLoginAt ? (user.lastLoginAt | appDate) : 'Never' }}</dd>
+            </dl>
+            <div class="k-row-card-actions">
+              <ng-container *ngTemplateOutlet="userActions; context: { $implicit: user }" />
+            </div>
+          </li>
+        }
+      </ul>
     } @else {
       <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
         <table class="data">
@@ -118,37 +161,9 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
                 <td>{{ user.displayName }}</td>
                 <td>{{ user.systemRole === roles.ADMIN ? 'Admin' : 'User' }}</td>
                 <td>{{ user.isActive ? 'Active' : 'Deactivated' }}</td>
-                <td>{{ user.lastLoginAt ? (user.lastLoginAt | date: 'short') : 'Never' }}</td>
+                <td>{{ user.lastLoginAt ? (user.lastLoginAt | appDate) : 'Never' }}</td>
                 <td class="actions">
-                  @if (user.systemRole === roles.ADMIN) {
-                    <button
-                      mat-button
-                      type="button"
-                      (click)="update(user, { systemRole: roles.USER })"
-                    >
-                      Make user
-                    </button>
-                  } @else {
-                    <button
-                      mat-button
-                      type="button"
-                      (click)="update(user, { systemRole: roles.ADMIN })"
-                    >
-                      Make admin
-                    </button>
-                  }
-                  <button
-                    mat-button
-                    type="button"
-                    (click)="update(user, { isActive: !user.isActive })"
-                  >
-                    {{ user.isActive ? 'Deactivate' : 'Reactivate' }}
-                  </button>
-                  @if (user.id !== store.user()?.id) {
-                    <button mat-button type="button" (click)="resetPassword(user)">
-                      Reset password
-                    </button>
-                  }
+                  <ng-container *ngTemplateOutlet="userActions; context: { $implicit: user }" />
                 </td>
               </tr>
             } @empty {
@@ -171,6 +186,8 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
   `,
 })
 export class AdminUsersPage implements OnInit {
+  /** True at phone width, where rows become cards. */
+  protected readonly phone = phoneLayout();
   private readonly api = inject(AdminApiService);
   private readonly dialogs = inject(Dialogs);
   /** Used to hide self-service-only actions. */

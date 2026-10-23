@@ -6,6 +6,18 @@ Help & FAQ explains everyday permissions and offers **Take the tour** with curre
 project/team/admin capabilities. System administration does not grant PM rights;
 cross-project reads are audited. Personal spaces remain owner-only through the API.
 
+The audit log shows actions in words, people by name and email, projects by key and
+name and entities by name or item key; filter by action, person, project and dates,
+and open **Technical details** for the stored JSON. Item titles are not looked up, but
+some entries store a title or name in their details when they were written. When an
+administrator opens a project they are not a member of, one "Admin opened a project
+they are not a member of" entry is written per visit: per administrator, project and
+sign-in session, and again once the visit's last entry is 30 minutes old. Every change
+(including refused attempts) and every Excel/offline or ADO file download is recorded
+as its own entry. Entries are never edited afterwards. Reads that follow any such entry within 30 minutes
+in the same session belong to it, so a visit's first entry can be a change or a
+download rather than a read.
+
 Personal privacy is an application access rule, not encryption. Database/file
 operators, root and people with backup access can read personal data. Treat database
 dumps, attachments, branding, private configuration and diagnostic material as

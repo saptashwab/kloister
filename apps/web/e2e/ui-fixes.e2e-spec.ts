@@ -184,7 +184,7 @@ test('unified user search preserves PM chips and invalidates edited member choic
   await expect(picker.locator('.picked button')).toHaveCount(2);
   await snap(page, 'multiple project managers retained across searches');
   const { project: p } = await project(page, 'UIUSER');
-  await page.goto(`/p/${p.key}/settings`);
+  await page.goto(`/p/${p.key}/settings/members`);
   const memberPicker = page.locator('app-user-picker').first();
   const input = memberPicker.getByRole('combobox', { name: 'User', exact: true });
   await input.fill('pm@');
@@ -236,19 +236,17 @@ test('unified user search preserves PM chips and invalidates edited member choic
     data: { mode: 'DARK', primary: '#8e44ad', accent: '#f0b429' },
   });
   expect(themed.ok()).toBe(true);
-  await page.reload();
+  // Buckets are on their own settings tab (M8.5); a full load also applies the theme.
+  await page.goto(`/p/${p.key}/settings/buckets`);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await page
-    .locator('tbody tr')
-    .filter({ has: page.getByRole('textbox', { name: 'Name of Backlog', exact: true }) })
-    .getByRole('button', { name: 'Delete', exact: true })
-    .click();
+  const deleteBucket = async (name: string): Promise<void> => {
+    await page.getByRole('button', { name: `Actions for ${name}`, exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Delete…', exact: true }).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+  };
+  await deleteBucket('Backlog');
   await choose(page, 'Destination bucket', 'To Do');
-  await page
-    .locator('tbody tr')
-    .filter({ has: page.getByRole('textbox', { name: 'Name of Done', exact: true }) })
-    .getByRole('button', { name: 'Delete', exact: true })
-    .click();
+  await deleteBucket('Done');
   await expect(
     page.getByRole('combobox', { name: 'Bucket receiving the cards', exact: true }),
   ).toContainText('Choose destination bucket');

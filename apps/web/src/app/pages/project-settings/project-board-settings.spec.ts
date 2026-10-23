@@ -13,7 +13,7 @@ interface SettingsInternals {
 }
 
 describe('ProjectBoardSettings regressions', () => {
-  async function render() {
+  async function render(section: 'board' | 'labels' = 'board') {
     const buckets = [makeBucket('b1', 'To Do', 1), makeBucket('b2', 'Done', 2)];
     const api = {
       labels: vi.fn().mockResolvedValue([]),
@@ -35,6 +35,7 @@ describe('ProjectBoardSettings regressions', () => {
     fixture.componentRef.setInput('project', makeProject());
     fixture.componentRef.setInput('buckets', buckets);
     fixture.componentRef.setInput('canManageBoard', true);
+    fixture.componentRef.setInput('section', section);
     await settle(fixture);
     return {
       fixture,
@@ -47,7 +48,7 @@ describe('ProjectBoardSettings regressions', () => {
   }
 
   it('gives the empty labels their own full row', async () => {
-    const { root } = await render();
+    const { root } = await render('labels');
     expect(root.querySelector('.labels-empty app-empty-state')?.textContent).toContain(
       'No labels yet',
     );
@@ -57,8 +58,13 @@ describe('ProjectBoardSettings regressions', () => {
   it('resets the destination on each delete trigger and confirms before deletion', async () => {
     const { root, component, fixture, api, confirm, buckets } = await render();
     component.moveTarget.set('b2');
-    const buttons = [...root.querySelectorAll<HTMLButtonElement>('button')];
-    const trigger = buttons.find((b) => b.textContent?.trim() === 'Delete');
+    // Each bucket row has one actions menu (M8.5); Delete… is inside it.
+    root.querySelector<HTMLButtonElement>('button[aria-label="Actions for To Do"]')?.click();
+    await settle(fixture);
+    const items = [...document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item')];
+    expect(items.map((b) => b.textContent?.trim())).toEqual(['Move up', 'Move down', 'Delete…']);
+    expect(items[0]?.disabled).toBe(true);
+    const trigger = items.find((b) => b.textContent?.trim() === 'Delete…');
     if (!trigger) throw new Error('Missing delete trigger');
     trigger.click();
     await settle(fixture);

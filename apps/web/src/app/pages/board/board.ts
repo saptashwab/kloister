@@ -1,6 +1,5 @@
 import { Dialogs } from '../../ui/dialogs';
 import { CdkScrollable } from '@angular/cdk/scrolling';
-import { SnapshotAction } from '../../ui/snapshot-action';
 import { CdkDrag, type CdkDragDrop, CdkDropList, CdkDragHandle } from '@angular/cdk/drag-drop';
 import {
   Component,
@@ -53,6 +52,7 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
 import { ItemCard } from './item-card';
+import { PageActions } from '../../core/page-actions';
 
 /** How many member avatars the quick person filter shows. */
 const QUICK_PEOPLE = 6;
@@ -78,7 +78,6 @@ const QUICK_PEOPLE = 6;
 @Component({
   selector: 'app-board',
   imports: [
-    SnapshotAction,
     CdkDragHandle,
     CdkScrollable,
     CdkDropList,
@@ -221,7 +220,6 @@ const QUICK_PEOPLE = 6;
       <p class="k-alert info" role="status">Sprint board: {{ name }}</p>
     }
 
-    <app-snapshot-action [source]="ctx.project()?.id ?? ''" [filters]="snapshotFilters()" />
     <div class="toolbar" role="toolbar" aria-label="Board filters">
       <label class="search">
         <app-icon name="search" />
@@ -616,6 +614,11 @@ const QUICK_PEOPLE = 6;
 export class BoardPage implements OnInit, PersonFilter {
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
+  /** Shows this view's Export… in the project header's page actions. */
+  private readonly pageActions = inject(PageActions).register(() => ({
+    source: this.ctx.project()?.id ?? '',
+    filters: this.snapshotFilters(),
+  }));
   private readonly api = inject(ItemsApiService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);

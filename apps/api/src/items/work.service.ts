@@ -10,7 +10,7 @@ import {
 import type { AuthContext } from '../auth/auth-context.js';
 import { ApiException } from '../common/api-exception.js';
 import { parseProjectSettings } from '../projects/project-settings.js';
-import { fromDbDate, toDbDate } from '../common/dates.js';
+import { fromDbDate, fromDbTime, toDbDate } from '../common/dates.js';
 import { toPage } from '../common/pagination.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -28,6 +28,7 @@ const WORK_SELECT = {
   status: true,
   priority: true,
   dueDate: true,
+  dueTime: true,
   project: { select: { key: true, name: true, ownerId: true, settings: true } },
   bucket: { select: { id: true, name: true } },
   labels: { select: { label: true } },
@@ -72,8 +73,8 @@ export class WorkService {
   ) {}
 
   /**
-   * Lists the items assigned to a person that the caller can see, due date
-   * first and undated items last.
+   * Lists the items assigned to a person that the caller can see, by due date
+   * and time (undated and untimed items last), then priority.
    *
    * Permissions: any signed-in user; see the class comment for who may be
    * looked up and which items are returned.
@@ -131,33 +132,30 @@ export class WorkService {
           }),
       ...(query.includeDone === true ? {} : { status: { not: ItemStatus.DONE } }),
     });
-    // Keyset paging on (due date, id) with undated items last. The rows after
-    // the cursor are selected explicitly rather than with Prisma's cursor,
-    // which compares the nullable due date and could skip undated items.
+    // Keyset paging on (due date, due time, priority, id) with undated and
+    // untimed items last (SPEC §6, M8.5). The rows after the cursor are
+    // selected explicitly rather than with Prisma's cursor, which compares the
+    // nullable columns and could skip rows.
     let after: Prisma.WorkItemWhereInput = {};
     if (query.cursor !== undefined) {
       // A cursor naming an item the caller cannot see gives an empty page, so
       // it cannot be used to probe for hidden items.
       const cursor = await this.prisma.workItem.findFirst({
         where: { AND: [where, { id: query.cursor }] },
-        select: { id: true, dueDate: true },
+        select: { id: true, dueDate: true, dueTime: true, priority: true },
       });
       if (cursor === null) return empty;
-      after =
-        cursor.dueDate === null
-          ? { dueDate: null, id: { gt: cursor.id } }
-          : {
-              OR: [
-                { dueDate: { gt: cursor.dueDate } },
-                { dueDate: cursor.dueDate, id: { gt: cursor.id } },
-                { dueDate: null },
-              ],
-            };
+      after = afterCursor(cursor);
     }
     const rows = await this.prisma.workItem.findMany({
       where: { AND: [where, after] },
       select: WORK_SELECT,
-      orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }, { id: 'asc' }],
+      orderBy: [
+        { dueDate: { sort: 'asc', nulls: 'last' } },
+        { dueTime: { sort: 'asc', nulls: 'last' } },
+        { priority: 'asc' },
+        { id: 'asc' },
+      ],
       // One extra row tells whether another page follows.
       take: (query.limit ?? DEFAULT_PAGE_LIMIT) + 1,
     });
@@ -209,6 +207,51 @@ function toWorkSummary(row: WorkRow): WorkSummaryDto {
     status: row.status,
     priority: row.priority,
     dueDate: fromDbDate(row.dueDate),
+    dueTime: fromDbTime(row.dueTime),
+  };
+}
+
+/**
+ * Rows after a cursor in the list order: due date, then due time (both with
+ * empty values last), then priority and id.
+ *
+ * @param cursor The last row of the previous page.
+ * @param cursor.id Its id.
+ * @param cursor.dueDate Its due date, or null.
+ * @param cursor.dueTime Its due time in minutes, or null.
+ * @param cursor.priority Its priority.
+ * @returns The filter selecting the following rows.
+ */
+export function afterCursor(cursor: {
+  id: string;
+  dueDate: Date | null;
+  dueTime: number | null;
+  priority: number;
+}): Prisma.WorkItemWhereInput {
+  const afterPriority: Prisma.WorkItemWhereInput = {
+    OR: [
+      { priority: { gt: cursor.priority } },
+      { priority: cursor.priority, id: { gt: cursor.id } },
+    ],
+  };
+  // An undated item never has a time, so only priority and id remain.
+  if (cursor.dueDate === null) return { AND: [{ dueDate: null }, afterPriority] };
+  const afterTime: Prisma.WorkItemWhereInput =
+    cursor.dueTime === null
+      ? { AND: [{ dueTime: null }, afterPriority] }
+      : {
+          OR: [
+            { dueTime: { gt: cursor.dueTime } },
+            { dueTime: null },
+            { AND: [{ dueTime: cursor.dueTime }, afterPriority] },
+          ],
+        };
+  return {
+    OR: [
+      { dueDate: { gt: cursor.dueDate } },
+      { dueDate: null },
+      { AND: [{ dueDate: cursor.dueDate }, afterTime] },
+    ],
   };
 }
 

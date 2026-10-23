@@ -57,6 +57,7 @@ import { ItemActivity } from './item-activity';
 import { ItemAttachments } from './item-attachments';
 import { ItemChecklist } from './item-checklist';
 import { type ImageUploader, RichTextEditor } from './rich-text-editor';
+import { DateField, TimeField } from '../../ui/date-field';
 
 /** Display names of the fields, for toasts. */
 const FIELD_NAMES: Record<string, string> = {
@@ -70,6 +71,7 @@ const FIELD_NAMES: Record<string, string> = {
   teamId: 'Team',
   startDate: 'Start date',
   dueDate: 'Due date',
+  dueTime: 'Due time',
   assigneeIds: 'Assignees',
   labelIds: 'Labels',
 };
@@ -100,6 +102,8 @@ const FIELD_NAMES: Record<string, string> = {
   imports: [
     ItemCopyAction,
     CdkTrapFocus,
+    DateField,
+    TimeField,
     MatMenuModule,
     MatSelectModule,
     Avatar,
@@ -162,7 +166,7 @@ const FIELD_NAMES: Record<string, string> = {
         @if (detail(); as source) {
           <app-item-copy-action [item]="source" />
         }
-        @if (canDelete()) {
+        @if (canDelete() || canReorder()) {
           <button
             type="button"
             class="k-icon-btn"
@@ -172,9 +176,29 @@ const FIELD_NAMES: Record<string, string> = {
             <app-icon name="more" [size]="17" [stroke]="3" />
           </button>
           <mat-menu #more="matMenu">
-            <button mat-menu-item type="button" (click)="remove()">
-              <app-icon name="trash" />&nbsp;Delete item
-            </button>
+            @if (canReorder()) {
+              <button
+                mat-menu-item
+                type="button"
+                [disabled]="predecessor() === none"
+                (click)="reorderCard(none)"
+              >
+                Move to top of bucket
+              </button>
+              <button
+                mat-menu-item
+                type="button"
+                [disabled]="isLastInBucket()"
+                (click)="reorderCard(lastInBucket())"
+              >
+                Move to bottom of bucket
+              </button>
+            }
+            @if (canDelete()) {
+              <button mat-menu-item type="button" (click)="remove()">
+                <app-icon name="trash" />&nbsp;Delete item
+              </button>
+            }
           </mat-menu>
         }
         <button type="button" class="k-icon-btn" aria-label="Close" (click)="close()">
@@ -265,23 +289,6 @@ const FIELD_NAMES: Record<string, string> = {
           </div>
 
           <dl class="fields">
-            @if (canMove() && d.bucketId) {
-              <dt>Board order</dt>
-              <dd>
-                <mat-select
-                  aria-label="Position in bucket"
-                  [value]="predecessor()"
-                  (valueChange)="reorderCard($event)"
-                >
-                  <mat-option [value]="none">At the top</mat-option>
-                  @for (card of bucketCards(); track card.id) {
-                    <mat-option [value]="card.id"
-                      >After {{ card.key }} · {{ card.title }}</mat-option
-                    >
-                  }
-                </mat-select>
-              </dd>
-            }
             @if (ctx.project()?.ownerId === null) {
               <dt>Assignees</dt>
               <dd>
@@ -434,25 +441,34 @@ const FIELD_NAMES: Record<string, string> = {
             <dd>
               <div class="dates">
                 @if (canEdit()) {
-                  <input
-                    class="k-inline"
-                    type="date"
-                    aria-label="Start date"
-                    [value]="d.startDate ?? ''"
-                    (change)="save({ startDate: $any($event.target).value || null })"
+                  <app-date-field
+                    label="Start date"
+                    [value]="d.startDate"
+                    (valueChange)="save({ startDate: $event })"
                   />
                   <span class="muted" aria-hidden="true">→</span>
-                  <input
-                    class="k-inline"
-                    type="date"
-                    aria-label="Due date"
-                    [value]="d.dueDate ?? ''"
-                    (change)="save({ dueDate: $any($event.target).value || null })"
+                  <app-date-field
+                    label="Due date"
+                    [value]="d.dueDate"
+                    [min]="d.startDate"
+                    (valueChange)="save({ dueDate: $event })"
                   />
+                  @if (d.dueDate && (d.dueTime || addingTime())) {
+                    <app-time-field
+                      label="Due time"
+                      [value]="d.dueTime"
+                      (valueChange)="addingTime.set(false); save({ dueTime: $event })"
+                    />
+                  } @else if (d.dueDate) {
+                    <button type="button" class="k-action" (click)="addingTime.set(true)">
+                      Add time
+                    </button>
+                  }
                 } @else {
                   <span class="plain">
                     {{ d.startDate ? short(d.startDate) : 'No start' }} →
-                    {{ d.dueDate ? short(d.dueDate) : 'no due date' }}
+                    {{ d.dueDate ? short(d.dueDate) : 'no due date'
+                    }}{{ d.dueTime ? ', ' + d.dueTime : '' }}
                   </span>
                 }
                 @if (due(); as due) {
@@ -676,6 +692,15 @@ export class ItemDrawer {
       .filter((item) => item.bucketId === detail?.bucketId && item.id !== detail?.id)
       .sort((a, b) => a.position - b.position);
   });
+  /** True when the caller may reorder this card within its bucket (drawer menu). */
+  protected readonly canReorder = computed(() => this.canMove() && !!this.detail()?.bucketId);
+  /** The last other visible card in the bucket, or the top option when there is none. */
+  protected readonly lastInBucket = computed(() => this.bucketCards().at(-1)?.id ?? NONE);
+  /** True when no visible card follows this one in its bucket. */
+  protected readonly isLastInBucket = computed(() => {
+    const position = this.detail()?.position ?? 0;
+    return !this.bucketCards().some((item) => item.position > position);
+  });
   /** Visible predecessor of this card, or the top option. */
   protected readonly predecessor = computed(() => {
     const position = this.detail()?.position ?? 0;
@@ -727,6 +752,8 @@ export class ItemDrawer {
 
   /** The item, or null while loading or after an error. */
   protected readonly detail = signal<WorkItemDetailDto | null>(null);
+  /** True while an empty due time field is shown after "Add time". */
+  protected readonly addingTime = signal(false);
   /** Loaded children. */
   protected readonly children = signal<WorkItemDto[]>([]);
   /** Cursor for more children, or null. */

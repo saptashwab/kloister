@@ -1141,6 +1141,31 @@ describe('work items (db)', () => {
       ).toBe(404);
     });
 
+    it('keeps an optional due time with the due date and clears it with the date (M8.5)', async () => {
+      const set = await as('pm', 'PATCH', item(N.theirs), {
+        dueDate: '2026-11-05',
+        dueTime: '17:00',
+      });
+      expect(set.json()).toMatchObject({ dueDate: '2026-11-05', dueTime: '17:00' });
+      // Changing only the date keeps the time; older clients never send dueTime.
+      const moved = await as('pm', 'PATCH', item(N.theirs), { dueDate: '2026-11-06' });
+      expect(moved.json()).toMatchObject({ dueDate: '2026-11-06', dueTime: '17:00' });
+      const cleared = await as('pm', 'PATCH', item(N.theirs), { dueDate: null });
+      expect(cleared.json()).toMatchObject({ dueDate: null, dueTime: null });
+      for (const body of [{ dueTime: '09:30' }, { dueTime: '24:00' }, { dueTime: '9:30' }]) {
+        const res = await as('pm', 'PATCH', item(N.theirs), body);
+        expect({ body, status: res.statusCode }).toEqual({ body, status: 400 });
+      }
+      const history = await prisma.auditLog.findMany({
+        where: {
+          entityId: (
+            await prisma.workItem.findFirstOrThrow({ where: { projectId, number: N.theirs } })
+          ).id,
+        },
+      });
+      expect(JSON.stringify(history.map((h) => h.meta))).toContain('dueTime');
+    });
+
     it('validates labels, sprints, assignees and dates', async () => {
       const label = await seedLabel(prisma, projectId, 'ui');
       const other = await seedProject(prisma, 'OTH', [{ userId: ids.pm, role: 'PM' }]);
@@ -1230,14 +1255,14 @@ describe('work items (db)', () => {
       }
     });
 
-    it('audits admin reads of items in projects they are not a member of', async () => {
+    it('audits admin reads of items in projects they are not a member of, once per visit', async () => {
       expect((await as('admin', 'GET', item(N.mine))).statusCode).toBe(200);
       expect((await as('admin', 'GET', items())).statusCode).toBe(200);
       const audits = await prisma.auditLog.findMany({
         where: { action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS, actorId: ids.admin },
       });
-      expect(audits.map((a) => (a.meta as { via: string }).via).sort()).toEqual([
-        'GET /api/v1/projects/:id/items',
+      // Both reads share the admin's session, so the second belongs to the visit the first opened.
+      expect(audits.map((a) => (a.meta as { via: string }).via)).toEqual([
         'GET /api/v1/projects/:id/items/:item',
       ]);
     });

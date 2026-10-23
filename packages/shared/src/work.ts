@@ -38,6 +38,8 @@ export interface WorkSummaryDto {
   priority: number;
   /** Due date as `YYYY-MM-DD`, or null. */
   dueDate: string | null;
+  /** Due time as `HH:MM`, or null. */
+  dueTime: string | null;
 }
 
 /** The person whose work is listed. */

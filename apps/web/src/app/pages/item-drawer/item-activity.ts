@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -13,6 +12,7 @@ import { StaticAvatar } from '../../ui/avatar';
 import { ToastService } from '../../ui/toast.service';
 import { ItemNote } from './item-note';
 import { type ImageUploader, RichTextEditor } from './rich-text-editor';
+import { AppDatePipe } from '../../ui/app-date.pipe';
 
 /** One history entry ready for display. */
 interface HistoryRow {
@@ -51,7 +51,7 @@ type Filter = 'all' | 'notes' | 'history';
 @Component({
   selector: 'app-item-activity',
   imports: [
-    DatePipe,
+    AppDatePipe,
     MatButtonModule,
     MatButtonToggleModule,
     ItemNote,
@@ -119,7 +119,7 @@ type Filter = 'all' | 'notes' | 'history';
               <app-avatar-static [userId]="entry.row.actorKey" [name]="entry.row.actor" />
               <div>
                 <strong>{{ entry.row.actor }}</strong> {{ entry.row.lines.join('; ') }}
-                <div class="when">{{ entry.row.at | date: 'medium' }}</div>
+                <div class="when">{{ entry.row.at | appDate }}</div>
               </div>
             </div>
           }

@@ -4,10 +4,12 @@ import {
   DEFAULT_BUCKETS,
   DEFAULT_PROJECT_SETTINGS,
   ErrorCode,
+  ItemStatus,
   type Page,
   type ProjectDto,
   ProjectRole,
   type ProjectSettings,
+  type ProjectSummaryDto,
   type StatusToBucket,
   SystemRole,
   Visibility,
@@ -16,12 +18,18 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthContext } from '../auth/auth-context.js';
 import { ApiException, invalidField } from '../common/api-exception.js';
 import { pageArgs, toPage } from '../common/pagination.js';
+import { toDbDate } from '../common/dates.js';
 import { POSITION_STEP } from '../common/positions.js';
+import { dueWindows } from '../notifications/due-dates.js';
 import { isUniqueViolation, mapTransactionConflict } from '../common/prisma-errors.js';
 import type { Prisma, Project } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { toProjectDto, toProjectListDto } from './project.mapper.js';
-import { type ProjectAccess, projectArchived } from './project-access.service.js';
+import {
+  type ProjectAccess,
+  ProjectAccessService,
+  projectArchived,
+} from './project-access.service.js';
 import { mergeProjectSettings, parseProjectSettings } from './project-settings.js';
 import type { CreateProjectDto, ListProjectsQueryDto, UpdateProjectDto } from './projects.dto.js';
 
@@ -44,6 +52,7 @@ export class ProjectsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly access: ProjectAccessService,
   ) {}
 
   /**
@@ -52,7 +61,9 @@ export class ProjectsService {
    * Permissions: `scope=mine` (default) returns only the caller's projects;
    * `scope=all` is for system admins (403 otherwise) and is the UI's "All
    * projects" toggle. Listing is not "opening" a project, so it writes no
-   * `ADMIN_CROSS_PROJECT_ACCESS` entries; opening one does.
+   * `ADMIN_CROSS_PROJECT_ACCESS` entries; opening one does. Each row's
+   * summary counts only items the caller can see there, and is null where
+   * the caller is not a member, so the list never reads other projects.
    *
    * @param auth The caller.
    * @param query Scope, archived filter, search and pagination.
@@ -105,9 +116,14 @@ export class ProjectsService {
       orderBy: [{ name: 'asc' }, { id: 'asc' }],
       ...pageArgs(query),
     });
-    return toPage(rows, query, ({ members, ...project }) =>
-      toProjectListDto(project, members[0] ?? null, auth.user.systemRole === SystemRole.ADMIN),
+    const summaries = await this.summaries(
+      auth,
+      rows.filter((r) => r.members.length > 0).map((r) => r.id),
     );
+    return toPage(rows, query, ({ members, ...project }) => ({
+      ...toProjectListDto(project, members[0] ?? null, auth.user.systemRole === SystemRole.ADMIN),
+      summary: summaries.get(project.id) ?? null,
+    }));
   }
 
   /**
@@ -357,6 +373,96 @@ export class ProjectsService {
     });
     return toProjectDto(access, updated);
   }
+
+  /**
+   * Counts what the caller can see in each project of a list page (M8.5):
+   * open items, overdue items and the newest recorded change to a visible
+   * item. Every count goes through the caller's own visibility filter, so a
+   * Member with `OWN` sees only their own work. Last activity comes from item
+   * audit entries, not `updatedAt`, because moving a hidden card renumbers
+   * visible siblings and would reveal it.
+   *
+   * Permissions: membership only; non-member projects get no summary.
+   *
+   * @param auth The caller.
+   * @param projectIds Projects on the page that the caller is a member of.
+   * @returns Summaries by project id.
+   */
+  private async summaries(
+    auth: AuthContext,
+    projectIds: string[],
+  ): Promise<Map<string, ProjectSummaryDto>> {
+    const result = new Map<string, ProjectSummaryDto>();
+    if (projectIds.length === 0) return result;
+    const accesses = await this.access.memberAccessesIn(auth, projectIds);
+    // Overdue follows the server clock, like the daily due-date check.
+    const window = dueWindows(new Date());
+    const today = toDbDate(window.today);
+    // Projects are summarized in parallel; each needs a few small queries.
+    await Promise.all(
+      accesses.map(async (access) => {
+        const scope = this.access.itemScopeFilter(access);
+        const visible: Prisma.WorkItemWhereInput = {
+          AND: [{ projectId: access.project.id }, scope],
+        };
+        const open: Prisma.WorkItemWhereInput = {
+          AND: [visible, { status: { not: ItemStatus.DONE } }],
+        };
+        const [openCount, overdue, lastActivityAt] = await Promise.all([
+          this.prisma.workItem.count({ where: open }),
+          this.prisma.workItem.count({
+            where: {
+              AND: [
+                open,
+                {
+                  OR: [
+                    { dueDate: { lt: today } },
+                    { dueDate: today, dueTime: { lt: window.minutes } },
+                  ],
+                },
+              ],
+            },
+          }),
+          this.lastActivity(access.project.id, Object.keys(scope).length === 0 ? null : visible),
+        ]);
+        result.set(access.project.id, { open: openCount, overdue, lastActivityAt });
+      }),
+    );
+    return result;
+  }
+
+  /**
+   * The newest audit entry about a visible item of a project. With full
+   * visibility every item entry counts; otherwise only entries about the
+   * visible items, read in batches so a large project never builds one huge
+   * id list.
+   *
+   * @param projectId The project.
+   * @param visible The caller's item filter, or null when they see every item.
+   * @returns ISO time, or null without entries.
+   */
+  private async lastActivity(
+    projectId: string,
+    visible: Prisma.WorkItemWhereInput | null,
+  ): Promise<string | null> {
+    const newest = async (entityId?: { in: string[] }): Promise<Date | null> =>
+      (
+        await this.prisma.auditLog.aggregate({
+          where: { projectId, entityType: 'WorkItem', ...(entityId ? { entityId } : {}) },
+          _max: { createdAt: true },
+        })
+      )._max.createdAt;
+    if (visible === null) return (await newest())?.toISOString() ?? null;
+    const ids = (await this.prisma.workItem.findMany({ where: visible, select: { id: true } })).map(
+      (i) => i.id,
+    );
+    let latest: Date | null = null;
+    for (let start = 0; start < ids.length; start += SUMMARY_ID_BATCH) {
+      const found = await newest({ in: ids.slice(start, start + SUMMARY_ID_BATCH) });
+      if (found !== null && (latest === null || found > latest)) latest = found;
+    }
+    return latest?.toISOString() ?? null;
+  }
 }
 
 /**
@@ -370,3 +476,6 @@ function sameMap(a: StatusToBucket, b: StatusToBucket): boolean {
   const keys = Object.keys(a) as (keyof StatusToBucket)[];
   return keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k]);
 }
+
+/** Visible item ids per last-activity query, well below the database's parameter limit. */
+const SUMMARY_ID_BATCH = 5000;

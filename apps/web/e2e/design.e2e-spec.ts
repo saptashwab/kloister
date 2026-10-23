@@ -125,7 +125,7 @@ test('PMs choose the label style; boards and drawers follow it, also in dark mod
   page,
 }) => {
   await signIn(page, USERS.pm);
-  await page.goto(`/p/${PROJECT_KEY}/settings`);
+  await page.goto(`/p/${PROJECT_KEY}/settings/labels`);
   await expect(page.getByRole('radio', { name: /^Solid/ })).toBeChecked();
   await snap(page, 'label settings');
 
@@ -137,6 +137,8 @@ test('PMs choose the label style; boards and drawers follow it, also in dark mod
     await expect(card(page, 'Total rounds wrongly')).toContainText('customer');
     await snap(page, `board, ${style.toLowerCase()} labels`);
     await page.getByRole('tab', { name: 'Settings' }).click();
+    // Settings opens on General; the label style is on the Labels tab (M8.5).
+    await page.getByRole('tab', { name: 'Labels', exact: true }).click();
   }
 
   await page.emulateMedia({ colorScheme: 'dark' });
@@ -149,7 +151,7 @@ test('PMs choose the label style; boards and drawers follow it, also in dark mod
 
   // Back to the default for the other tests.
   await page.emulateMedia({ colorScheme: 'light' });
-  await page.goto(`/p/${PROJECT_KEY}/settings`);
+  await page.goto(`/p/${PROJECT_KEY}/settings/labels`);
   await page.getByRole('radio', { name: /^Solid/ }).check();
   await expect(page.getByRole('radio', { name: /^Solid/ })).toBeChecked();
 });

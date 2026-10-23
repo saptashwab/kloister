@@ -7,7 +7,10 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { NgTemplateOutlet } from '@angular/common';
+import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
+import { MatTabsModule } from '@angular/material/tabs';
 import {
   assignsPmsOnly,
   type BucketDto,
@@ -52,6 +55,10 @@ import { ProjectTeamsComponent } from './project-teams';
   selector: 'app-project-settings',
   host: { class: 'k-page' },
   imports: [
+    NgTemplateOutlet,
+    RowCardStyles,
+    MatTabsModule,
+    RouterLink,
     UserPicker,
     ReactiveFormsModule,
     MatButtonModule,
@@ -74,215 +81,278 @@ import { ProjectTeamsComponent } from './project-teams';
     }
 
     @if (project(); as project) {
-      <mat-card>
-        <mat-card-header><mat-card-title>General</mat-card-title></mat-card-header>
-        <mat-card-content>
-          @if (canManageProject()) {
-            <form class="row" [formGroup]="generalForm" (ngSubmit)="saveGeneral()">
-              <mat-form-field>
-                <mat-label>Name</mat-label>
-                <input matInput formControlName="name" />
-              </mat-form-field>
-              <mat-form-field>
-                <mat-label>Description</mat-label>
-                <textarea matInput formControlName="description"></textarea>
-              </mat-form-field>
-              @if (project.ownerId === null) {
-                <mat-checkbox formControlName="membersCanAssignOthers">
-                  Members can assign items to others
-                </mat-checkbox>
-              }
-
-              <button
-                mat-flat-button
-                type="submit"
-                [disabled]="generalForm.invalid || !!project.archivedAt"
-              >
-                Save
-              </button>
-              @if (project.ownerId === null) {
-                <button mat-button type="button" (click)="toggleArchived(project)">
-                  {{ project.archivedAt ? 'Unarchive' : 'Archive' }}
-                </button>
-              }
-            </form>
-          } @else {
-            <p>{{ project.description || 'No description.' }}</p>
-            <p>
-              Members {{ project.settings.membersCanAssignOthers ? 'can' : 'cannot' }} assign items
-              to others.
-            </p>
-          }
-        </mat-card-content>
-      </mat-card>
-
-      @if (project.ownerId === null) {
-        <mat-card>
-          <mat-card-header><mat-card-title>Members</mat-card-title></mat-card-header>
-          <mat-card-content>
-            @if (canAddMembers()) {
-              <div class="row">
-                <app-user-picker
-                  label="User"
-                  [searchUsers]="findCandidates"
-                  [(selected)]="selectedCandidate"
-                  (selectedChange)="newUserId.set($event[0]?.id ?? '')"
-                />
-                @if (pmOnly()) {
-                  <button
-                    mat-flat-button
-                    type="button"
-                    [disabled]="!newUserId()"
-                    (click)="addMember()"
-                  >
-                    Add as Project Manager
-                  </button>
-                } @else {
-                  <mat-form-field>
-                    <mat-label>Role</mat-label>
-                    <mat-select [value]="newRole()" (valueChange)="newRole.set($event)">
-                      @for (r of roles; track r) {
-                        <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
-                  <button
-                    mat-flat-button
-                    type="button"
-                    [disabled]="!newUserId()"
-                    (click)="addMember()"
-                  >
-                    Add
-                  </button>
-                }
-              </div>
+      <app-row-card-styles />
+      <ng-template #memberRole let-m>
+        @if (canEditMembers()) {
+          <mat-select
+            [aria-label]="'Role of ' + m.displayName"
+            [value]="m.role"
+            (valueChange)="updateMember(m, { role: $event })"
+          >
+            @for (r of roles; track r) {
+              <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
             }
-
-            <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
-              <table class="data">
-                <thead>
-                  <tr>
-                    <th scope="col">Name</th>
-                    <th scope="col">Email</th>
-                    <th scope="col">Role</th>
-                    <th scope="col">Visibility</th>
-                    <th scope="col"><span class="visually-hidden">Actions</span></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (m of members(); track m.id) {
-                    <tr>
-                      <td>{{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}</td>
-                      <td>{{ m.email }}</td>
-                      @if (canEditMembers()) {
-                        <td>
-                          <mat-select
-                            [aria-label]="'Role of ' + m.displayName"
-                            [value]="m.role"
-                            (valueChange)="updateMember(m, { role: $event })"
-                          >
-                            @for (r of roles; track r) {
-                              <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
-                            }
-                          </mat-select>
-                        </td>
-                        <td>
-                          @if (isScoped(m)) {
-                            <mat-select
-                              [aria-label]="'Visibility of ' + m.displayName"
-                              [value]="m.visibility"
-                              (valueChange)="updateMember(m, { visibility: $event })"
-                            >
-                              <mat-option [value]="visibility.ALL">{{
-                                visibilityLabels.ALL
-                              }}</mat-option>
-                              <mat-option [value]="visibility.OWN">{{
-                                visibilityLabels.OWN
-                              }}</mat-option>
-                              <mat-option [value]="visibility.TEAMS">{{
-                                visibilityLabels.TEAMS
-                              }}</mat-option>
-                              <mat-option [value]="visibility.BUCKETS">{{
-                                visibilityLabels.BUCKETS
-                              }}</mat-option>
-                            </mat-select>
-                            @if (m.visibility === visibility.BUCKETS) {
-                              <mat-select
-                                multiple
-                                placeholder="Choose buckets"
-                                [aria-label]="'Buckets visible to ' + m.displayName"
-                                [value]="m.allowedBucketIds"
-                                (valueChange)="pendingBuckets.set(m.userId, $event)"
-                                (openedChange)="$event || saveBuckets(m)"
-                              >
-                                @for (b of buckets(); track b.id) {
-                                  <mat-option [value]="b.id">{{ b.name }}</mat-option>
-                                }
-                              </mat-select>
-                            }
-                          } @else {
-                            {{ visibilityLabels.ALL }}
-                          }
-                        </td>
-                        <td class="actions">
-                          <button mat-button type="button" (click)="removeMember(m)">Remove</button>
-                        </td>
-                      } @else {
-                        <td>{{ roleLabels[m.role] }}</td>
-                        <td>
-                          {{ isScoped(m) ? visibilityLabels[m.visibility] : visibilityLabels.ALL }}
-                          @if (isScoped(m) && m.visibility === visibility.BUCKETS) {
-                            ({{ bucketNames(m) }})
-                          }
-                        </td>
-                        <td class="actions">
-                          @if (pmOnly()) {
-                            @if (m.role === projectRole.PM) {
-                              <button
-                                mat-button
-                                type="button"
-                                (click)="updateMember(m, { role: projectRole.MEMBER })"
-                              >
-                                Remove PM role
-                              </button>
-                              <button mat-button type="button" (click)="removeMember(m)">
-                                Remove
-                              </button>
-                            } @else {
-                              <button
-                                mat-button
-                                type="button"
-                                (click)="updateMember(m, { role: projectRole.PM })"
-                              >
-                                Make PM
-                              </button>
-                            }
-                          }
-                        </td>
-                      }
-                    </tr>
+          </mat-select>
+        } @else {
+          {{ roleName(m) }}
+        }
+      </ng-template>
+      <ng-template #memberVisibility let-m>
+        @if (canEditMembers()) {
+          @if (isScoped(m)) {
+            <mat-select
+              [aria-label]="'Visibility of ' + m.displayName"
+              [value]="m.visibility"
+              (valueChange)="updateMember(m, { visibility: $event })"
+            >
+              <mat-option [value]="visibility.ALL">{{ visibilityLabels.ALL }}</mat-option>
+              <mat-option [value]="visibility.OWN">{{ visibilityLabels.OWN }}</mat-option>
+              <mat-option [value]="visibility.TEAMS">{{ visibilityLabels.TEAMS }}</mat-option>
+              <mat-option [value]="visibility.BUCKETS">{{ visibilityLabels.BUCKETS }}</mat-option>
+            </mat-select>
+            @if (m.visibility === visibility.BUCKETS) {
+              <mat-select
+                multiple
+                placeholder="Choose buckets"
+                [aria-label]="'Buckets visible to ' + m.displayName"
+                [value]="m.allowedBucketIds"
+                (valueChange)="pendingBuckets.set(m.userId, $event)"
+                (openedChange)="$event || saveBuckets(m)"
+              >
+                @for (b of buckets(); track b.id) {
+                  <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                }
+              </mat-select>
+            }
+          } @else {
+            {{ visibilityLabels.ALL }}
+          }
+        } @else {
+          {{ isScoped(m) ? visibilityName(m) : visibilityLabels.ALL }}
+          @if (isScoped(m) && m.visibility === visibility.BUCKETS) {
+            ({{ bucketNames(m) }})
+          }
+        }
+      </ng-template>
+      <ng-template #memberActions let-m>
+        @if (canEditMembers()) {
+          <button mat-button type="button" (click)="removeMember(m)">Remove</button>
+        } @else {
+          @if (pmOnly()) {
+            @if (m.role === projectRole.PM) {
+              <button
+                mat-button
+                type="button"
+                (click)="updateMember(m, { role: projectRole.MEMBER })"
+              >
+                Remove PM role
+              </button>
+              <button mat-button type="button" (click)="removeMember(m)">Remove</button>
+            } @else {
+              <button mat-button type="button" (click)="updateMember(m, { role: projectRole.PM })">
+                Make PM
+              </button>
+            }
+          }
+        }
+      </ng-template>
+      <nav
+        mat-tab-nav-bar
+        mat-stretch-tabs="false"
+        [tabPanel]="settingsPanel"
+        aria-label="Settings sections"
+      >
+        @for (tab of tabs(); track tab.id) {
+          <a
+            mat-tab-link
+            [routerLink]="['/p', project.key ?? 'personal', 'settings', tab.id]"
+            [active]="current() === tab.id"
+            >{{ tab.label }}</a
+          >
+        }
+      </nav>
+      <mat-tab-nav-panel #settingsPanel>
+        @if (current() === 'general') {
+          <mat-card>
+            <mat-card-header><mat-card-title>General</mat-card-title></mat-card-header>
+            <mat-card-content>
+              @if (canManageProject()) {
+                <form class="row" [formGroup]="generalForm" (ngSubmit)="saveGeneral()">
+                  <mat-form-field>
+                    <mat-label>Name</mat-label>
+                    <input matInput formControlName="name" />
+                  </mat-form-field>
+                  <mat-form-field>
+                    <mat-label>Description</mat-label>
+                    <textarea matInput formControlName="description"></textarea>
+                  </mat-form-field>
+                  @if (project.ownerId === null) {
+                    <mat-checkbox formControlName="membersCanAssignOthers">
+                      Members can assign items to others
+                    </mat-checkbox>
                   }
-                </tbody>
-              </table>
-            </div>
-          </mat-card-content>
-        </mat-card>
 
-        <app-project-teams
-          [projectId]="project.id"
-          [members]="members()"
-          [canEdit]="canEditMembers()"
-        />
-      }
+                  <button
+                    mat-flat-button
+                    type="submit"
+                    [disabled]="generalForm.invalid || !!project.archivedAt"
+                  >
+                    Save
+                  </button>
+                  @if (project.ownerId === null) {
+                    <button mat-button type="button" (click)="toggleArchived(project)">
+                      {{ project.archivedAt ? 'Unarchive' : 'Archive' }}
+                    </button>
+                  }
+                </form>
+              } @else {
+                <p>{{ project.description || 'No description.' }}</p>
+                <p>
+                  Members {{ project.settings.membersCanAssignOthers ? 'can' : 'cannot' }} assign
+                  items to others.
+                </p>
+              }
+            </mat-card-content>
+          </mat-card>
+        }
 
-      <app-project-board-settings
-        [project]="project"
-        [(buckets)]="buckets"
-        (bucketsChange)="ctx?.buckets.set($event)"
-        [canManageBoard]="canManageBoard()"
-        [canManageProject]="canManageProject() && !project.archivedAt"
-        (projectChange)="boardSettingsSaved($event)"
-      />
+        @if (project.ownerId === null && current() === 'members') {
+          <mat-card>
+            <mat-card-header><mat-card-title>Members</mat-card-title></mat-card-header>
+            <mat-card-content>
+              @if (canAddMembers()) {
+                <div class="row">
+                  <app-user-picker
+                    label="User"
+                    [searchUsers]="findCandidates"
+                    [(selected)]="selectedCandidate"
+                    (selectedChange)="newUserId.set($event[0]?.id ?? '')"
+                  />
+                  @if (pmOnly()) {
+                    <button
+                      mat-flat-button
+                      type="button"
+                      [disabled]="!newUserId()"
+                      (click)="addMember()"
+                    >
+                      Add as Project Manager
+                    </button>
+                  } @else {
+                    <mat-form-field>
+                      <mat-label>Role</mat-label>
+                      <mat-select [value]="newRole()" (valueChange)="newRole.set($event)">
+                        @for (r of roles; track r) {
+                          <mat-option [value]="r">{{ roleLabels[r] }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                    <button
+                      mat-flat-button
+                      type="button"
+                      [disabled]="!newUserId()"
+                      (click)="addMember()"
+                    >
+                      Add
+                    </button>
+                  }
+                </div>
+              }
+
+              @if (phone()) {
+                <ul class="k-row-cards" aria-label="Members">
+                  @for (m of members(); track m.id) {
+                    <li class="k-row-card">
+                      <div class="k-row-card-title">
+                        {{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}
+                      </div>
+                      <dl>
+                        <dt>Email</dt>
+                        <dd>{{ m.email }}</dd>
+                        <dt>Role</dt>
+                        <dd>
+                          <ng-container *ngTemplateOutlet="memberRole; context: { $implicit: m }" />
+                        </dd>
+                        <dt>Visibility</dt>
+                        <dd>
+                          <ng-container
+                            *ngTemplateOutlet="memberVisibility; context: { $implicit: m }"
+                          />
+                        </dd>
+                      </dl>
+                      <div class="k-row-card-actions">
+                        <ng-container
+                          *ngTemplateOutlet="memberActions; context: { $implicit: m }"
+                        />
+                      </div>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <div
+                  class="k-table-scroll"
+                  tabindex="0"
+                  role="region"
+                  aria-label="Scrollable table"
+                >
+                  <table class="data">
+                    <thead>
+                      <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Email</th>
+                        <th scope="col">Role</th>
+                        <th scope="col">Visibility</th>
+                        <th scope="col"><span class="visually-hidden">Actions</span></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (m of members(); track m.id) {
+                        <tr>
+                          <td>{{ m.displayName }}{{ m.isActive ? '' : ' (deactivated)' }}</td>
+                          <td>{{ m.email }}</td>
+                          <td>
+                            <ng-container
+                              *ngTemplateOutlet="memberRole; context: { $implicit: m }"
+                            />
+                          </td>
+                          <td>
+                            <ng-container
+                              *ngTemplateOutlet="memberVisibility; context: { $implicit: m }"
+                            />
+                          </td>
+                          <td class="actions">
+                            <ng-container
+                              *ngTemplateOutlet="memberActions; context: { $implicit: m }"
+                            />
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
+            </mat-card-content>
+          </mat-card>
+        }
+        @if (project.ownerId === null && current() === 'teams') {
+          <app-project-teams
+            [projectId]="project.id"
+            [members]="members()"
+            [canEdit]="canEditMembers()"
+          />
+        }
+
+        @if (current() === 'buckets' || current() === 'labels') {
+          <app-project-board-settings
+            [section]="current() === 'labels' ? 'labels' : 'board'"
+            [project]="project"
+            [(buckets)]="buckets"
+            (bucketsChange)="ctx?.buckets.set($event)"
+            [canManageBoard]="canManageBoard()"
+            [canManageProject]="canManageProject() && !project.archivedAt"
+            (projectChange)="boardSettingsSaved($event)"
+          />
+        }
+      </mat-tab-nav-panel>
     }
   `,
 })
@@ -296,8 +366,53 @@ export class ProjectSettingsPage implements OnInit {
   /** The project shell's shared state, kept in step with changes made here. */
   protected readonly ctx = inject(ProjectContext, { optional: true });
 
-  /** Project key from the route (`/p/:key/settings`). */
+  /** Project key from the route (`/p/:key/settings/:section`). */
   readonly key = input.required<string>();
+  /** Settings tab from the route; unknown or hidden tabs show General (M8.5). */
+  readonly section = input<string>('general');
+  /**
+   * A member's role in words (member templates are untyped).
+   *
+   * @param m The member.
+   * @returns E.g. "Project Manager".
+   */
+  protected roleName(m: ProjectMemberDto): string {
+    return this.roleLabels[m.role];
+  }
+
+  /**
+   * A member's visibility in words.
+   *
+   * @param m The member.
+   * @returns E.g. "Own items".
+   */
+  protected visibilityName(m: ProjectMemberDto): string {
+    return this.visibilityLabels[m.visibility];
+  }
+
+  /** True at phone width, where member rows become cards. */
+  protected readonly phone = phoneLayout();
+
+  /** Tabs this space offers: members and teams only in ordinary projects. */
+  protected readonly tabs = computed(() => {
+    const shared = this.project()?.ownerId === null;
+    return [
+      { id: 'general', label: 'General' },
+      ...(shared
+        ? [
+            { id: 'members', label: 'Members' },
+            { id: 'teams', label: 'Teams' },
+          ]
+        : []),
+      { id: 'buckets', label: 'Buckets' },
+      { id: 'labels', label: 'Labels' },
+    ];
+  });
+  /** The tab shown. */
+  protected readonly current = computed(() => {
+    const section = this.section();
+    return this.tabs().some((t) => t.id === section) ? section : 'general';
+  });
 
   /** Role values for the template. */
   protected readonly roles = Object.values(ProjectRole);

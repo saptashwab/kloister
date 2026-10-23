@@ -15,6 +15,8 @@ import { Icon, type IconName } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
 import { dialogMotion } from '../../ui/motion';
 import { NewItemDialog, type NewItemData } from './new-item-dialog';
+import { PageActions } from '../../core/page-actions';
+import { SnapshotAction } from '../../ui/snapshot-action';
 
 /**
  * Frame of one project (`/p/:key/…`, DESIGN §7): breadcrumb, project name,
@@ -27,8 +29,16 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
  */
 @Component({
   selector: 'app-project-shell',
-  imports: [RouterOutlet, RouterLink, MatTabsModule, MatButtonModule, Icon, Skeleton],
-  providers: [ProjectContext],
+  imports: [
+    SnapshotAction,
+    RouterOutlet,
+    RouterLink,
+    MatTabsModule,
+    MatButtonModule,
+    Icon,
+    Skeleton,
+  ],
+  providers: [ProjectContext, PageActions],
   styles: `
     .head {
       padding: var(--k-size-14px) var(--k-gutter) 0;
@@ -70,6 +80,9 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
         <button type="button" class="k-chip" (click)="shortcuts.open()" aria-label="Search or jump">
           <app-icon name="search" />Search or jump <kbd>/</kbd>
         </button>
+        @if (pageActions.export(); as exportAction) {
+          <app-snapshot-action [source]="exportAction.source" [filters]="exportAction.filters" />
+        }
         @if (canCreate()) {
           <button mat-flat-button type="button" (click)="newItem()">
             <app-icon name="plus" />New item
@@ -112,6 +125,8 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
   `,
 })
 export class ProjectShellPage {
+  /** The open view's page actions (Export…), shown in the header. */
+  protected readonly pageActions = inject(PageActions);
   /** Transfer is project PM/Lead only; snapshots use their own control. */
   protected readonly adoPermission = ProjectPermission.EXPORT_ADO;
   /** Lazy command palette shared with the app shell. */

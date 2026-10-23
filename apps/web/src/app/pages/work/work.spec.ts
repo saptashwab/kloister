@@ -30,6 +30,7 @@ describe('WorkPage', () => {
         status: 'IN_PROGRESS',
         priority: 2,
         dueDate: '2000-01-01',
+        dueTime: null,
       },
     ],
     nextCursor: null,
@@ -154,6 +155,27 @@ describe('WorkPage', () => {
     expect(itemsApi.update.mock.invocationCallOrder[1]).toBeLessThan(
       itemsApi.move.mock.invocationCallOrder[0],
     );
+  });
+
+  it('changes a board card status from its pill menu, not a full select (M8.5)', async () => {
+    const card = { ...page.items[0], canEdit: true };
+    const { itemsApi, fixture, root } = await render('u1', [{ ...page, items: [card] }]);
+    (fixture.componentInstance as unknown as { view: { set(v: 'board'): void } }).view.set('board');
+    await settle(fixture);
+    expect(root.querySelector('article.card mat-select')).toBeNull();
+    const trigger = root.querySelector<HTMLButtonElement>(
+      'button[aria-label="Status for Invoice form: In progress. Change"]',
+    );
+    expect(trigger).not.toBeNull();
+    itemsApi.update.mockResolvedValue({ status: 'DONE', bucketId: 'b1', can: { edit: true } });
+    itemsApi.buckets.mockResolvedValue([]);
+    trigger?.click();
+    await settle(fixture);
+    const options = [...document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item')];
+    expect(options.find((o) => o.textContent?.trim() === 'In progress')?.disabled).toBe(true);
+    options.find((o) => o.textContent?.trim() === 'Done')?.click();
+    await settle(fixture);
+    expect(itemsApi.update).toHaveBeenCalledWith('p1', 'i1', { status: 'DONE' });
   });
 
   it('does not write read-only cards, and rolls back a refused edit', async () => {

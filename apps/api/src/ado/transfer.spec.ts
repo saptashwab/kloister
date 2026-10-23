@@ -52,6 +52,7 @@ function item(id: string, type: ItemType = 'TASK', parentId: string | null = nul
     teamId: null,
     startDate: null,
     dueDate: null,
+    dueTime: null,
     priority: 2,
     assignees: [],
     labels: [],
@@ -357,6 +358,17 @@ describe('outgoing creates and hierarchy', () => {
     task.dueDate = new Date('2026-12-24T00:00:00Z');
     const table = readCsv(exportPlan(d, outgoing(), [task], []).files[0].csv);
     expect(table.rows[0]['Target Date']).toBe('2026-12-24T12:00:00Z');
+  });
+  it('sends only the due date and warns that due times stay in Kloister', () => {
+    const d = destination();
+    d.profile.fields = { dueDate: 'Target Date' };
+    d.profile.dateTypes = { dueDate: ['TASK'] };
+    const task = item('1');
+    task.dueDate = new Date('2026-12-24T00:00:00Z');
+    task.dueTime = 17 * 60;
+    const plan = exportPlan(d, outgoing(), [task], []);
+    expect(plan.warnings.join()).toMatch(/Due times are not exported/);
+    expect(readCsv(plan.files[0].csv).rows[0]['Target Date']).toBe('2026-12-24T12:00:00Z');
   });
   it('warns when a Task sits directly under a Feature, which ADO backlogs do not show', () => {
     const plan = exportPlan(

@@ -260,6 +260,22 @@ export interface ProjectDto {
   myPermissions: ProjectPermission[];
   /** ISO timestamp of creation. */
   createdAt: string;
+  /**
+   * Counts for the Projects list (M8.5), limited to what the caller can see;
+   * null where the caller is not a member (an admin's "All projects" rows),
+   * absent outside the list.
+   */
+  summary?: ProjectSummaryDto | null;
+}
+
+/** What the caller can see of a project's work, for the Projects list. */
+export interface ProjectSummaryDto {
+  /** Visible items that are not Done. */
+  open: number;
+  /** Visible open items past their due date, or due time today (server time). */
+  overdue: number;
+  /** ISO time of the newest recorded change to a visible item, or null. */
+  lastActivityAt: string | null;
 }
 
 /** Body of `POST /projects` (admins only). */

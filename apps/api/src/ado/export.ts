@@ -131,6 +131,9 @@ export function exportPlan(
   };
   const usable = selection.items.filter((i) => !omitted.has(i.id));
   const newItems = usable.filter((i) => !linked.get(i.id)?.remoteId);
+  // ADO files carry the calendar date only (SPEC §7.3); due times stay in Kloister.
+  if (p.fields.dueDate && usable.some((i) => i.dueTime !== null))
+    warnings.push('Due times are not exported; ADO receives the due date only.');
   const values = new Map<string, Values>();
   const updates: { item: TransferItem; fields: AdoField[]; raw: Record<string, string> }[] = [];
   const raws = (link: AdoItemLink | undefined): Record<string, string> =>

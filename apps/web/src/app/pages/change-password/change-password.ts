@@ -10,6 +10,7 @@ import { errorMessage } from '../../core/api';
 import { required } from '../../core/validators';
 import { AuthService } from '../../core/auth.service';
 import { SessionStore } from '../../core/session.store';
+import { ThemeService } from '../../core/theme.service';
 
 /**
  * Password change screen. Forced after login with a temporary password
@@ -28,7 +29,9 @@ import { SessionStore } from '../../core/session.store';
   template: `
     <mat-card class="auth-card">
       <mat-card-header
-        ><mat-card-title><h1>Change password</h1></mat-card-title></mat-card-header
+        ><mat-card-title
+          ><h1>Change your {{ theme.appName() }} password</h1></mat-card-title
+        ></mat-card-header
       >
       <mat-card-content>
         @if (forced()) {
@@ -70,6 +73,9 @@ import { SessionStore } from '../../core/session.store';
   `,
 })
 export class ChangePasswordPage {
+  /** Branding shown in the heading; the sign-in pages retry it if its first load timed out. */
+  protected readonly theme = inject(ThemeService);
+
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly store = inject(SessionStore);

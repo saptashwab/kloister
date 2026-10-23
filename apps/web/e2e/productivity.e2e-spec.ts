@@ -184,7 +184,7 @@ test('new account tour follows initial password success, skips durably across br
   await page.getByLabel('Email', { exact: true }).fill(email);
   await page.getByLabel('Password', { exact: true }).fill(user.temporaryPassword);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Change password', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Change your .+ password$/ })).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByLabel('Current password', { exact: true }).fill(user.temporaryPassword);
   await page.getByLabel('New password', { exact: true }).fill(E2E_PASSWORD);

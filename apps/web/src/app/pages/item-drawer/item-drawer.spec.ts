@@ -137,7 +137,7 @@ describe('ItemDrawer', () => {
     expect(root.querySelector('h1 [aria-label]')).toBeNull();
     expect(root.querySelector('button.title-btn')).toBeNull();
     expect(root.querySelectorAll('mat-select').length).toBe(0);
-    expect(root.querySelectorAll('input[type="date"]').length).toBe(0);
+    expect(root.querySelectorAll('app-date-field, app-time-field').length).toBe(0);
     expect(root.querySelector('dl.fields')?.textContent).toContain('Bob');
     expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
     expect(root.querySelector('input[aria-label="New checklist line"]')).toBeNull();
@@ -170,12 +170,23 @@ describe('ItemDrawer', () => {
     expect(root.querySelector('h1')?.textContent).toContain('New title');
   });
 
-  it('offers a non-drag card order control and undoes with its previous neighbour', async () => {
+  it('offers move to top and bottom in its menu and undoes with the previous neighbour', async () => {
     const item = makeItem(4, { position: 2 });
     const before = makeItem(5, { position: 1 });
-    const { drawer, itemsApi, show, root } = await render(item, [before]);
+    const { drawer, itemsApi, show, root, fixture } = await render(item, [before]);
     itemsApi.move.mockResolvedValue({ ...item, position: 0 });
-    expect(root.querySelector('mat-select[aria-label="Position in bucket"]')).not.toBeNull();
+    // The old "Board order" select is gone (M8.5); the actions menu moves the card.
+    expect(root.querySelector('mat-select[aria-label="Position in bucket"]')).toBeNull();
+    root.querySelector<HTMLButtonElement>('[aria-label="More actions"]')?.click();
+    await settle(fixture);
+    const items = [...document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item')];
+    const label = (b: HTMLButtonElement) => b.textContent?.trim() ?? '';
+    expect(items.map(label).slice(0, 2)).toEqual([
+      'Move to top of bucket',
+      'Move to bottom of bucket',
+    ]);
+    // Already last in its bucket: only "top" is offered.
+    expect(items[1]?.disabled).toBe(true);
     await drawer.reorderCard('none');
     expect(itemsApi.move).toHaveBeenCalledWith('p1', 'i4', { bucketId: 'b1', afterId: null });
     await show.mock.calls[0]?.[1]?.();
@@ -267,8 +278,14 @@ describe('ItemDrawer', () => {
       childCount: 2,
       can: { edit: true, move: true, delete: true, deleteCascade: false, annotate: true },
     });
-    const { root } = await render(parent);
-    expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
+    const { root, fixture } = await render(parent);
+    // The menu stays for moving the card, but without Delete.
+    root.querySelector<HTMLButtonElement>('[aria-label="More actions"]')?.click();
+    await settle(fixture);
+    const labels = [...document.querySelectorAll('.mat-mdc-menu-item')].map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(labels).not.toContain('Delete item');
   });
 
   it('lets callers without ASSIGN_OTHERS change only their own assignment', async () => {

@@ -51,6 +51,37 @@ describe('ProjectsPage', () => {
     expect(root.textContent).not.toContain('New project');
   });
 
+  it('shows open, overdue and last activity, and a dash without a summary (M8.5)', async () => {
+    list.mockReset();
+    const counted = {
+      ...project,
+      summary: { open: 7, overdue: 2, lastActivityAt: '2026-10-23T12:05:00.000Z' },
+    };
+    const other = { ...project, id: 'p2', key: 'OTH', myRole: null, summary: null };
+    await TestBed.configureTestingModule({
+      imports: [ProjectsPage],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ProjectsApiService,
+          useValue: {
+            list: vi.fn().mockResolvedValue({ items: [counted, other], nextCursor: null }),
+          },
+        },
+        { provide: AdminApiService, useValue: {} },
+      ],
+    }).compileComponents();
+    TestBed.inject(SessionStore).set({ systemRole: 'ADMIN' } as UserDto);
+    const fixture = TestBed.createComponent(ProjectsPage);
+    await settle(fixture);
+    const rows = [...(fixture.nativeElement as HTMLElement).querySelectorAll('tbody tr')].map((r) =>
+      [...r.querySelectorAll('td')].map((c) => c.textContent?.trim()),
+    );
+    expect(rows[0]?.slice(3, 5)).toEqual(['7', '2']);
+    expect(rows[0]?.[5]).toMatch(/^23 Oct 2026, \d\d:\d\d$/);
+    expect(rows[1]?.slice(3, 6)).toEqual(['—', '—', '—']);
+  });
+
   it('gives admins the All/My toggle and the create form', async () => {
     const root = await render('ADMIN');
     expect(root.textContent).toContain('All projects');

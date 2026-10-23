@@ -33,7 +33,7 @@ import {
   Min,
   ValidateBy,
 } from 'class-validator';
-import { IsCalendarDate } from '../common/dates.js';
+import { IsCalendarDate, IsDueTime } from '../common/dates.js';
 import { Nullable, OmittableNotNull, queryBoolean, trim } from '../common/dto-helpers.js';
 import { PageQueryDto } from '../common/pagination.js';
 import { LowercaseUuid } from '../common/uuid.js';
@@ -189,6 +189,11 @@ export class CreateItemDto implements CreateItemRequest {
   @IsCalendarDate()
   dueDate?: string | null;
 
+  /** Due time `HH:MM` on the due date. */
+  @Nullable()
+  @IsDueTime()
+  dueTime?: string | null;
+
   /** Assignees. */
   @OmittableNotNull()
   @IsArray()
@@ -267,6 +272,11 @@ export class UpdateItemDto implements UpdateItemRequest {
   @Nullable()
   @IsCalendarDate()
   dueDate?: string | null;
+
+  /** New due time `HH:MM`, or null; needs a due date. */
+  @Nullable()
+  @IsDueTime()
+  dueTime?: string | null;
 
   /** Full assignee list. */
   @OmittableNotNull()

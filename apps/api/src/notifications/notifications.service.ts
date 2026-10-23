@@ -102,7 +102,8 @@ export class NotificationsService {
   /**
    * The daily due-date check (SPEC §6, 09:00 server time): "due tomorrow" for
    * open items due tomorrow, and "overdue" once for open items whose due date
-   * passed within the last week. Assignees are notified, or the creator of an
+   * passed within the last week, or which are due today at a time already
+   * passed. Assignees are notified, or the creator of an
    * item nobody is assigned to. Running it twice on a day adds nothing.
    *
    * @param now When the check runs.
@@ -120,6 +121,7 @@ export class NotificationsService {
           {
             dueDate: { gte: toDbDate(windows.overdueFrom), lte: toDbDate(windows.overdueTo) },
           },
+          { dueDate: toDbDate(windows.today), dueTime: { lt: windows.minutes } },
         ],
       },
       select: {

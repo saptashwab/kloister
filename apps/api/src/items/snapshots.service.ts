@@ -221,6 +221,8 @@ export class SnapshotsService {
           'Description',
           'Checklist progress',
           'Details',
+          // Added in M8.5 at the end, so earlier columns keep their positions.
+          'Due time',
         ],
         rows: [],
       },
@@ -279,6 +281,7 @@ export class SnapshotsService {
         readableText(item.description),
         `${item.checklist.done}/${item.checklist.total}`,
         'Checklists; Notes; Dependencies; Files; Activity (linked by Item)',
+        item.dueTime ?? '',
       ]);
       for (const line of item.checklistItems)
         tables['Checklists']?.rows.push([

@@ -506,3 +506,30 @@ and a PM policy can lock it to Detailed. Previews start with a one-glance summar
 statuses and item keys instead of raw identifiers; the last-synced values appear
 only in Detailed review. Settings start with a sample-export upload that pre-fills
 suggestions, and label creation reuses the shared label palette.
+
+## 15. M8.5 patterns
+
+- **Dates and times.** Dates show as `23 Oct 2026` everywhere (they read the same in every locale);
+  moments as `23 Oct 2026, 14:05` in the viewer's time zone, 24-hour. Cards keep their short relative
+  wording ("Due today", "Due in 3 days", "Fri 24 Oct"), adding a due time when one is set ("Due today
+  17:00", "Overdue since 17:00"). Every date is entered with the Material datepicker (typing `23 Oct
+2026` or `2026-10-23` works) and every due time with the Material time list in 30-minute steps
+  (typing any `HH:MM` works). Compact drawer fields use the `k-inline` look; forms use outlined
+  Material fields. The `appDate` pipe and the date/time fields load only with the screens using them.
+- **Phone cards.** Below 600 px, wide tables (Projects, Users, Audit log, Members, Sprints, Backlog)
+  render as a list of cards: the row's main value as the title, other columns as a two-column
+  label/value list and the row's actions underneath. Pages render a real table on wider screens
+  instead of restyling table rows, so screen readers keep table semantics. Backlog cards keep tree
+  indentation and the selection checkbox; the bulk bar follows the list and sticks to the bottom.
+- **Page actions.** Board, backlog and sprints show Export… in the project header next to New item
+  (outlined button with the download icon); My work shows it in its own header. It wraps with the
+  header at narrow widths rather than collapsing into a separate menu, since it is the only action.
+- **Row menus.** Rows with several actions use one icon button ("Actions for <name>") opening a
+  Material menu: bucket rows (Move up, Move down, Delete…) and the drawer (Move to top/bottom of
+  bucket, Delete item). The My work status board uses the status pill itself as the menu button.
+- **Settings tabs.** Project settings use a Material tab nav bar (General, Members, Teams, Buckets,
+  Labels; personal spaces: General, Buckets, Labels) with one URL per tab. The tab is named Buckets
+  so it never reads like the project's Board tab.
+- **Audit log.** Actions in words grouped by area, the actor's name over their email, project
+  key · name, the entity by name or key (never a current item title), detail lines such as
+  "Changed title: Old → New", and the stored JSON behind a "Technical details" disclosure.

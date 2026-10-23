@@ -103,6 +103,8 @@ model AuditLog {
 
   @@index([createdAt, id])
   @@index([actorId])
+  /// Finds an admin's current cross-project visit (SPEC §3.1).
+  @@index([actorId, action, projectId, createdAt])
   @@index([entityType, entityId])
   @@index([projectId])
 }
@@ -430,6 +432,8 @@ model WorkItem {
   teamId      String?    @db.Uuid
   startDate   DateTime?  @db.Date
   dueDate     DateTime?  @db.Date
+  /// Optional due time on dueDate, minutes after midnight (wall-clock, no time zone).
+  dueTime     Int?       @db.SmallInt
   /// Order within the bucket, ascending (fractional index).
   position    Float
   createdById String     @db.Uuid

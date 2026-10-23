@@ -1,5 +1,7 @@
 import {
   type BucketDto,
+  dueNow,
+  isOverdueAt,
   type ItemRefDto,
   ItemStatus,
   type ItemType,
@@ -74,14 +76,20 @@ export function endOfWeek(today: string): string {
 }
 
 /**
- * Reports whether an unfinished item is past its due date.
+ * Reports whether an unfinished item is overdue: before today, or today past
+ * its due time (SPEC §6, M8.5).
  *
  * @param item The item.
  * @param today `YYYY-MM-DD`.
- * @returns True when due before today and not Done.
+ * @param minutes Minutes after midnight now; defaults to the current time.
+ * @returns True when overdue and not Done.
  */
-export function isOverdue(item: Pick<WorkItemDto, 'dueDate' | 'status'>, today: string): boolean {
-  return item.dueDate !== null && item.dueDate < today && item.status !== ItemStatus.DONE;
+export function isOverdue(
+  item: Pick<WorkItemDto, 'dueDate' | 'status'> & { dueTime?: string | null },
+  today: string,
+  minutes: number = dueNow(new Date()).minutes,
+): boolean {
+  return isOverdueAt(item, { date: today, minutes });
 }
 
 /**

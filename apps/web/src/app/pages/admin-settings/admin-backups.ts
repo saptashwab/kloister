@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, inject, type OnInit, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -18,6 +17,7 @@ import { required, wholeNumber } from '../../core/validators';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
+import { AppDatePipe } from '../../ui/app-date.pipe';
 
 /** How often the page asks whether a running backup has finished. */
 const POLL_MS = 2000;
@@ -35,7 +35,7 @@ const POLL_MS = 2000;
   selector: 'app-admin-backups',
   host: { class: 'k-tab' },
   imports: [
-    DatePipe,
+    AppDatePipe,
     ReactiveFormsModule,
     MatButtonModule,
     MatFormFieldModule,
@@ -61,7 +61,7 @@ const POLL_MS = 2000;
           <div>
             <dt>Next backup</dt>
             <dd>
-              {{ status.nextRunAt ? (status.nextRunAt | date: 'medium') + ' (your time)' : 'Off' }}
+              {{ status.nextRunAt ? (status.nextRunAt | appDate) + ' (your time)' : 'Off' }}
             </dd>
           </div>
           <div>
@@ -127,7 +127,7 @@ const POLL_MS = 2000;
                         }}
                       </span>
                     </td>
-                    <td>{{ run.startedAt | date: 'medium' }}</td>
+                    <td>{{ run.startedAt | appDate }}</td>
                     <td>{{ run.trigger === manual ? 'Run now' : 'Schedule' }}</td>
                     <td>{{ run.sizeBytes === null ? '' : size(run.sizeBytes) }}</td>
                     <td class="mono">
@@ -163,7 +163,7 @@ const POLL_MS = 2000;
                   <tr>
                     <td class="mono">{{ file.name }}</td>
                     <td>{{ size(file.sizeBytes) }}</td>
-                    <td>{{ file.modifiedAt | date: 'medium' }}</td>
+                    <td>{{ file.modifiedAt | appDate }}</td>
                   </tr>
                 }
               </tbody>

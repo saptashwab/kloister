@@ -1,4 +1,3 @@
-import { SnapshotAction } from '../../ui/snapshot-action';
 import { Component, computed, inject, type OnInit, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -27,6 +26,9 @@ import { Icon } from '../../ui/icon';
 import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ProjectContext } from '../../core/project-context';
 import { SessionStore } from '../../core/session.store';
+import { PageActions } from '../../core/page-actions';
+import { NgTemplateOutlet } from '@angular/common';
+import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
 
 /**
  * The backlog / hierarchy view (SPEC §6): the Epic → Feature → Story → Task
@@ -42,7 +44,8 @@ import { SessionStore } from '../../core/session.store';
 @Component({
   selector: 'app-backlog',
   imports: [
-    SnapshotAction,
+    NgTemplateOutlet,
+    RowCardStyles,
     RouterOutlet,
     MatButtonModule,
     MatCheckboxModule,
@@ -77,6 +80,14 @@ import { SessionStore } from '../../core/session.store';
     }
     .bulk mat-form-field {
       width: var(--k-size-170px);
+    }
+    /* At phone width the bulk bar follows the list and sticks to the bottom (M8.5). */
+    @media (max-width: 599px) {
+      .bulk {
+        order: 1;
+        top: auto;
+        bottom: 0;
+      }
     }
     .tree {
       border: var(--k-line) solid var(--k-border);
@@ -131,7 +142,6 @@ import { SessionStore } from '../../core/session.store';
       <p class="k-alert" role="alert">{{ error() }}</p>
     }
 
-    <app-snapshot-action [source]="ctx.project()?.id ?? ''" [filters]="snapshotFilters()" />
     <div class="row filters">
       <mat-form-field>
         <mat-label>Search</mat-label>
@@ -248,6 +258,44 @@ import { SessionStore } from '../../core/session.store';
         title="The backlog is empty"
         text="Items created on the board or with “New item” appear here as a tree of Epics, Features, Stories and Tasks."
       />
+    } @else if (phone()) {
+      <app-row-card-styles />
+      <div class="phone-select">
+        <mat-checkbox [checked]="allShownSelected()" (change)="selectAllShown($event.checked)"
+          >Select all shown</mat-checkbox
+        >
+      </div>
+      <ul class="k-row-cards" aria-label="Backlog">
+        @for (row of rows(); track row.node.id) {
+          @let item = row.node.item;
+          <li class="k-row-card" [style.margin-inline-start.px]="row.depth * 16">
+            <div class="k-row-card-title">
+              @if (item) {
+                <mat-checkbox
+                  [aria-label]="'Select ' + item.key"
+                  [checked]="selected().has(item.id)"
+                  (change)="toggle(item.id, $event.checked)"
+                />
+              }
+              <ng-container *ngTemplateOutlet="itemCell; context: { $implicit: row }" />
+            </div>
+            @if (item) {
+              <dl>
+                <dt>Status</dt>
+                <dd><app-status-pill [status]="item.status" /></dd>
+                <dt>Sprint</dt>
+                <dd>{{ sprintName(item) || '—' }}</dd>
+                <dt>Bucket</dt>
+                <dd>{{ bucketName(item) || '—' }}</dd>
+                <dt>Assignees</dt>
+                <dd>{{ assigneeNames(item) || '—' }}</dd>
+              </dl>
+            }
+          </li>
+        } @empty {
+          <li class="muted">No items match the filters.</li>
+        }
+      </ul>
     } @else {
       <div class="tree k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
         <table class="data">
@@ -281,34 +329,7 @@ import { SessionStore } from '../../core/session.store';
                   }
                 </td>
                 <td [style.padding-left.px]="10 + row.depth * 24">
-                  <span class="item">
-                    @if (row.node.children.length > 0) {
-                      <button
-                        class="toggle"
-                        type="button"
-                        [class.open]="!collapsed().has(row.node.id)"
-                        [attr.aria-expanded]="!collapsed().has(row.node.id)"
-                        [attr.aria-label]="
-                          (collapsed().has(row.node.id) ? 'Expand ' : 'Collapse ') +
-                          row.node.ref.key
-                        "
-                        (click)="toggleCollapsed(row.node.id)"
-                      >
-                        <app-icon name="chevronRight" [size]="14" [stroke]="2.4" />
-                      </button>
-                    } @else {
-                      <span class="spacer-24"></span>
-                    }
-                    <app-type-icon [type]="row.node.ref.type" />
-                    <span class="k-key">{{ row.node.ref.key }}</span>
-                    @if (item) {
-                      <a href="" (click)="open($event, item)">{{ item.title }}</a>
-                    } @else {
-                      <span class="ghost" title="Outside your view: shown as a title only">{{
-                        row.node.ref.title
-                      }}</span>
-                    }
-                  </span>
+                  <ng-container *ngTemplateOutlet="itemCell; context: { $implicit: row }" />
                 </td>
                 <td>
                   @if (item) {
@@ -329,10 +350,42 @@ import { SessionStore } from '../../core/session.store';
       </div>
     }
 
+    <ng-template #itemCell let-row>
+      @let item = row.node.item;
+      <span class="item">
+        @if (row.node.children.length > 0) {
+          <button
+            class="toggle"
+            type="button"
+            [class.open]="!collapsed().has(row.node.id)"
+            [attr.aria-expanded]="!collapsed().has(row.node.id)"
+            [attr.aria-label]="
+              (collapsed().has(row.node.id) ? 'Expand ' : 'Collapse ') + row.node.ref.key
+            "
+            (click)="toggleCollapsed(row.node.id)"
+          >
+            <app-icon name="chevronRight" [size]="14" [stroke]="2.4" />
+          </button>
+        } @else {
+          <span class="spacer-24"></span>
+        }
+        <app-type-icon [type]="row.node.ref.type" />
+        <span class="k-key">{{ row.node.ref.key }}</span>
+        @if (item) {
+          <a href="" (click)="open($event, item)">{{ item.title }}</a>
+        } @else {
+          <span class="ghost" title="Outside your view: shown as a title only">{{
+            row.node.ref.title
+          }}</span>
+        }
+      </span>
+    </ng-template>
     <router-outlet />
   `,
 })
 export class BacklogPage implements OnInit {
+  /** True at phone width, where tree rows become cards. */
+  protected readonly phone = phoneLayout();
   /** Distinct transfer capability, never applied to snapshots. */
   protected readonly adoPermission = ProjectPermission.EXPORT_ADO;
 
@@ -344,6 +397,11 @@ export class BacklogPage implements OnInit {
   }
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
+  /** Shows this view's Export… in the project header's page actions. */
+  private readonly pageActions = inject(PageActions).register(() => ({
+    source: this.ctx.project()?.id ?? '',
+    filters: this.snapshotFilters(),
+  }));
   private readonly api = inject(ItemsApiService);
   private readonly session = inject(SessionStore);
   private readonly router = inject(Router);

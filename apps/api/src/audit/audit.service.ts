@@ -40,6 +40,9 @@ export interface AuditFilter {
   to?: Date;
 }
 
+/** How long one cross-project visit entry covers further reads (SPEC §3.1). */
+export const VISIT_WINDOW_MINUTES = 30;
+
 /** A Prisma client or an interactive transaction client. */
 export type DbClient = Prisma.TransactionClient | PrismaService;
 
@@ -73,6 +76,42 @@ export class AuditService {
         projectId: record.projectId ?? null,
         meta: record.meta ?? {},
       },
+    });
+  }
+
+  /**
+   * Appends one entry unless the same actor already has an entry with this
+   * action, project and session within the visit window (SPEC §3.1, M8.5).
+   * Entries are never updated, so a long visit leaves one entry per window.
+   * An advisory transaction lock on (actor, project) keeps parallel first
+   * requests of one page from writing duplicates.
+   *
+   * @param record What to record; needs an actor and a project.
+   * @param sessionId Session the visit belongs to; stored in `meta.sessionId`.
+   * @param windowMinutes How long one recorded entry covers further requests.
+   * @returns True when a new entry was written.
+   */
+  async recordVisit(
+    record: AuditRecord & { actorId: string; projectId: string },
+    sessionId: string,
+    windowMinutes = VISIT_WINDOW_MINUTES,
+  ): Promise<boolean> {
+    return this.prisma.$transaction(async (tx) => {
+      // pg_advisory_xact_lock returns void, which the client cannot read; select a constant instead.
+      await tx.$queryRaw`SELECT 1 AS locked FROM (SELECT pg_advisory_xact_lock(hashtextextended(${`${record.actorId}:${record.projectId}`}, 0))) AS l`;
+      const recent = await tx.auditLog.findFirst({
+        where: {
+          actorId: record.actorId,
+          action: record.action,
+          projectId: record.projectId,
+          createdAt: { gte: new Date(Date.now() - windowMinutes * 60_000) },
+          meta: { path: ['sessionId'], equals: sessionId },
+        },
+        select: { id: true },
+      });
+      if (recent !== null) return false;
+      await this.record({ ...record, meta: { ...record.meta, sessionId } }, tx);
+      return true;
     });
   }
 
@@ -168,14 +207,19 @@ export class AuditService {
         ...(Object.keys(createdAt).length > 0 ? { createdAt } : {}),
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      include: { actor: { select: { email: true } } },
+      include: { actor: { select: { email: true, displayName: true } } },
       ...pageArgs(page),
     });
+    const names = await this.names(rows);
 
     return toPage(rows, page, (row) => ({
       id: row.id,
       actorId: row.actorId,
       actorEmail: row.actor?.email ?? null,
+      actorName: row.actor?.displayName ?? null,
+      projectKey: names.projects.get(row.projectId ?? '')?.key ?? null,
+      projectName: names.projects.get(row.projectId ?? '')?.name ?? null,
+      entityLabel: names.entities.get(`${row.entityType}:${row.entityId ?? ''}`) ?? null,
       action: row.action,
       entityType: row.entityType,
       entityId: row.entityId,
@@ -187,4 +231,86 @@ export class AuditService {
       createdAt: row.createdAt.toISOString(),
     }));
   }
+
+  /**
+   * Resolves readable names for one page of entries at read time; stored
+   * rows never change (M8.5). Items resolve to their key only, never their
+   * current title, and members to the member's display name.
+   *
+   * @param rows Entries of the page.
+   * @returns Project keys/names by id and entity labels by `type:id`.
+   */
+  private async names(
+    rows: { projectId: string | null; entityType: string; entityId: string | null }[],
+  ): Promise<{
+    projects: Map<string, { key: string | null; name: string }>;
+    entities: Map<string, string>;
+  }> {
+    const ids = (type: string): string[] => [
+      ...new Set(
+        rows
+          .filter((r) => r.entityType === type && r.entityId !== null && isUuid(r.entityId))
+          .map((r) => r.entityId!),
+      ),
+    ];
+    const projectIds = [
+      ...new Set([
+        ...rows.flatMap((r) => (r.projectId === null ? [] : [r.projectId])),
+        ...ids('Project'),
+      ]),
+    ];
+    const [projects, items, users, members, buckets, labels, sprints, teams] = await Promise.all([
+      this.prisma.project.findMany({
+        where: { id: { in: projectIds } },
+        select: { id: true, key: true, name: true },
+      }),
+      this.prisma.workItem.findMany({
+        where: { id: { in: ids('WorkItem') } },
+        select: { id: true, number: true, project: { select: { key: true } } },
+      }),
+      this.prisma.user.findMany({
+        where: { id: { in: ids('User') } },
+        select: { id: true, displayName: true },
+      }),
+      this.prisma.projectMember.findMany({
+        where: { id: { in: ids('ProjectMember') } },
+        select: { id: true, user: { select: { displayName: true } } },
+      }),
+      this.prisma.bucket.findMany({ where: { id: { in: ids('Bucket') } }, select: NAME }),
+      this.prisma.label.findMany({ where: { id: { in: ids('Label') } }, select: NAME }),
+      this.prisma.sprint.findMany({ where: { id: { in: ids('Sprint') } }, select: NAME }),
+      this.prisma.team.findMany({ where: { id: { in: ids('Team') } }, select: NAME }),
+    ]);
+    const entities = new Map<string, string>();
+    for (const p of projects) entities.set(`Project:${p.id}`, p.key ?? p.name);
+    for (const i of items)
+      entities.set(
+        `WorkItem:${i.id}`,
+        i.project.key === null ? `#${i.number}` : `${i.project.key}-${i.number}`,
+      );
+    for (const u of users) entities.set(`User:${u.id}`, u.displayName);
+    for (const m of members) entities.set(`ProjectMember:${m.id}`, m.user.displayName);
+    for (const [type, list] of [
+      ['Bucket', buckets],
+      ['Label', labels],
+      ['Sprint', sprints],
+      ['Team', teams],
+    ] as const)
+      for (const row of list) entities.set(`${type}:${row.id}`, row.name);
+    return { projects: new Map(projects.map((p) => [p.id, p])), entities };
+  }
+}
+
+/** Columns read for entities shown by name. */
+const NAME = { id: true, name: true } as const;
+
+/**
+ * Whether a stored entity id is a uuid; other ids (setting keys, file names)
+ * are never looked up.
+ *
+ * @param value Stored entity id.
+ * @returns True for a uuid.
+ */
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }

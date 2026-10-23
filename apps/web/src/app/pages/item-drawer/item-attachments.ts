@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { Component, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import type { AttachmentDto } from '@kloister/shared';
@@ -8,6 +7,7 @@ import { Dialogs } from '../../ui/dialogs';
 import { Icon } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
 import { formatSize } from '../../core/format';
+import { AppDatePipe } from '../../ui/app-date.pipe';
 
 /**
  * An item's attachments in the drawer (SPEC §6, DESIGN §10): the list with
@@ -22,7 +22,7 @@ import { formatSize } from '../../core/format';
  */
 @Component({
   selector: 'app-item-attachments',
-  imports: [DatePipe, MatButtonModule, Icon],
+  imports: [AppDatePipe, MatButtonModule, Icon],
   host: {
     class: 'k-files',
     '[class.dragging]': 'dragging()',
@@ -50,7 +50,7 @@ import { formatSize } from '../../core/format';
           <a class="file-name" [href]="a.url" download>{{ a.name }}</a>
           <span class="file-meta"
             >{{ size(a.sizeBytes) }} · {{ a.uploaderName }} ·
-            {{ a.createdAt | date: 'mediumDate' }}</span
+            {{ a.createdAt | appDate: 'day' }}</span
           >
           @if (a.can.delete && writable()) {
             <button

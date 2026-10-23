@@ -1,4 +1,6 @@
 import {
+  dueNow,
+  isOverdueAt,
   ItemStatus,
   type MoveItemRequest,
   type UpdateItemRequest,
@@ -38,44 +40,65 @@ export function shortDate(date: string): string {
   return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
 
+/** Fields the due rules read; `dueTime` is optional for older payloads. */
+export type DueItem = Pick<WorkItemDto, 'dueDate' | 'status'> & { dueTime?: string | null };
+
 /**
- * How urgent an item's due date is: overdue (before today and not Done, as
- * decided in M4), soon (today to {@link DUE_SOON_DAYS} days ahead, not Done)
- * or later.
+ * Minutes after midnight now, in the viewer's local time.
+ *
+ * @returns Minutes (0–1439).
+ */
+export function nowMinutes(): number {
+  return dueNow(new Date()).minutes;
+}
+
+/**
+ * How urgent an item's due date is: overdue (not Done, and before today, or
+ * today past its due time; SPEC §6, M8.5), soon (today to
+ * {@link DUE_SOON_DAYS} days ahead, not Done) or later.
  *
  * @param item The item.
  * @param today `YYYY-MM-DD`.
+ * @param minutes Minutes after midnight now; defaults to the current time.
  * @returns The state, or null without a due date.
  */
 export function dueState(
-  item: Pick<WorkItemDto, 'dueDate' | 'status'>,
+  item: DueItem,
   today: string,
+  minutes: number = nowMinutes(),
 ): DueState | null {
   if (item.dueDate === null) return null;
   if (item.status === ItemStatus.DONE) return 'later';
-  const days = daysBetween(today, item.dueDate);
-  if (days < 0) return 'overdue';
-  return days <= DUE_SOON_DAYS ? 'soon' : 'later';
+  if (isOverdueAt(item, { date: today, minutes })) return 'overdue';
+  return daysBetween(today, item.dueDate) <= DUE_SOON_DAYS ? 'soon' : 'later';
 }
 
 /**
  * The due date in words for cards and the drawer: "2 days overdue", "Due
- * today", "Due tomorrow", "Due in 3 days", or the date.
+ * today", "Due tomorrow", "Due in 3 days", or the date; with a due time,
+ * "Due today 17:00", "Overdue since 17:00" or "Fri 17 Oct, 17:00".
  *
  * @param item The item.
  * @param today `YYYY-MM-DD`.
+ * @param minutes Minutes after midnight now; defaults to the current time.
  * @returns The text, or empty without a due date.
  */
-export function dueText(item: Pick<WorkItemDto, 'dueDate' | 'status'>, today: string): string {
+export function dueText(item: DueItem, today: string, minutes: number = nowMinutes()): string {
   if (item.dueDate === null) return '';
-  const state = dueState(item, today);
+  const state = dueState(item, today, minutes);
   const days = daysBetween(today, item.dueDate);
-  if (state === 'overdue') return days === -1 ? '1 day overdue' : `${-days} days overdue`;
-  if (state === 'soon') {
-    if (days === 0) return 'Due today';
-    return days === 1 ? 'Due tomorrow' : `Due in ${days} days`;
+  const time = item.dueTime ?? null;
+  const at = time === null ? '' : ` ${time}`;
+  if (state === 'overdue') {
+    if (days === 0) return `Overdue since ${time ?? ''}`.trim();
+    return days === -1 ? '1 day overdue' : `${-days} days overdue`;
   }
-  return shortDate(item.dueDate);
+  if (state === 'soon') {
+    if (days === 0) return `Due today${at}`;
+    if (days === 1) return `Due tomorrow${at}`;
+    return `Due in ${days} days${time === null ? '' : `, ${time}`}`;
+  }
+  return `${shortDate(item.dueDate)}${time === null ? '' : `, ${time}`}`;
 }
 
 /** Fields an item edit can change, and so an undo can put back. */
@@ -90,6 +113,7 @@ const UNDOABLE = [
   'teamId',
   'startDate',
   'dueDate',
+  'dueTime',
   'assigneeIds',
   'labelIds',
 ] as const satisfies readonly (keyof UpdateItemRequest & keyof WorkItemDto)[];

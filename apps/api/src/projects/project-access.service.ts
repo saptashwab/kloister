@@ -128,7 +128,9 @@ export class ProjectAccessService {
    * members get their role's access; system admins who are not
    * members get read-only access plus `ASSIGN_PMS`, and an
    * `ADMIN_CROSS_PROJECT_ACCESS` entry is written before anything is
-   * returned; everyone else gets 404. Admins always hold `ASSIGN_PMS`.
+   * returned: once per visit for reads, every time for writes (including
+   * refused ones) and export downloads (SPEC §3.1). Everyone else gets 404.
+   * Admins always hold `ASSIGN_PMS`.
    *
    * @param auth The signed-in caller.
    * @param ref Project uuid or key (case-insensitive) from the URL.
@@ -162,14 +164,17 @@ export class ProjectAccessService {
     if (member !== undefined) return memberAccess(row, member, userId, isSystemAdmin);
 
     if (!isSystemAdmin) throw projectNotFound();
-    await this.audit.record({
+    const entry = {
       actorId: userId,
       action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS,
       entityType: 'Project',
       entityId: row.id,
       projectId: row.id,
       meta: { via },
-    });
+    };
+    // Reads are recorded once per visit; writes (also refused ones) and export downloads always.
+    if (isVisitRead(via)) await this.audit.recordVisit(entry, auth.sessionId);
+    else await this.audit.record({ ...entry, meta: { via, sessionId: auth.sessionId } });
     return {
       project: row,
       settings,
@@ -248,6 +253,29 @@ export class ProjectAccessService {
       where: { userId, project: { archivedAt: null, ownerId: null } },
       include: { project: true, teamMemberships: { select: { teamId: true, role: true } } },
       orderBy: { project: { key: 'asc' } },
+    });
+    return rows.map(({ project, ...member }) =>
+      memberAccess(project, member, userId, isSystemAdmin),
+    );
+  }
+
+  /**
+   * Resolves the caller's member access to the given projects, archived ones
+   * included, built as {@link resolve} builds a member's access. Projects the
+   * caller is not a member of are left out (no admin access, no audit entry).
+   *
+   * Permissions: membership only.
+   *
+   * @param auth The signed-in caller.
+   * @param projectIds Ordinary projects to look at.
+   * @returns One access per project the caller is a member of.
+   */
+  async memberAccessesIn(auth: AuthContext, projectIds: string[]): Promise<ProjectAccess[]> {
+    const userId = auth.user.id;
+    const isSystemAdmin = auth.user.systemRole === SystemRole.ADMIN;
+    const rows = await this.prisma.projectMember.findMany({
+      where: { userId, projectId: { in: projectIds }, project: { ownerId: null } },
+      include: { project: true, teamMemberships: { select: { teamId: true, role: true } } },
     });
     return rows.map(({ project, ...member }) =>
       memberAccess(project, member, userId, isSystemAdmin),
@@ -703,4 +731,19 @@ export function projectArchived(): ApiException {
  */
 export function projectNotFound(): ApiException {
   return new ApiException(HttpStatus.NOT_FOUND, ErrorCode.NOT_FOUND, 'Project not found');
+}
+
+/** Downloads that are recorded every time, although they are reads (SPEC §6.2). */
+const EXPORT_ROUTE = /\/snapshots(?:\?|$)|\/ado\/batches\/[^/]+\/download(?:\?|$)/;
+
+/**
+ * Whether a request is a read that belongs to an admin's cross-project visit
+ * rather than an action recorded on its own.
+ *
+ * @param via `METHOD route` as recorded in the audit entry.
+ * @returns True for reads other than export downloads.
+ */
+export function isVisitRead(via: string): boolean {
+  const [method = '', route = ''] = via.split(' ');
+  return ['GET', 'HEAD', 'OPTIONS'].includes(method) && !EXPORT_ROUTE.test(route);
 }

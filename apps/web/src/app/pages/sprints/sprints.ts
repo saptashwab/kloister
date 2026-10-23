@@ -1,4 +1,3 @@
-import { SnapshotAction } from '../../ui/snapshot-action';
 import { Component, computed, inject, type OnInit, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -27,6 +26,13 @@ import { required } from '../../core/validators';
 const KEEP = 'keep';
 
 import { EmptyState, Skeleton } from '../../ui/feedback';
+import { PageActions } from '../../core/page-actions';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { dayOf } from '../../core/format';
+import { AppDatePipe } from '../../ui/app-date.pipe';
+import { DATE_PROVIDERS, localDay } from '../../ui/date-field';
+import { NgTemplateOutlet } from '@angular/common';
+import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
 
 /**
  * Sprints (SPEC §6): list, create and edit, set active, open the sprint
@@ -43,7 +49,10 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
   selector: 'app-sprints',
   host: { class: 'k-page' },
   imports: [
-    SnapshotAction,
+    NgTemplateOutlet,
+    RowCardStyles,
+    AppDatePipe,
+    MatDatepickerModule,
     EmptyState,
     Skeleton,
     ReactiveFormsModule,
@@ -54,8 +63,8 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
     MatInputModule,
     MatSelectModule,
   ],
-  template: `<app-snapshot-action [source]="ctx.project()?.id ?? ''" />
-    @if (error()) {
+  providers: DATE_PROVIDERS,
+  template: `@if (error()) {
       <p class="k-alert" role="alert">{{ error() }}</p>
     }
     @if (notice()) {
@@ -75,11 +84,28 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
             </mat-form-field>
             <mat-form-field>
               <mat-label>Start</mat-label>
-              <input matInput type="date" formControlName="startDate" />
+              <input
+                matInput
+                autocomplete="off"
+                [matDatepicker]="startPicker"
+                [value]="asDate(form.controls.startDate.value)"
+                (dateChange)="setDay('startDate', $event.value)"
+              />
+              <mat-datepicker-toggle matIconSuffix [for]="startPicker" />
+              <mat-datepicker #startPicker />
             </mat-form-field>
             <mat-form-field>
               <mat-label>End</mat-label>
-              <input matInput type="date" formControlName="endDate" />
+              <input
+                matInput
+                autocomplete="off"
+                [matDatepicker]="endPicker"
+                [min]="asDate(form.controls.startDate.value)"
+                [value]="asDate(form.controls.endDate.value)"
+                (dateChange)="setDay('endDate', $event.value)"
+              />
+              <mat-datepicker-toggle matIconSuffix [for]="endPicker" />
+              <mat-datepicker #endPicker />
             </mat-form-field>
             <mat-form-field>
               <mat-label>ADO iteration path (optional)</mat-label>
@@ -123,8 +149,43 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
       </mat-card>
     }
 
+    <ng-template #sprintActions let-s>
+      <a mat-button [routerLink]="['/p', key()]" [queryParams]="{ sprint: s.id }">Sprint board</a>
+      @if (canManage()) {
+        @if (s.state !== closed) {
+          <button mat-button type="button" (click)="edit(s)">Edit</button>
+        }
+        @if (s.state === planned) {
+          <button mat-button type="button" (click)="start(s)">Set active</button>
+        }
+        @if (s.state !== closed) {
+          <button mat-button type="button" (click)="openClose(s)">Close</button>
+        }
+        <button mat-button type="button" (click)="remove(s)">Delete</button>
+      }
+    </ng-template>
+    <app-row-card-styles />
     @if (!ctx.loaded()) {
       <app-skeleton label="Loading the list" />
+    } @else if (phone() && ctx.sprints().length > 0) {
+      <ul class="k-row-cards" aria-label="Sprints">
+        @for (s of ctx.sprints(); track s.id) {
+          <li class="k-row-card">
+            <div class="k-row-card-title">{{ s.name }}</div>
+            <dl>
+              <dt>Dates</dt>
+              <dd>{{ s.startDate | appDate: 'day' }} – {{ s.endDate | appDate: 'day' }}</dd>
+              <dt>State</dt>
+              <dd>{{ stateLabels[s.state] }}</dd>
+              <dt>Items</dt>
+              <dd>{{ itemCount(s.id) }}</dd>
+            </dl>
+            <div class="k-row-card-actions">
+              <ng-container *ngTemplateOutlet="sprintActions; context: { $implicit: s }" />
+            </div>
+          </li>
+        }
+      </ul>
     } @else {
       <div class="k-table-scroll" tabindex="0" role="region" aria-label="Scrollable table">
         <table class="data">
@@ -141,25 +202,11 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
             @for (s of ctx.sprints(); track s.id) {
               <tr>
                 <td>{{ s.name }}</td>
-                <td>{{ s.startDate }} – {{ s.endDate }}</td>
+                <td>{{ s.startDate | appDate: 'day' }} – {{ s.endDate | appDate: 'day' }}</td>
                 <td>{{ stateLabels[s.state] }}</td>
                 <td>{{ itemCount(s.id) }}</td>
                 <td class="actions">
-                  <a mat-button [routerLink]="['/p', key()]" [queryParams]="{ sprint: s.id }"
-                    >Sprint board</a
-                  >
-                  @if (canManage()) {
-                    @if (s.state !== closed) {
-                      <button mat-button type="button" (click)="edit(s)">Edit</button>
-                    }
-                    @if (s.state === planned) {
-                      <button mat-button type="button" (click)="start(s)">Set active</button>
-                    }
-                    @if (s.state !== closed) {
-                      <button mat-button type="button" (click)="openClose(s)">Close</button>
-                    }
-                    <button mat-button type="button" (click)="remove(s)">Delete</button>
-                  }
+                  <ng-container *ngTemplateOutlet="sprintActions; context: { $implicit: s }" />
                 </td>
               </tr>
             } @empty {
@@ -182,8 +229,15 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
     } `,
 })
 export class SprintsPage implements OnInit {
+  /** True at phone width, where sprint rows become cards. */
+  protected readonly phone = phoneLayout();
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
+  /** Shows this view's Export… in the project header's page actions. */
+  private readonly pageActions = inject(PageActions).register(() => ({
+    source: this.ctx.project()?.id ?? '',
+    filters: {},
+  }));
   private readonly api = inject(ItemsApiService);
   private readonly dialogs = inject(Dialogs);
 
@@ -273,6 +327,28 @@ export class SprintsPage implements OnInit {
       endDate: sprint.endDate,
       adoIterationPath: sprint.adoIterationPath ?? '',
     });
+  }
+
+  /**
+   * A form date as a local Date for the picker.
+   *
+   * @param day `YYYY-MM-DD`, or empty.
+   * @returns The Date, or null.
+   */
+  protected asDate(day: string): Date | null {
+    return day ? localDay(day) : null;
+  }
+
+  /**
+   * Stores a picked or typed date in the form; unreadable text clears it.
+   *
+   * @param field Which date.
+   * @param date The picked date, or null.
+   */
+  protected setDay(field: 'startDate' | 'endDate', date: Date | null): void {
+    const control = this.form.controls[field];
+    control.setValue(date !== null && !Number.isNaN(date.getTime()) ? dayOf(date) : '');
+    control.markAsTouched();
   }
 
   /**

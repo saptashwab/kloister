@@ -14,6 +14,7 @@ const base: WorkSummaryDto = {
   status: 'NOT_STARTED',
   priority: 2,
   dueDate: null,
+  dueTime: null,
   labels: [{ id: 'l1', name: 'Same name', colour: '#123456' }],
   labelStyle: 'SOLID',
   bucket: { id: 'b1', name: 'Same bucket' },

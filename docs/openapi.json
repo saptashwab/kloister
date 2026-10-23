@@ -4066,6 +4066,11 @@
           },
           "startDate": { "type": "string", "nullable": true, "description": "Start date." },
           "dueDate": { "type": "string", "nullable": true, "description": "Due date." },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "Due time `HH:MM` on the due date."
+          },
           "assigneeIds": {
             "description": "Assignees.",
             "uniqueItems": true,
@@ -4138,6 +4143,11 @@
             "type": "string",
             "nullable": true,
             "description": "New due date, or null."
+          },
+          "dueTime": {
+            "type": "string",
+            "nullable": true,
+            "description": "New due time `HH:MM`, or null; needs a due date."
           },
           "assigneeIds": {
             "description": "Full assignee list.",

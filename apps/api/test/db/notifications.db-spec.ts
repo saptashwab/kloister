@@ -245,6 +245,22 @@ describe('notifications (db)', () => {
       expect(await stored('pm')).toEqual([]);
     });
 
+    it('announces items due today whose due time has passed, once (M8.5)', async () => {
+      const nine = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0);
+      await prisma.workItem.update({
+        where: { id: memberItem.id },
+        data: { dueDate: toDbDate(localDate(nine)), dueTime: 8 * 60 },
+      });
+      await prisma.workItem.update({
+        where: { id: pmItem.id },
+        data: { dueDate: toDbDate(localDate(nine)), dueTime: 17 * 60 },
+      });
+      const service = app.get(NotificationsService);
+      expect(await service.checkDueDates(nine)).toBe(1);
+      expect(await service.checkDueDates(nine)).toBe(0);
+      expect(await stored('member')).toEqual([[NotificationType.OVERDUE, memberItem.id]]);
+    });
+
     it('skips Done items, items overdue for more than a week and archived projects', async () => {
       await due(pmItem.id, 1, 'DONE');
       await due(memberItem.id, -8);

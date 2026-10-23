@@ -29,7 +29,9 @@ Who can do what:
    - iterations, and the date order of the exported dates.
 3. Save. People are matched by email; add a row only for someone who uses another address in ADO.
    Dates are sent only for the types you tick, because ADO silently drops a date its type does not
-   have (an Agile Task has no Target Date).
+   have (an Agile Task has no Target Date). Optional due times stay in Kloister: files carry the
+   calendar date only, and imports never set a time (an imported date change keeps the
+   item's local due time).
 
 A PM can tick **Require Detailed review** to make every transfer in the project use Detailed review.
 

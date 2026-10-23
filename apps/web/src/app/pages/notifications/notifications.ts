@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -10,6 +9,7 @@ import { NotificationsStore } from '../../core/notifications.store';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
+import { AppDatePipe } from '../../ui/app-date.pipe';
 
 /**
  * The notifications list (SPEC §6), opened from the bell: newest first, all
@@ -20,7 +20,7 @@ import { ToastService } from '../../ui/toast.service';
 @Component({
   selector: 'app-notifications-page',
   imports: [
-    DatePipe,
+    AppDatePipe,
     MatButtonModule,
     MatButtonToggleModule,
     RouterLink,
@@ -69,7 +69,7 @@ import { ToastService } from '../../ui/toast.service';
                 <span class="n-item"
                   ><span class="k-key">{{ n.item.key }}</span> {{ n.item.title }}</span
                 >
-                <span class="n-when">{{ n.createdAt | date: 'medium' }}</span>
+                <span class="n-when">{{ n.createdAt | appDate }}</span>
               </a>
               @if (!n.readAt) {
                 <span class="n-dot" title="Unread"

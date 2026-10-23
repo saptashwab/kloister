@@ -87,6 +87,17 @@ export interface AuditEntryDto {
   actorId: string | null;
   /** Acting user's email at read time, or null. */
   actorEmail: string | null;
+  /** Acting user's display name at read time, or null (M8.5). */
+  actorName?: string | null;
+  /** Project key at read time; null for personal spaces or no project. */
+  projectKey?: string | null;
+  /** Project name at read time, or null. */
+  projectName?: string | null;
+  /**
+   * The entity by name at read time: item key, user or member name, project
+   * key, bucket/label/sprint/team name; null when deleted or not named.
+   */
+  entityLabel?: string | null;
   /** What happened. */
   action: string;
   /** Kind of entity affected, e.g. `User`. */

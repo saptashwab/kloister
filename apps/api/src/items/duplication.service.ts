@@ -106,7 +106,11 @@ export class DuplicationService {
                 assigneeIds: copy.assigneeIds,
                 status: ItemStatus.NOT_STARTED,
                 ...(dto.keepDates === true
-                  ? { startDate: source.startDate, dueDate: source.dueDate }
+                  ? {
+                      startDate: source.startDate,
+                      dueDate: source.dueDate,
+                      dueTime: source.dueTime,
+                    }
                   : {}),
                 ...(dto.keepSprint === true ? { sprintId: source.sprintId } : {}),
               },

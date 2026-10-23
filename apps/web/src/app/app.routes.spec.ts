@@ -75,7 +75,7 @@ describe('project routes', () => {
     ['/p/KLO/backlog', BacklogPage, {}],
     ['/p/KLO/backlog/items/7', ItemDrawer, { key: 'KLO', number: '7' }],
     ['/p/KLO/sprints', SprintsPage, {}],
-    ['/p/KLO/settings', ProjectSettingsPage, { key: 'KLO' }],
+    ['/p/KLO/settings/members', ProjectSettingsPage, { key: 'KLO', section: 'members' }],
   ])('%s', async (url, component, params) => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl(url);
@@ -85,6 +85,12 @@ describe('project routes', () => {
     // Below the board and backlog, the leaf is the empty "no drawer" route.
     expect(collect(snapshot).map((r) => r.component)).toContain(component);
     expect(leaf(snapshot).params).toMatchObject(params);
+  });
+
+  it('opens the first settings tab from the old settings link (M8.5)', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/p/KLO/settings');
+    expect(TestBed.inject(Router).url).toBe('/p/KLO/settings/general');
   });
 });
 

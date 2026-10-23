@@ -1,4 +1,9 @@
-import { DATE_PATTERN } from '@kloister/shared';
+import {
+  DATE_PATTERN,
+  DUE_TIME_PATTERN,
+  dueTimeToMinutes,
+  minutesToDueTime,
+} from '@kloister/shared';
 import { ValidateBy, type ValidationOptions } from 'class-validator';
 
 /**
@@ -51,4 +56,42 @@ export function toDbDate(value: string): Date {
  */
 export function fromDbDate(value: Date | null): string | null {
   return value === null ? null : value.toISOString().slice(0, 10);
+}
+
+/**
+ * class-validator decorator for a wire due time (`HH:MM`, 24-hour).
+ *
+ * @param options Validation options.
+ * @returns The property decorator.
+ */
+export const IsDueTime = (options?: ValidationOptions): PropertyDecorator =>
+  ValidateBy(
+    {
+      name: 'isDueTime',
+      validator: {
+        validate: (value: unknown) => typeof value === 'string' && DUE_TIME_PATTERN.test(value),
+        defaultMessage: () => '$property must be a time in HH:MM form',
+      },
+    },
+    options,
+  );
+
+/**
+ * Converts a validated `HH:MM` due time to the minutes the database stores.
+ *
+ * @param value The time, or null.
+ * @returns Minutes after midnight, or null.
+ */
+export function toDbTime(value: string | null): number | null {
+  return value === null ? null : dueTimeToMinutes(value);
+}
+
+/**
+ * Converts stored minutes after midnight back to `HH:MM`.
+ *
+ * @param value Stored minutes, or null.
+ * @returns The time, or null.
+ */
+export function fromDbTime(value: number | null): string | null {
+  return value === null ? null : minutesToDueTime(value);
 }

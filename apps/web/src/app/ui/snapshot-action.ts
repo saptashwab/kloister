@@ -1,11 +1,19 @@
 import { Component, inject, input } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
+import { Icon } from './icon';
 import { dialogMotion } from './motion';
 
-/** Lazy export entry point; the server calculates and rechecks the eligible scope. */
+/**
+ * Lazy export entry point; the server calculates and rechecks the eligible
+ * scope. Shown in a page header's actions (M8.5).
+ */
 @Component({
   selector: 'app-snapshot-action',
-  template: `<button type="button" class="k-action" (click)="open()">Export…</button>`,
+  imports: [MatButtonModule, Icon],
+  template: `<button mat-stroked-button type="button" (click)="open()">
+    <app-icon name="download" />Export…
+  </button>`,
 })
 export class SnapshotAction {
   /** Project uuid or me for My work; never an arbitrary person. */

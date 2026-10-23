@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { Component, computed, inject, type OnInit, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -11,6 +10,7 @@ import { wholeNumber } from '../../core/validators';
 import { Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
+import { AppDatePipe } from '../../ui/app-date.pipe';
 
 /** One row of the disk usage list. */
 interface UsageRow {
@@ -33,7 +33,7 @@ interface UsageRow {
   selector: 'app-admin-storage',
   host: { class: 'k-tab' },
   imports: [
-    DatePipe,
+    AppDatePipe,
     ReactiveFormsModule,
     MatButtonModule,
     MatFormFieldModule,
@@ -75,7 +75,7 @@ interface UsageRow {
     <section class="k-panel" aria-labelledby="usage-title">
       <h2 id="usage-title">Disk usage</h2>
       @if (usage(); as usage) {
-        <p class="lead">Measured {{ usage.measuredAt | date: 'medium' }}.</p>
+        <p class="lead">Measured {{ usage.measuredAt | appDate }}.</p>
         @if (usage.disk; as disk) {
           <ul class="k-usage" aria-label="Disk">
             <li>

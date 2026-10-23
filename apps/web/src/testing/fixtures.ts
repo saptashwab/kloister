@@ -74,6 +74,7 @@ export function makeItem(
     teamId: null,
     startDate: null,
     dueDate: null,
+    dueTime: null,
     position: number,
     createdById: 'u1',
     assigneeIds: [],

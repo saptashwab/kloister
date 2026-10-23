@@ -1,3 +1,4 @@
+import { ProjectAccessService } from './project-access.service.js';
 import { AuditAction, ErrorCode } from '@kloister/shared';
 import { fakeAudit, fakePrisma, makeProject, makeUser } from '../../test/support/fakes.js';
 import type { AuthContext } from '../auth/auth-context.js';
@@ -308,7 +309,8 @@ describe('MembersService admin PM assignment (SPEC §3.1)', () => {
 describe('ProjectsService.list', () => {
   it('refuses scope=all to non-admins', async () => {
     const { prisma } = fakePrisma();
-    const service = new ProjectsService(prisma, fakeAudit().service);
+    const audit = fakeAudit().service;
+    const service = new ProjectsService(prisma, audit, new ProjectAccessService(prisma, audit));
     expect(await rejection(service.list(auth, { scope: 'all' }))).toEqual({
       status: 403,
       code: ErrorCode.FORBIDDEN,

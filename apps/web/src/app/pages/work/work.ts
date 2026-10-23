@@ -31,6 +31,7 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
 import { LabelPill } from '../../ui/label-pill';
 import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
+import { MatMenuModule } from '@angular/material/menu';
 
 /** My work and all their work share readable list/status-board views (SPEC §6). */
 @Component({
@@ -43,6 +44,7 @@ import { ToastService } from '../../ui/toast.service';
     MatFormFieldModule,
     MatSelectModule,
     MatSlideToggleModule,
+    MatMenuModule,
     CdkDrag,
     CdkDropList,
     CdkDropListGroup,
@@ -54,6 +56,20 @@ import { ToastService } from '../../ui/toast.service';
   ],
   styleUrl: './work.scss',
   template: `
+    <mat-menu #statusMenu="matMenu">
+      <ng-template matMenuContent let-item="item">
+        @for (s of statuses; track s) {
+          <button
+            mat-menu-item
+            type="button"
+            [disabled]="s === item.status"
+            (click)="changeStatus(item, s)"
+          >
+            {{ statusLabels[s] }}
+          </button>
+        }
+      </ng-template>
+    </mat-menu>
     <div class="k-page">
       <div class="k-page-head">
         <div>
@@ -245,18 +261,18 @@ import { ToastService } from '../../ui/toast.service';
                             }
                           </div>
                           @if (i.canEdit) {
-                            <mat-form-field
-                              ><mat-label>Status for {{ i.title }}</mat-label
-                              ><mat-select
-                                [value]="i.status"
-                                [disabled]="busy().has(i.id)"
-                                (valueChange)="changeStatus(i, $event)"
-                              >
-                                @for (s of statuses; track s) {
-                                  <mat-option [value]="s">{{ statusLabels[s] }}</mat-option>
-                                }
-                              </mat-select></mat-form-field
+                            <button
+                              type="button"
+                              class="status-menu"
+                              [attr.aria-label]="
+                                'Status for ' + i.title + ': ' + statusLabels[i.status] + '. Change'
+                              "
+                              [disabled]="busy().has(i.id)"
+                              [matMenuTriggerFor]="statusMenu"
+                              [matMenuTriggerData]="{ item: i }"
                             >
+                              <app-status-pill [status]="i.status" />
+                            </button>
                           }
                         </article>
                       } @empty {

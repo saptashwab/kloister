@@ -60,7 +60,7 @@ export function tourSteps(project: ProjectDto | null, admin: boolean): TourStep[
       steps.push({
         title: `${project.name}: project management`,
         text: 'In this project you can manage members, visibility and teams. Members may hold different roles in different projects. A team Lead manages its items, not the project’s membership.',
-        route: [...path, 'settings'],
+        route: [...path, 'settings', 'members'],
       });
   } else
     steps.push({
