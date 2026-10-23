@@ -2,6 +2,11 @@
 
 ## M8.1 transfer implementation (2026-10-23)
 
+M8.1 CI (2026-10-23): `630b259` is green on run 39940353809 after two re-runs that
+stopped only because the Postgres image pull from ECR Public hit its data limit:
+614 API and 280 web unit tests, 673 database tests, all 49 browser scenarios,
+migrations, schema drift and extracted-package checks passed.
+
 - Real exports from a disposable Azure DevOps Services organization (Agile, Scrum,
   Basic) became the test fixtures, with names replaced by example values. They use
   LF line endings, quoted values, `Name <email>` identities, tags sorted by ADO,
