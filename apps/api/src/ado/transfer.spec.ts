@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   ADO_LIMITS,
+  adoPreset,
+  adoSuggestStatus,
   type AdoDestinationDto,
   type AdoExportRequest,
   type AdoImportRequest,
@@ -12,6 +16,7 @@ import { preset, validateProfile } from './profiles.js';
 import { selectItems } from './selection.js';
 import { exportPlan } from './export.js';
 import { incomingPlan, type TransferItem } from './transfer.js';
+import { adoDate, parseAdoDate, stripFooter } from './values.js';
 
 const bucket = '11111111-1111-4111-8111-111111111111';
 function destination(): AdoDestinationDto {
@@ -29,6 +34,7 @@ function destination(): AdoDestinationDto {
     remoteProject: 'remote',
     profile,
     revision: 1,
+    requireDetailedReview: false,
   };
 }
 function item(id: string, type: ItemType = 'TASK', parentId: string | null = null): TransferItem {
@@ -147,10 +153,16 @@ describe('documented independent CSV contracts', () => {
   ])('rejects malformed input %j', (text) => {
     expect(() => readCsv(text)).toThrow();
   });
-  it.each(['=1+1', ' +command', '\t@SUM(1)', '-1+2'])(
+  it.each(['=1+1', ' =HYPERLINK("x")', '\t=SUM(1)'])(
     'blocks formula-like output without silently changing data: %s',
     (text) => {
       expect(() => writeCsv(['Work Item Type', 'Title'], [['Task', text]])).toThrow(/Formula/);
+    },
+  );
+  it.each(['- fix login', '+1 for this', '@team review'])(
+    'keeps ordinary text that ADO imports as text: %s',
+    (text) => {
+      expect(writeCsv(['Work Item Type', 'Title'], [['Task', text]])).toContain(text);
     },
   );
   it('writes the exact independent BOM/CRLF/RFC4180 expectation', () => {
@@ -219,67 +231,48 @@ describe('reviewed profiles and complete selection', () => {
   });
 });
 
-describe('outgoing identity and hierarchy', () => {
-  it('names remote-parent context added by a reviewed parent choice and identifies unused local ancestors', () => {
-    const old = item('old', 'STORY'),
-      remote = item('remote', 'STORY'),
-      child = item('child', 'TASK', 'old');
-    const links = [
-      link('old', { remoteId: '41', reference: 'b'.repeat(64) }),
-      link('remote', {
-        remoteId: '42',
-        reference: 'c'.repeat(64),
-        observation: {
-          raw: {
-            'Work Item Type': 'User Story',
-            Title: 'Remote parent',
-            Description: '<p>parent</p>',
-            'Assigned To': '',
-          },
-          values: { parentId: null },
-        },
-      }),
-      link('child', {
-        remoteId: '43',
-        observation: {
-          raw: {
-            'Work Item Type': 'Task',
-            Title: 'Child',
-            Description: '<p>child</p>',
-            'Assigned To': '',
-          },
-          values: { parentId: 'remote' },
-        },
-      }),
-    ];
-    const request = outgoing();
-    request.selection.scope = 'manual';
-    request.selection.itemIds = ['child'];
-    request.choices['child'] = { parentId: 'incoming' };
-    const result = exportPlan(destination(), request, [old, remote, child], links);
-    expect(result.errors).toEqual([]);
-    expect(result.rows.find((r) => r.itemId === 'remote')).toMatchObject({
-      kind: 'context',
-      selected: false,
-      remoteId: '42',
-    });
-    expect(result.rows.find((r) => r.itemId === 'old')).toMatchObject({
-      kind: 'omitted',
-      selected: false,
-    });
-    expect(readCsv(result.files[0].csv).rows.map((r) => r['ID'])).toEqual(['42', '43']);
+const mia = '22222222-2222-4222-8222-222222222222';
+const labelA = '33333333-3333-4333-8333-333333333333';
+const labelB = '44444444-4444-4444-8444-444444444444';
+const members = [{ userId: mia, email: 'member@example.org', displayName: 'Mia Member' }];
+function assign(target: TransferItem, userId = mia): TransferItem {
+  target.assignees = [
+    {
+      userId,
+      projectMember: { user: { displayName: 'Mia Member', email: 'member@example.org' } },
+    },
+  ] as unknown as TransferItem['assignees'];
+  return target;
+}
+/** A linked item whose last sync confirmed `synced` on both sides and whose ADO export is `raw`. */
+function synced(
+  target: TransferItem,
+  raw: Record<string, string>,
+  values: Record<string, unknown> = {},
+): AdoItemLink {
+  const baseline = {
+    title: target.title,
+    description: target.description,
+    status: target.status,
+    priority: target.priority,
+    assigneeIds: target.assignees.map((a) => a.userId),
+    labelIds: target.labels.map((l) => l.labelId),
+    sprintId: target.sprintId,
+    startDate: null,
+    dueDate: null,
+    ...values,
+  };
+  return link(target.id, {
+    localBaseline: baseline,
+    remoteBaseline: baseline,
+    observation: {
+      raw: { 'Work Item Type': 'Task', Title: target.title, ...raw },
+      values: { parentId: target.parentId },
+    },
   });
-  it('blocks selected updates when the PM observation omits an emitted field', () => {
-    const local = item('1'),
-      l = link('1');
-    l.observation = {
-      raw: { 'Work Item Type': 'Task', Title: 'Item 1', Parent: '' },
-      values: { parentId: null },
-    };
-    const plan = exportPlan(destination(), outgoing(), [local], [l]);
-    expect(plan.errors.join()).toMatch(/review the Description column/);
-    expect(plan.files).toEqual([]);
-  });
+}
+
+describe('outgoing creates and hierarchy', () => {
   it('emits true depth-first hierarchy independently of item creation/number order', () => {
     const plan = exportPlan(
       destination(),
@@ -325,7 +318,7 @@ describe('outgoing identity and hierarchy', () => {
         [item('1')],
         [link('1', { remoteId: null, pendingBatchId: randomUUID() })],
       ).errors.join(),
-    ).toMatch(/recover or cancel/);
+    ).toMatch(/link the returned ID/);
     const d = destination();
     d.profile = preset('Basic');
     d.profile.fields = {};
@@ -356,23 +349,167 @@ describe('outgoing identity and hierarchy', () => {
     plan = exportPlan(destination(), req, [parent, child], [l]);
     expect(plan.errors.join()).toMatch(/Description/);
   });
-  it('keeps mapped states on separate files from intentionally unsupported states', () => {
+  it('writes dates in the ISO form ADO imports under any locale', () => {
+    const d = destination();
+    d.profile.fields = { dueDate: 'Target Date' };
+    d.profile.dateTypes = { dueDate: ['TASK'] };
+    const task = item('1');
+    task.dueDate = new Date('2026-12-24T00:00:00Z');
+    const table = readCsv(exportPlan(d, outgoing(), [task], []).files[0].csv);
+    expect(table.rows[0]['Target Date']).toBe('2026-12-24T12:00:00Z');
+  });
+  it('warns when a Task sits directly under a Feature, which ADO backlogs do not show', () => {
+    const plan = exportPlan(
+      destination(),
+      outgoing(),
+      [item('1', 'FEATURE'), item('2', 'TASK', '1')],
+      [],
+    );
+    expect(plan.rows.find((r) => r.itemId === '2')!.warnings.join()).toMatch(
+      /do not normally nest/,
+    );
+  });
+});
+
+describe('outgoing updates send only real local changes', () => {
+  it('sends just the changed title, with flat ID/type/title columns', () => {
+    const task = item('1');
+    const l = synced(task, { Description: '<p>Hello Ω 😀 </p>', State: 'New' });
+    task.title = 'Renamed locally';
+    const plan = exportPlan(destination(), outgoing(), [task], [l], undefined, members);
+    expect(plan.errors).toEqual([]);
+    const table = readCsv(plan.files[0].csv);
+    expect(table.headers).toEqual(['ID', 'Work Item Type', 'Title']);
+    expect(table.rows).toEqual([{ ID: '21', 'Work Item Type': 'Task', Title: 'Renamed locally' }]);
+    expect(plan.files[0].name).toMatch(/^update-/);
+  });
+  it('treats ADO HTML normalization as no change and leaves unchanged items out', () => {
+    const task = item('1');
+    const l = synced(task, { Description: '<p>Hello Ω 😀 </p>', 'Assigned To': '', State: 'New' });
+    const plan = exportPlan(destination(), outgoing(), [task], [l], undefined, members);
+    expect(plan.files).toEqual([]);
+    expect(plan.rows[0].kind).toBe('unchanged');
+  });
+  it('never clears an ADO assignee that has no local member', () => {
+    const task = item('1');
+    const l = synced(task, { 'Assigned To': 'Outside Person <outside@example.org>' });
+    const plan = exportPlan(destination(), outgoing(), [task], [l], undefined, members);
+    expect(plan.files).toEqual([]);
+    expect(plan.rows[0].warnings.join()).toMatch(/not mapped to a project member/);
+  });
+  it('keeps unmapped and omitted ADO tags when the local labels change', () => {
+    const d = destination();
+    d.profile.fields = { labelIds: 'Tags' };
+    d.profile.tags = { Mapped: labelA, Ignored: null };
+    const task = item('1');
+    task.labels = [{ labelId: labelA }] as TransferItem['labels'];
+    const l = synced(task, { Tags: 'Ignored; Mapped; Unknown' });
+    task.labels = [{ labelId: labelA }, { labelId: labelB }] as TransferItem['labels'];
+    const labels = [
+      { id: labelA, name: 'Mapped' },
+      { id: labelB, name: 'Second' },
+    ];
+    const plan = exportPlan(d, outgoing(), [task], [l], { labels, sprints: [] }, members);
+    expect(plan.errors).toEqual([]);
+    expect(readCsv(plan.files[0].csv).rows[0]['Tags']).toBe('Ignored; Mapped; Unknown; Second');
+  });
+  it('does not regress a remote state that maps to the same local status', () => {
+    const d = destination();
+    d.profile.states.TASK = {
+      NOT_STARTED: 'New',
+      IN_PROGRESS: 'Active',
+      BLOCKED: null,
+      DONE: 'Closed',
+    };
+    d.profile.incomingStates['Task\nResolved'] = { status: 'IN_PROGRESS', bucketId: bucket };
+    const task = item('1');
+    task.status = 'IN_PROGRESS';
+    const l = synced(task, { State: 'Resolved' });
+    expect(exportPlan(d, outgoing(), [task], [l], undefined, members).files).toEqual([]);
+  });
+  it('sends the intended state and assignee after link-only reconciliation', () => {
     const d = destination();
     d.profile.states.TASK.IN_PROGRESS = 'Active';
-    const a = item('1'),
-      b = item('2');
-    a.status = 'IN_PROGRESS';
-    b.status = 'BLOCKED';
-    const result = exportPlan(
-      d,
-      outgoing(),
-      [a, b],
-      [link('1'), link('2', { remoteId: '22', reference: 'b'.repeat(64) })],
+    const task = assign(item('1'));
+    task.status = 'IN_PROGRESS';
+    const l = link('1', {
+      intent: {
+        title: 'Item 1',
+        description: task.description,
+        status: 'IN_PROGRESS',
+        assigneeIds: [mia],
+      },
+      observation: {
+        raw: { 'Work Item Type': 'Task', Title: 'Item 1', State: 'New', 'Assigned To': '' },
+        values: { parentId: null },
+      },
+    });
+    const plan = exportPlan(d, outgoing(), [task], [l], undefined, members);
+    expect(plan.errors).toEqual([]);
+    expect(readCsv(plan.files[0].csv).rows[0]).toMatchObject({
+      'Assigned To': 'Mia Member <member@example.org>',
+      State: 'Active',
+    });
+  });
+  it('asks only about fields changed on both sides in Quick review, and about all in Detailed', () => {
+    const task = item('1');
+    const l = synced(task, { Title: 'Remote rename' });
+    task.title = 'Local rename';
+    let plan = exportPlan(destination(), outgoing(), [task], [l], undefined, members);
+    expect(plan.errors.join()).toMatch(/changed on both sides/);
+    const request = outgoing();
+    request.choices['1'] = { title: 'local' };
+    plan = exportPlan(destination(), request, [task], [l], undefined, members);
+    expect(readCsv(plan.files[0].csv).rows[0]['Title']).toBe('Local rename');
+    const other = item('2');
+    other.title = 'Only local';
+    const detailed = outgoing();
+    detailed.review = 'detailed';
+    plan = exportPlan(
+      destination(),
+      detailed,
+      [other],
+      [synced(item('2'), { Title: 'Item 2' })],
+      undefined,
+      members,
     );
-    expect(result.files).toHaveLength(2);
-    const tables = result.files.map((f) => readCsv(f.csv));
-    expect(tables.filter((t) => t.headers.includes('State'))).toHaveLength(1);
-    expect(tables.find((t) => t.headers.includes('State'))!.rows[0]['State']).toBe('Active');
+    expect(plan.errors.join()).toMatch(/choose what to send for Title/);
+  });
+  it('keeps a newer ADO value in Quick review when only ADO changed', () => {
+    const task = item('1');
+    const l = synced(task, { Title: 'Renamed in ADO' });
+    const plan = exportPlan(destination(), outgoing(), [task], [l], undefined, members);
+    expect(plan.errors).toEqual([]);
+    expect(plan.files).toEqual([]);
+    expect(plan.rows[0].differences[0]).toMatchObject({
+      field: 'title',
+      choice: 'incoming',
+      auto: true,
+    });
+  });
+  it('requires a returned observation and warns about local parent changes', () => {
+    const task = item('1', 'TASK', 'p');
+    expect(
+      exportPlan(
+        destination(),
+        outgoing(),
+        [item('p', 'STORY'), task],
+        [link('1', { observedAt: null })],
+      ).errors.join(),
+    ).toMatch(/fresh ADO export/);
+    const l = synced(task, {}, {});
+    (l.observation as { values: Record<string, unknown> }).values['parentId'] = null;
+    const plan = exportPlan(
+      destination(),
+      outgoing(),
+      [item('p', 'STORY'), task],
+      [l],
+      undefined,
+      members,
+    );
+    expect(plan.rows.find((r) => r.itemId === '1')!.warnings.join()).toMatch(
+      /change the parent in ADO/,
+    );
   });
 });
 
@@ -391,9 +528,10 @@ describe('incoming explicit review, provenance and tombstones', () => {
     r.confirmedNew = [];
     expect(incomingPlan(d, r, [], []).errors.join()).toMatch(/confirmation as new/);
     r.confirmedNew = ['21'];
+    r.review = 'detailed';
     const preview = incomingPlan(d, r, [], []);
     expect(preview.rows[0].differences.map((f) => f.field)).not.toContain('assigneeIds');
-    expect(preview.errors.join()).toMatch(/review title/);
+    expect(preview.errors.join()).toMatch(/require reviewed title/);
   });
   it('rejects duplicate IDs, foreign provenance and unknown markers before applying any row', () => {
     const d = destination();
@@ -473,5 +611,256 @@ describe('incoming explicit review, provenance and tombstones', () => {
     expect(incomingPlan(d, r, [local], [l]).operations[0].incoming.description).toBe(
       '<p>User content</p>',
     );
+  });
+});
+
+describe('real ADO export formats', () => {
+  const fixture = (name: string): string =>
+    readFileSync(join(process.cwd(), 'test/fixtures/ado', name), 'utf8');
+  function agile(): AdoDestinationDto {
+    const d = destination();
+    d.profile.fields = {
+      priority: 'Priority',
+      labelIds: 'Tags',
+      startDate: 'Start Date',
+      dueDate: 'Target Date',
+    };
+    d.profile.dateTypes = { startDate: ['EPIC'], dueDate: ['EPIC'] };
+    d.profile.dateOrder = 'DMY';
+    d.profile.reverseTypes = {
+      Epic: 'EPIC',
+      Feature: 'FEATURE',
+      'User Story': 'STORY',
+      Task: 'TASK',
+      Bug: 'BUG',
+    };
+    for (const [type, states] of Object.entries({
+      Epic: ['New'],
+      Feature: ['Active'],
+      'User Story': ['Resolved', 'Closed'],
+      Task: ['Active'],
+      Bug: ['New'],
+    }))
+      for (const state of states)
+        d.profile.incomingStates[`${type}\n${state}`] = { status: 'NOT_STARTED', bucketId: bucket };
+    d.profile.tags = { payments: null, q4: null, customer: null, frontend: null, backend: null };
+    return d;
+  }
+  it('reads an Agile tree export: LF lines, locale dates with time, identities and hierarchy', () => {
+    const r = incoming(fixture('agile-tree.csv'));
+    r.confirmedNew = ['1', '2', '3', '4', '5', '6'];
+    const plan = incomingPlan(agile(), r, [], [], undefined, members);
+    expect(plan.errors).toEqual([]);
+    const epic = plan.operations.find((o) => o.remoteId === '1')!;
+    expect(epic.incoming).toMatchObject({
+      startDate: '2026-11-02',
+      dueDate: '2026-12-18',
+      priority: 2,
+    });
+    expect(epic.changes.title).toBe('Checkout revamp');
+    const feature = plan.operations.find((o) => o.remoteId === '2')!;
+    expect(feature.incoming.assigneeIds).toEqual([mia]);
+    expect(feature.parentRemote).toBe('1');
+    expect(plan.operations.find((o) => o.remoteId === '4')!.incoming.title).toBe(
+      'Remove a saved card, "quickly"',
+    );
+    expect(plan.rows.every((row) => row.differences.every((d) => d.choice === 'incoming'))).toBe(
+      true,
+    );
+  });
+  it('reads Scrum flat and Basic tree exports', () => {
+    for (const name of ['scrum-flat.csv', 'basic-tree.csv']) {
+      const r = incoming(fixture(name));
+      r.mode = 'observe';
+      expect(() => incomingPlan(agile(), r, [], [], undefined, members)).not.toThrow();
+    }
+  });
+  it('parses export dates by locale and refuses ambiguous ones without a configured order', () => {
+    expect(parseAdoDate('02/11/2026 05:30:00', 'DMY', 'Start Date')).toBe('2026-11-02');
+    expect(parseAdoDate('11/02/2026 7:00 PM', 'MDY', 'Start Date')).toBe('2026-11-02');
+    expect(parseAdoDate('18/12/2026 05:30:00', undefined, 'Target Date')).toBe('2026-12-18');
+    expect(parseAdoDate('2026-12-24T12:00:00Z', undefined, 'Target Date')).toBe('2026-12-24');
+    expect(parseAdoDate('', 'DMY', 'Target Date')).toBeNull();
+    expect(() => parseAdoDate('02/11/2026', undefined, 'Start Date')).toThrow(/date order/);
+    expect(() => parseAdoDate('31/02/2026', 'DMY', 'Start Date')).toThrow(/Unrecognized/);
+    expect(() => parseAdoDate('18/12/2026', 'MDY', 'Start Date')).toThrow(/does not match/);
+    expect(adoDate('2026-12-24')).toBe('2026-12-24T12:00:00Z');
+  });
+  it('treats a blank priority as no value', () => {
+    const d = destination();
+    d.profile.fields = { priority: 'Priority' };
+    const r = incoming('ID,Work Item Type,Title,State,Priority\n21,Task,A,New,');
+    expect(incomingPlan(d, r, [], []).operations[0].incoming.priority).toBeUndefined();
+  });
+});
+
+describe('Quick and Detailed incoming review', () => {
+  it('applies a change made only in ADO and asks when both sides changed', () => {
+    const task = item('1');
+    const l = synced(task, {});
+    const csv = (title: string) =>
+      `ID,Work Item Type,Title,Description\n21,Task,${title},Kloister reference: ${l.reference}`;
+    let plan = incomingPlan(destination(), incoming(csv('Renamed in ADO')), [task], [l]);
+    expect(plan.errors).toEqual([]);
+    expect(plan.operations[0].changes).toEqual({ title: 'Renamed in ADO', description: '' });
+    task.title = 'Renamed locally';
+    plan = incomingPlan(destination(), incoming(csv('Renamed in ADO')), [task], [l]);
+    expect(plan.errors.join()).toMatch(/changed on both sides/);
+    const detailed = incoming(csv('Renamed locally'));
+    detailed.review = 'detailed';
+    task.title = 'Item 1';
+    plan = incomingPlan(destination(), detailed, [task], [l]);
+    expect(plan.errors.join()).toMatch(/choose Title/);
+  });
+  it('link-only returns never block on unmapped State, Assigned To, Tags or Iteration', () => {
+    const d = destination();
+    d.profile.fields = { labelIds: 'Tags', sprintId: 'Iteration Path' };
+    const l = link('1', { remoteId: null, pendingBatchId: randomUUID() });
+    const r = incoming(
+      'ID,Work Item Type,Title,State,Assigned To,Tags,Iteration Path,Description\n' +
+        `21,Task,A,Doing,Someone <someone@example.org>,mystery,Remote\\Sprint 9,Kloister reference: ${l.reference}`,
+    );
+    r.mode = 'reconcile';
+    const plan = incomingPlan(d, r, [item('1')], [l], undefined, members);
+    expect(plan.errors).toEqual([]);
+    expect(plan.rows[0].warnings.join(' ')).toMatch(
+      /State "Doing".*not mapped.*mystery.*Sprint 9/s,
+    );
+  });
+  it('strips generated details from ADO-normalized HTML even after an unused prepared file', () => {
+    const l = link('1');
+    l.generatedSuffix =
+      '<hr /><p>Kloister transfer details (generated; not structured entities)</p><p>Kloister reference: newer</p>';
+    const text = `<p>User content </p><hr><p>Kloister transfer details (generated; not structured entities) </p><ul><li>[ ] step </li></ul><p>Kloister reference: ${l.reference} </p>`;
+    const r = incoming(`ID,Work Item Type,Title,Description\n21,Task,A,"${text}"`);
+    expect(
+      incomingPlan(destination(), r, [item('1')], [l]).operations[0].incoming.description,
+    ).toBe('<p>User content </p>');
+    expect(() => stripFooter(`${text}<p>added below</p>`, l.reference)).toThrow(/added after/);
+  });
+});
+
+describe('presets', () => {
+  it('suggests default states per process and recognizes extra states', () => {
+    const scrum = adoPreset('Scrum');
+    expect(scrum.states.TASK).toMatchObject({ NOT_STARTED: 'To Do', DONE: 'Done', BLOCKED: null });
+    expect(scrum.states.STORY.IN_PROGRESS).toBe('Committed');
+    expect(adoPreset('Basic').states.BUG.IN_PROGRESS).toBe('Doing');
+    expect(adoSuggestStatus(adoPreset('Agile'), 'User Story', 'Resolved')).toBe('IN_PROGRESS');
+    expect(adoSuggestStatus(scrum, 'Product Backlog Item', 'approved')).toBe('NOT_STARTED');
+    expect(adoSuggestStatus(adoPreset('Custom'), 'Task', 'New')).toBeNull();
+  });
+});
+
+describe('review findings: no silent overwrites', () => {
+  it('asks instead of guessing when ADO has no baseline for a field', () => {
+    const d = destination();
+    d.profile.fields = { priority: 'Priority' };
+    const task = item('1');
+    // Imported from ADO with a blank Priority: the baseline has no priority at all.
+    const l = synced(task, { Priority: '1' });
+    delete (l.remoteBaseline as Record<string, unknown>)['priority'];
+    delete (l.localBaseline as Record<string, unknown>)['priority'];
+    const plan = exportPlan(d, outgoing(), [task], [l], undefined, members);
+    expect(plan.files).toEqual([]);
+    expect(plan.errors.join()).toMatch(/choose what to send for Priority/);
+  });
+  it('needs an explicit choice before replacing an ADO description with images', () => {
+    const task = item('1');
+    const l = synced(task, { Description: '<p>Hello Ω 😀</p><img src="x.png">' });
+    task.description = '<p>Edited here</p>';
+    expect(
+      exportPlan(destination(), outgoing(), [task], [l], undefined, members).errors.join(),
+    ).toMatch(/embedded images/);
+    const request = outgoing();
+    request.choices['1'] = { description: 'local' };
+    const plan = exportPlan(destination(), request, [task], [l], undefined, members);
+    expect(plan.errors).toEqual([]);
+    expect(readCsv(plan.files[0].csv).rows[0]['Description']).toContain('Edited here');
+  });
+  it('warns when the returned export lacks a column for a local change', () => {
+    const d = destination();
+    d.profile.fields = { labelIds: 'Tags' };
+    const task = item('1');
+    const l = synced(task, {});
+    task.labels = [{ labelId: labelA }] as TransferItem['labels'];
+    const plan = exportPlan(d, outgoing(), [task], [l], undefined, members);
+    expect(plan.rows[0].warnings.join()).toMatch(/no Tags column/);
+  });
+  it('leaves required constant columns out of update files', () => {
+    const d = destination();
+    d.profile.constants = [{ header: 'Custom.Team', value: 'Payments' }];
+    const task = item('1');
+    const l = synced(task, {});
+    task.title = 'Renamed';
+    const plan = exportPlan(d, outgoing(), [task], [l], undefined, members);
+    expect(readCsv(plan.files[0].csv).headers).toEqual(['ID', 'Work Item Type', 'Title']);
+    expect(plan.rows[0].changes).toEqual(['title']);
+  });
+  it('keeps ADO tag spelling, matches tags ignoring case and drops only removed labels', () => {
+    const d = destination();
+    d.profile.fields = { labelIds: 'Tags' };
+    d.profile.tags = { fe: labelA, BE: labelB };
+    const task = item('1');
+    task.labels = [{ labelId: labelA }, { labelId: labelB }] as TransferItem['labels'];
+    const l = synced(task, { Tags: 'FE; be; Other' });
+    task.labels = [{ labelId: labelA }] as TransferItem['labels'];
+    const labels = [
+      { id: labelA, name: 'Frontend' },
+      { id: labelB, name: 'Backend' },
+    ];
+    const plan = exportPlan(d, outgoing(), [task], [l], { labels, sprints: [] }, members);
+    expect(plan.errors).toEqual([]);
+    expect(readCsv(plan.files[0].csv).rows[0]['Tags']).toBe('FE; Other');
+  });
+  it('does not block a link-only return on an ambiguous date', () => {
+    const d = destination();
+    d.profile.fields = { dueDate: 'Target Date' };
+    d.profile.dateTypes = { dueDate: ['TASK'] };
+    const l = link('1', { remoteId: null, pendingBatchId: randomUUID() });
+    const r = incoming(
+      `ID,Work Item Type,Title,Target Date,Description\n21,Task,A,02/11/2026 05:30:00,Kloister reference: ${l.reference}`,
+    );
+    r.mode = 'reconcile';
+    const plan = incomingPlan(d, r, [item('1')], [l], undefined, members);
+    expect(plan.errors).toEqual([]);
+    expect(plan.rows[0].warnings.join()).toMatch(/date order/);
+    expect(plan.rows[0].changes).toEqual([]);
+  });
+});
+
+describe('fields sent by an update file', () => {
+  it('asks when ADO later shows a different value for a field an update sent', () => {
+    const d = destination();
+    d.profile.states.TASK = {
+      NOT_STARTED: 'New',
+      IN_PROGRESS: 'Active',
+      BLOCKED: null,
+      DONE: 'Closed',
+    };
+    d.profile.incomingStates['Task\nClosed'] = { status: 'DONE', bucketId: bucket };
+    const task = item('1');
+    task.status = 'IN_PROGRESS';
+    const l = link('1', {
+      intent: { title: 'Item 1', status: 'IN_PROGRESS', _sent: ['status'] },
+      observation: {
+        raw: { 'Work Item Type': 'Task', Title: 'Item 1', State: 'Closed' },
+        values: { parentId: null },
+      },
+    });
+    const plan = exportPlan(d, outgoing(), [task], [l], undefined, members);
+    expect(plan.files).toEqual([]);
+    expect(plan.errors.join()).toMatch(/choose what to send for Status/);
+  });
+  it('leaves a date cell blank only for types without that date in a create file', () => {
+    const d = destination();
+    d.profile.fields = { dueDate: 'Target Date' };
+    d.profile.dateTypes = { dueDate: ['FEATURE'] };
+    const feature = item('1', 'FEATURE');
+    feature.dueDate = new Date('2026-12-24T00:00:00Z');
+    const task = item('2', 'TASK', '1');
+    task.dueDate = new Date('2026-12-25T00:00:00Z');
+    const rows = readCsv(exportPlan(d, outgoing(), [feature, task], []).files[0].csv).rows;
+    expect(rows.map((r) => r['Target Date'])).toEqual(['2026-12-24T12:00:00Z', '']);
   });
 });

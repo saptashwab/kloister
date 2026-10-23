@@ -17,11 +17,10 @@ outbound email or external services at runtime.
 - Local accounts, access controls, audit history and scheduled database backups.
 - Searchable **Help & FAQ** and a skippable introduction with **Take the tour** replay.
 
-The current source includes selective manual ADO CSV export/import, reviewed
-process mappings, returned-ID reconciliation and durable retry recovery. See
-[ADO transfer](docs/ADO-EXPORT.md) for permissions, limits and the disposable
-operator acceptance drill. Published v1.0.0 predates this feature; no v1.1 release
-or target ADO compatibility result is implied by the source changes.
+Kloister also moves work to and from Azure Boards with manual CSV files: setup from
+a sample ADO export, Quick review by default (with Detailed review when you want every
+choice), returned-ID linking and durable retry recovery. See
+[ADO transfer](docs/ADO-EXPORT.md) for permissions, limits and the acceptance drill.
 
 ![Project board with example data](docs/screenshots/board.png)
 

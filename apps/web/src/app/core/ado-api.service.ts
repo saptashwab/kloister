@@ -6,6 +6,7 @@ import type {
   AdoExportRequest,
   AdoImportRequest,
   AdoPreview,
+  AdoSampleResult,
   Page,
 } from '@kloister/shared';
 import { firstValueFrom } from 'rxjs';
@@ -33,6 +34,28 @@ export class AdoApiService {
     return firstValueFrom(
       this.http.put<AdoDestinationDto>(this.url(project, 'destination'), value),
     );
+  }
+  /**
+   * Makes Detailed review mandatory or optional for the project, PM only.
+   * @param project Project identity.
+   * @param requireDetailedReview New policy.
+   * @returns Saved destination.
+   */
+  reviewPolicy(project: string, requireDetailedReview: boolean): Promise<AdoDestinationDto> {
+    return firstValueFrom(
+      this.http.put<AdoDestinationDto>(this.url(project, 'review-policy'), {
+        requireDetailedReview,
+      }),
+    );
+  }
+  /**
+   * Reads a sample ADO export to suggest mappings, PM only; nothing is stored.
+   * @param project Project identity.
+   * @param csv Exported CSV text.
+   * @returns Distinct values found in the file.
+   */
+  sample(project: string, csv: string): Promise<AdoSampleResult> {
+    return firstValueFrom(this.http.post<AdoSampleResult>(this.url(project, 'sample'), { csv }));
   }
   /**
    * Previews outbound content without reserving creates.
@@ -94,12 +117,15 @@ export class AdoApiService {
   history(
     project: string,
     cursor?: string,
-  ): Promise<Page<{ id: string; mode: string; state: string; createdAt: string }>> {
+  ): Promise<
+    Page<{ id: string; mode: string; review?: string; state: string; createdAt: string }>
+  > {
     return firstValueFrom(
-      this.http.get<Page<{ id: string; mode: string; state: string; createdAt: string }>>(
-        this.url(project, 'batches'),
-        { params: cursor ? new HttpParams().set('cursor', cursor) : new HttpParams() },
-      ),
+      this.http.get<
+        Page<{ id: string; mode: string; review?: string; state: string; createdAt: string }>
+      >(this.url(project, 'batches'), {
+        params: cursor ? new HttpParams().set('cursor', cursor) : new HttpParams(),
+      }),
     );
   }
   /**

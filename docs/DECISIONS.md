@@ -1,5 +1,68 @@
 # Decisions
 
+## M8.1 transfer implementation (2026-10-23)
+
+- Real exports from a disposable Azure DevOps Services organization (Agile, Scrum,
+  Basic) became the test fixtures, with names replaced by example values. They use
+  LF line endings, quoted values, `Name <email>` identities, tags sorted by ADO,
+  HTML normalized by ADO (a space before closing tags) and dates in the exporting
+  user's locale and time zone (`02/11/2026 05:30:00` for midnight UTC at UTC+5:30).
+- Import probes through the ADO web UI showed that `YYYY-MM-DD` and
+  `YYYY-MM-DD HH:MM` are rejected for a day/month locale, while
+  `YYYY-MM-DDT12:00:00Z` is accepted under any locale. Exports now write noon UTC,
+  which keeps the calendar day for viewers within eleven hours of UTC. Imports read
+  the calendar date ADO showed the exporting user; an ambiguous day/month needs the
+  profile's optional `dateOrder`, which the sample upload detects when it can.
+- A new row with State is rejected ("not in the list of supported values"), as
+  documented. A new row with `Assigned To` was accepted, but Kloister still omits it
+  on creates to follow Microsoft's guidance. A Target Date on an Agile Task was
+  dropped silently, so date support stays opt-in per type.
+- Update files carry a field only when the reviewed choice is to send the local
+  value, grouped into one file per column set with flat ID/Work Item Type/Title
+  columns; parent changes are reported, not sent. Values are compared by meaning
+  (visible text for HTML, sorted lists). Unmapped tags in the observed ADO cell are
+  appended when Tags is sent.
+- Quick review: a field differs from the last confirmed sync on one side only →
+  that side wins; both → explicit choice. Without a baseline, the create intent
+  stands in, and fields a create never sends (State, Assigned To) count as unchanged
+  in ADO, so local intent wins after link-only. New ADO rows take every incoming
+  value. Outside a Detailed import of existing items, unmapped states, people, tags
+  and iterations are warnings and leave the field unchanged.
+- Stored observations are re-read with the current profile instead of being
+  invalidated by profile revisions; preview staleness covers only the items the
+  review reads plus shared project references.
+- Generated footers are removed structurally (from the rule before "Kloister
+  transfer details" to the item's issued reference), so prepared files that were
+  never imported and ADO's HTML normalization no longer break the next import.
+- Only a leading `=` is refused in output cells; `+`, `-` and `@` produce a preview
+  warning. Presets and default states moved to `@kloister/shared`; forward states
+  are filled from Microsoft's default processes and Blocked stays unmapped.
+- `AdoDestination.requireDetailedReview` and `AdoTransferBatch.review` are additive
+  columns with defaults (`false`, `detailed` for M8 batches). The review policy has
+  its own PM-only route so it does not change the profile revision. The sample
+  route is PM-only and stores nothing. Nothing outside ADO transfers changed.
+- Known limit: in Agile and CMMI a Bug's main text is Repro Steps; Kloister keeps
+  using Description and documents it.
+- Manual drill in the disposable organization (Agile): a generated create file with
+  a three-level hierarchy, a tag, a noon-UTC date and a title starting with "-"
+  imported without errors; its returned export linked by reference through ADO's
+  reformatted footers; the two follow-up update files (State only, and State plus
+  Assigned To) imported and set exactly those fields, leaving descriptions, tags,
+  priority, parents and the date unchanged.
+- Update files record the fields they sent. A sent field that ADO later shows with a
+  different value is asked about instead of being treated as ADO defaults, and a
+  returned export confirms the fields whose ADO value equals the local value.
+- Create files leave a date cell blank for types without that date instead of
+  dropping the column for the whole tree; mixed files with existing parents keep
+  the stricter rule.
+- Independent review fixes: a field with no known ADO baseline is a choice, not a
+  local win (only State/Assigned To after a create count as ADO defaults); tag
+  updates keep ADO's spelling for labels that stay and match tags ignoring case;
+  replacing an ADO description that has images always needs an explicit choice; a
+  local change hidden by a missing export column is reported; required constant
+  columns are create-only; summaries count only fields actually sent or applied;
+  ambiguous dates no longer block link-only or observation returns.
+
 ## Planning update: M8.1 (2026-10-23)
 
 - Owner decision: ADO transfers default to a Quick review (automatic linking by

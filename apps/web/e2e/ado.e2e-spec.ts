@@ -47,6 +47,11 @@ async function setup(page: Page) {
     },
   });
   expect(saved.status()).toBe(200);
+  const policy = await page.request.put(`api/v1/projects/${project.id}/ado/review-policy`, {
+    headers,
+    data: { requireDetailedReview: false },
+  });
+  expect(policy.status()).toBe(200);
   return { project: project.id, bucket };
 }
 async function csvFromDownload(page: Page): Promise<string> {
@@ -101,7 +106,7 @@ test('local starting point reserves creates, reconciles real IDs and exports pos
     await page.request.get(`api/v1/projects/${project}/ado/batches`)
   ).json()) as { items: { id: string }[] };
   expect(stored.items.length).toBeGreaterThan(0);
-  await page.getByRole('button', { name: 'Import / reconcile CSV', exact: true }).click();
+  await page.getByRole('tab', { name: 'Import from ADO', exact: true }).click();
   // Return the complete generated Description footer from the independent create contract.
   const description = `<hr /><p>Kloister transfer details (generated; not structured entities)</p><p>Kloister reference: ${reference}</p>`;
   await upload(
@@ -109,8 +114,8 @@ test('local starting point reserves creates, reconciles real IDs and exports pos
     `ID,Work Item Type,Title,State,Description,Parent,Assigned To\r\n71001,Task,Transfer local example,New,${description},,\r\n`,
   );
   await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
-  await page.getByRole('button', { name: /Apply 1 reviewed rows/ }).click();
-  await expect(page.getByRole('heading', { name: /Review.*APPLIED/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Apply 1 reviewed row', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Review.*Applied/ })).toBeVisible();
   expect(
     (
       (await (
@@ -118,14 +123,20 @@ test('local starting point reserves creates, reconciles real IDs and exports pos
       ).json()) as WorkItemDto
     ).status,
   ).toBe('BLOCKED');
-  await page.getByRole('button', { name: 'Export CSV', exact: true }).click();
+  // Quick review sends the intended local state without a per-field choice: ADO only holds its default.
+  await page
+    .getByRole('button', { name: 'Prepare the follow-up update (state and assignee)' })
+    .click();
+  await expect(page.getByRole('tab', { name: 'Export to ADO', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
   await page.getByRole('checkbox', { name: /I reviewed observation times/ }).check();
   await page.getByRole('button', { name: 'Preview export CSV', exact: true }).click();
-  await choose(page, 'Choose status for Transfer local example', 'Use local in file');
-  await page.getByRole('button', { name: 'Preview export CSV', exact: true }).click();
+  await expect(page.getByText(/Sent to ADO: Status ×1/)).toBeVisible();
   await page.getByRole('button', { name: 'Prepare reviewed CSV files' }).click();
   const update = await csvFromDownload(page);
-  expect(update).toContain('"ID"');
+  expect(update.split('\r\n')[0]).toBe('﻿"ID","Work Item Type","Title","State"');
   expect(update).toContain('"71001"');
   expect(update).toContain('"Active"');
   await info.attach('returned IDs and staged status update', {
@@ -134,29 +145,30 @@ test('local starting point reserves creates, reconciles real IDs and exports pos
   });
 });
 
-test('ADO starting point needs explicit new-row and field review, preserves counts on partial repeat', async ({
+test('ADO starting point needs explicit new-row confirmation and preserves counts on repeat', async ({
   page,
 }, info) => {
   const { project } = await setup(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/p/KLO/ado');
-  await page.getByRole('button', { name: 'Import / reconcile CSV', exact: true }).click();
+  await page.getByRole('tab', { name: 'Import from ADO', exact: true }).click();
   await choose(page, 'Incoming workflow', 'Import reviewed local changes / new rows');
   const csv = 'ID,Work Item Type,Title,State\r\n72001,Task,Remote starting example,New\r\n';
   await upload(page, csv);
   await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
-  await page.getByRole('checkbox', { name: /I confirm this ID is new/ }).check();
+  await page.getByRole('button', { name: 'Confirm all unmatched rows as new items' }).click();
   await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
-  for (const field of ['title', 'type', 'status', 'bucketId'])
-    await choose(page, `Choose ${field} for Remote starting example`, 'Take incoming');
-  await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
-  await page.getByRole('button', { name: 'Apply 1 reviewed rows' }).click();
-  await expect(page.getByRole('heading', { name: /Review.*APPLIED/ })).toBeVisible();
+  // Quick review takes every value of a confirmed new row; the choices stay visible and editable.
+  await expect(
+    page.getByRole('combobox', { name: 'Choose Title for Remote starting example' }),
+  ).toContainText('Take incoming');
+  await page.getByRole('button', { name: 'Apply 1 reviewed row', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Review.*Applied/ })).toBeVisible();
   await upload(page, csv);
   await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
-  await expect(page.getByRole('heading', { name: /Review.*PREVIEW/ })).toBeVisible();
-  await page.getByRole('button', { name: 'Apply 1 reviewed rows' }).click();
-  await expect(page.getByRole('heading', { name: /Review.*APPLIED/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Review.*Not applied yet/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Apply 1 reviewed row', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Review.*Applied/ })).toBeVisible();
   const results = (await (
     await page.request.get(`api/v1/projects/${project}/items?q=Remote%20starting%20example`)
   ).json()) as { items: WorkItemDto[] };
@@ -168,10 +180,47 @@ test('ADO starting point needs explicit new-row and field review, preserves coun
   });
 });
 
+test('PM sets up from a sample export and can require Detailed review', async ({ page }, info) => {
+  await setup(page);
+  await page.goto('/p/KLO/ado');
+  await expect(page.getByRole('tab', { name: 'ADO transfer', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await page.getByRole('tab', { name: 'Transfer settings', exact: true }).click();
+  const sample = [
+    'ID,Work Item Type,Title,State,Assigned To,Tags,Target Date',
+    '1,User Story,Sample story,Resolved,Example Person <person@example.org>,sample-tag,18/12/2026 05:30:00',
+    '2,Task,Sample task,Active,,,',
+  ].join('\r\n');
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'ado-sample.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(sample, 'utf8'),
+  });
+  await expect(page.getByRole('status').filter({ hasText: 'Looks like Agile' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'ADO tag' }).last()).toHaveValue('sample-tag');
+  await page.getByRole('checkbox', { name: /Require Detailed review/ }).check();
+  await page.getByRole('tab', { name: 'Export to ADO', exact: true }).click();
+  await expect(
+    page.getByText('A project PM requires Detailed review for this project.'),
+  ).toBeVisible();
+  await expect(page.getByRole('radio', { name: 'Quick review' })).toBeDisabled();
+  await info.attach('sample setup and required Detailed review', {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  });
+  await page.getByRole('tab', { name: 'Transfer settings', exact: true }).click();
+  await page.getByRole('checkbox', { name: /Require Detailed review/ }).uncheck();
+  await page.getByRole('tab', { name: 'Export to ADO', exact: true }).click();
+  await expect(page.getByRole('radio', { name: 'Quick review' })).toBeEnabled();
+});
+
 test('Viewers retain snapshots and cannot open transfer controls or API', async ({ page }) => {
   await signIn(page, USERS.viewer);
   await page.goto('/p/KLO');
-  await expect(page.getByRole('link', { name: 'ADO transfer', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Board', exact: true })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'ADO transfer', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Export…', exact: true })).toBeVisible();
   expect((await page.request.get('api/v1/projects/KLO/ado/profile')).status()).toBe(403);
   await page.goto('/p/KLO/ado');

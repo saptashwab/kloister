@@ -497,3 +497,12 @@ Changing a file resets file-specific approvals; changing project/capabilities cl
 drafts and discards delayed responses. Layout uses existing tokens, wraps mapping
 rows at phone width and retains named keyboard controls. CSV freshness/provenance
 and cancellation duplicate risks are visible before actions.
+
+M8.1 moves ADO transfer to the last project tab and gives its workflows real
+Material tabs (Export to ADO, Import from ADO, Transfer settings, Transfer history).
+A Quick/Detailed button toggle sits above export and import; Quick is the default
+and a PM policy can lock it to Detailed. Previews start with a one-glance summary
+(rows per kind, fields sent or taken, choices still needed). Values show names,
+statuses and item keys instead of raw identifiers; the last-synced values appear
+only in Detailed review. Settings start with a sample-export upload that pre-fills
+suggestions, and label creation reuses the shared label palette.

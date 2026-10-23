@@ -47,7 +47,9 @@ reset work or change database major, deployment layout, ports or server policy.
 Transfer mappings, pending intent and retry receipts are in the database backup.
 Keep the coordinated pre-upgrade backup and run the disposable acceptance drill in
 [ADO transfer](ADO-EXPORT.md) before transferring production work. Completed transfer
-content expires after 90 days; active links, tombstones and pending state remain.
+content expires after 90 days and unapplied previews after 7 days; active links,
+tombstones and pending state remain. The M8.1 upgrade adds two columns with defaults
+and changes no other data.
 
 Keep the maintenance window open. The script prints rollback guidance and keeps
 the prior code; it does not pretend that schema migrations can be reversed by

@@ -7,6 +7,7 @@ import {
   type AdoImportRequest,
   type AdoPreviewRow,
   type AdoProfile,
+  type AdoReview,
   ItemType,
   ItemStatus,
 } from '@kloister/shared';
@@ -16,6 +17,7 @@ import { sanitizeRichText } from '../common/sanitize-html.js';
 import type { AdoItemLink, Prisma } from '../generated/prisma/client.js';
 import { readCsv, remoteId, type CsvTable } from './csv.js';
 import { object } from './profiles.js';
+import { identityEmail, parseAdoDate, sameValue, stripFooter } from './values.js';
 
 /** Snapshot values normalized across the two systems. */
 export type Values = Partial<Record<AdoField, string | number | string[] | null>>;
@@ -36,6 +38,16 @@ export const TRANSFER_INCLUDE = {
 /** Fully scoped item with transfer relations. */
 export type TransferItem = Prisma.WorkItemGetPayload<{ include: typeof TRANSFER_INCLUDE }>;
 
+/** Project member facts used to recognize ADO identities by email. */
+export interface TransferMember {
+  /** Local user ID. */
+  userId: string;
+  /** Account email. */
+  email: string;
+  /** Shown name. */
+  displayName: string;
+}
+
 /** Normalized incoming row, used only after a persisted preview is revalidated. */
 export interface IncomingOperation {
   /** Remote identity. */
@@ -55,6 +67,48 @@ export interface IncomingOperation {
   /** Parent remote identity; missing leaves existing hierarchy unchanged. */
   parentRemote?: string | null;
 }
+
+/** Key in a link's intent listing the fields an update file sent. */
+export const SENT = '_sent';
+
+/**
+ * Fields an update file sent for a link, from its stored intent.
+ * @param intent Stored intent JSON.
+ * @returns Sent fields.
+ */
+export function sentFields(intent: unknown): AdoField[] {
+  const value = (intent as Record<string, unknown> | null | undefined)?.[SENT];
+  return Array.isArray(value) ? (value as AdoField[]) : [];
+}
+
+/** Readable field names for review messages. */
+export const FIELD_NAMES: Record<AdoField, string> = {
+  title: 'Title',
+  type: 'Type',
+  description: 'Description',
+  status: 'Status',
+  priority: 'Priority',
+  assigneeIds: 'Assignee',
+  labelIds: 'Labels',
+  sprintId: 'Sprint',
+  startDate: 'Start date',
+  dueDate: 'Due date',
+  parentId: 'Parent',
+  bucketId: 'Bucket',
+};
+
+/** Fields a create file carries; State and Assigned To are staged for the update pass. */
+const CREATE_FIELDS = new Set<AdoField>([
+  'title',
+  'type',
+  'description',
+  'priority',
+  'labelIds',
+  'sprintId',
+  'startDate',
+  'dueDate',
+  'parentId',
+]);
 
 /**
  * Stable digest for preview staleness and replay checks.
@@ -88,11 +142,16 @@ export function localValues(item: TransferItem): Values {
 }
 
 /**
- * Builds honest three-way differences, requiring an explicit choice for every unequal value.
+ * Builds three-way differences. In Quick review a difference is resolved automatically when only
+ * one side changed since the last confirmed sync; a field ADO never received (State, Assigned To
+ * after a create) only holds ADO's defaults, so the local value wins there. Changes on both sides,
+ * and fields with no known ADO baseline, stay unresolved. Detailed review resolves nothing
+ * automatically.
  * @param local Present local fields.
  * @param incoming Present remote fields; absent keys are preserved.
- * @param link Previous confirmed snapshots.
- * @param choices Reviewed direction-dependent choices.
+ * @param link Previous confirmed snapshots and the create intent.
+ * @param choices Explicit choices, which always win.
+ * @param review Review mode.
  * @returns Visible differences.
  */
 export function differences(
@@ -100,24 +159,47 @@ export function differences(
   incoming: Values,
   link: AdoItemLink | undefined,
   choices: Partial<Record<AdoField, AdoChoice>>,
+  review: AdoReview = 'detailed',
 ): AdoDifference[] {
   const lb = (link?.localBaseline ?? {}) as Values,
-    rb = (link?.remoteBaseline ?? {}) as Values;
+    rb = (link?.remoteBaseline ?? {}) as Values,
+    intent = (link?.intent ?? {}) as Values,
+    sent = new Set(sentFields(link?.intent));
   return (Object.keys(incoming) as AdoField[])
-    .filter((field) => digest(local[field] ?? null) !== digest(incoming[field]))
-    .map((field) => ({
-      field,
-      local: local[field] ?? null,
-      incoming: incoming[field],
-      baselineLocal: lb[field] ?? null,
-      baselineRemote: rb[field] ?? null,
-      conflict:
-        lb[field] === undefined ||
-        rb[field] === undefined ||
-        (digest(local[field]) !== digest(lb[field]) &&
-          digest(incoming[field]) !== digest(rb[field])),
-      ...(choices[field] === undefined ? {} : { choice: choices[field] }),
-    }));
+    .filter((field) => !sameValue(field, local[field], incoming[field]))
+    .map((field) => {
+      const hasLocalBase = field in lb || field in intent;
+      const baseLocal = field in lb ? lb[field] : intent[field];
+      // ADO's value is known only from a confirmed sync or from what a create file sent.
+      // Sent by an update file but not yet confirmed by a returned export.
+      const unconfirmed = sent.has(field) && !(field in rb) && field in intent;
+      const hasRemoteBase =
+        field in rb || ((CREATE_FIELDS.has(field) || unconfirmed) && field in intent);
+      const baseRemote = field in rb ? rb[field] : intent[field];
+      // A field a create never sends (State, Assigned To) holds only ADO's defaults afterwards.
+      const defaultsOnly = !hasRemoteBase && !CREATE_FIELDS.has(field) && field in intent;
+      const localChanged = !hasLocalBase || !sameValue(field, local[field], baseLocal);
+      const remoteChanged = hasRemoteBase && !sameValue(field, incoming[field], baseRemote);
+      // Without any ADO baseline a difference cannot be attributed to one side; a sent value that
+      // ADO no longer shows may never have been imported, so it is asked about too.
+      const conflict =
+        (localChanged && remoteChanged) ||
+        (!hasRemoteBase && !defaultsOnly) ||
+        (unconfirmed && remoteChanged);
+      const auto: AdoChoice | undefined =
+        review !== 'quick' || conflict ? undefined : remoteChanged ? 'incoming' : 'local';
+      const choice = choices[field] ?? auto;
+      return {
+        field,
+        local: local[field] ?? null,
+        incoming: incoming[field],
+        baselineLocal: lb[field] ?? null,
+        baselineRemote: rb[field] ?? null,
+        conflict: review === 'quick' ? conflict : conflict || !(field in lb) || !(field in rb),
+        ...(choice === undefined ? {} : { choice }),
+        ...(choices[field] === undefined && auto !== undefined ? { auto: true } : {}),
+      };
+    });
 }
 
 /**
@@ -145,6 +227,24 @@ export function validateChoices(value: unknown): void {
         throw invalidField('choices', 'Unknown field or resolution');
 }
 
+/** Inputs for reading one ADO row into local terms. */
+export interface NormalizeOptions {
+  /** Linked local item, if any. */
+  current?: TransferItem;
+  /** Durable link, used to recognize the generated footer. */
+  link?: AdoItemLink;
+  /** Explicit reverse type for this row. */
+  type?: ItemType;
+  /** Reviewed tags that become new labels. */
+  createLabels?: AdoImportRequest['createLabels'];
+  /** Unmapped values become warnings and are left out instead of blocking. */
+  lenient: boolean;
+  /** Project members, for email-based identity matching. */
+  members: TransferMember[];
+  /** Collected row warnings. */
+  warnings: string[];
+}
+
 /**
  * Builds a PM-only incoming plan. It never writes, infers identities from titles or imports unselected rows.
  * @param destination Scoped reviewed destination.
@@ -152,6 +252,7 @@ export function validateChoices(value: unknown): void {
  * @param items Fully readable current items.
  * @param links Scoped durable identities, including tombstones.
  * @param parsed Previously validated normalized table for persisted preview recovery.
+ * @param members Project members, for identity matching by email.
  * @returns Preview rows, operations and blocking errors.
  */
 export function incomingPlan(
@@ -160,6 +261,7 @@ export function incomingPlan(
   items: TransferItem[],
   links: AdoItemLink[],
   parsed?: CsvTable,
+  members: TransferMember[] = [],
 ): {
   rows: AdoPreviewRow[];
   operations: IncomingOperation[];
@@ -170,7 +272,8 @@ export function incomingPlan(
   object(request.manualLinks);
   object(request.types);
   const table = parsed ?? readCsv(request.csv),
-    p = destination.profile;
+    p = destination.profile,
+    review: AdoReview = request.review ?? 'quick';
   const errors: string[] = [],
     warnings = [
       'CSV is an observation, not a live lock. Missing rows never delete work.',
@@ -299,7 +402,16 @@ export function incomingPlan(
             ? 'observe'
             : 'update'
         : 'create';
-      const incoming = normalize(raw, p, request, id, current, link, row.warnings);
+      const incoming = normalizeRow(raw, p, {
+        current,
+        link,
+        type: request.types[id],
+        createLabels: request.createLabels,
+        // Only a Detailed import of existing values blocks on unmapped values; new items always need them.
+        lenient: request.mode !== 'import' || (review === 'quick' && current !== undefined),
+        members,
+        warnings: row.warnings,
+      });
       const parentRemote = parents.get(id);
       if (parents.has(id)) {
         if (parentRemote === id) throw invalidField('Parent', 'An item cannot parent itself');
@@ -325,13 +437,24 @@ export function incomingPlan(
           row.warnings.push('Parent intentionally omitted; hierarchy is lost for this row.');
       }
       const choices = request.choices[id] ?? {};
-      row.differences = differences(current ? localValues(current) : {}, incoming, link, choices);
+      row.differences = differences(
+        current ? localValues(current) : {},
+        incoming,
+        link,
+        choices,
+        review,
+        // A new item takes every incoming value in Quick review.
+      ).map((d) =>
+        !current && review === 'quick' && choices[d.field] === undefined
+          ? { ...d, choice: 'incoming' as const, auto: true, conflict: false }
+          : d,
+      );
       const changes: Values = {};
       if (request.mode === 'import')
         for (const d of row.differences) {
           if (d.choice === undefined)
             errors.push(
-              `Row ${index + 1}: review ${d.field} (${d.conflict ? 'conflict' : 'difference'}).`,
+              `Row ${index + 1}: choose ${FIELD_NAMES[d.field]} (${d.conflict ? 'changed on both sides' : 'difference'}).`,
             );
           if (d.choice === 'incoming') changes[d.field] = incoming[d.field];
         }
@@ -343,6 +466,7 @@ export function incomingPlan(
         errors.push(
           `Row ${index + 1}: new items require reviewed title, reverse type, status and existing bucket.`,
         );
+      row.changes = Object.keys(changes) as AdoField[];
       if (current && row.differences.length === 0) row.kind = 'unchanged';
       operations.push({
         remoteId: id,
@@ -401,75 +525,71 @@ export function references(html: string): string[] {
   return refs;
 }
 
-function normalize(
+/**
+ * Reads one ADO row into local terms. Absent columns stay absent so they never change local data.
+ * Lenient reading reports unmapped values as warnings and leaves those fields out.
+ * @param raw Row cells by header.
+ * @param p Destination profile.
+ * @param options Row context.
+ * @returns Normalized values for the supplied columns.
+ */
+export function normalizeRow(
   raw: Record<string, string>,
   p: AdoProfile,
-  request: AdoImportRequest,
-  id: string,
-  current: TransferItem | undefined,
-  link: AdoItemLink | undefined,
-  warnings: string[],
+  options: NormalizeOptions,
 ): Values {
+  const { current, link, lenient, warnings } = options;
+  const skip = (header: string, message: string): void => {
+    if (!lenient) throw invalidField(header, message);
+    warnings.push(`${message}; ${header} is left unchanged.`);
+  };
   const remoteType = raw['Work Item Type'] ?? '';
-  const type =
-    request.types[id] ??
+  let type =
+    options.type ??
     (current && p.types[current.type] === remoteType ? current.type : p.reverseTypes[remoteType]);
-  if (!Object.values(ItemType).includes(type))
-    throw invalidField('Work Item Type', 'Choose a reverse type for this row');
-  const result: Values = { type: type };
-  if (request.types[id] !== undefined) {
-    if (!Object.values(ItemType).includes(request.types[id]))
-      throw invalidField('types', 'Invalid reverse type');
-    result.type = request.types[id]!;
+  if (!Object.values(ItemType).includes(type)) {
+    if (!(lenient && current))
+      throw invalidField('Work Item Type', 'Choose a reverse type for this row');
+    type = current.type;
   }
+  const result: Values = { type };
   const title = Object.entries(raw).find(
     ([k, v]) => /^Title(?: [1-9]\d*)?$/u.test(k) && v !== '',
   )?.[1];
   if (title !== undefined) result.title = title;
   if (raw['Description'] !== undefined) {
-    let html = raw['Description'];
-    const refs = references(html);
-    if (link && refs.includes(link.reference)) {
-      if (link.generatedSuffix && html.endsWith(link.generatedSuffix))
-        html = html.slice(0, -link.generatedSuffix.length);
-      else if (link.generatedSuffix) {
-        // Compare sanitized suffixes so harmless tag/attribute and trailing-space normalization does not accumulate generated content.
-        const clean = sanitizeRichText(html).trimEnd(),
-          suffix = sanitizeRichText(link.generatedSuffix).trimEnd();
-        if (clean.endsWith(suffix)) html = clean.slice(0, -suffix.length);
-        else
-          throw invalidField(
-            'Description',
-            'Generated transfer details changed. Restore the issued footer or remove generated details and use explicit manual matching.',
-          );
-      } else html = html.replace(`Kloister reference: ${link.reference}`, '');
-    }
-    result.description = sanitizeRichText(html);
-    if (result.description !== html)
-      warnings.push('Unsafe markup and all embedded images removed; resources are never fetched.');
+    const html = raw['Description'];
+    result.description = link ? stripFooter(html, link.reference) : sanitizeRichText(html);
+    if (/<img\b/iu.test(html))
+      warnings.push(
+        'Embedded images in the ADO description are not kept; resources are never fetched.',
+      );
+    else if (
+      sanitizeRichText(html) !== html.trim() &&
+      /<(?:script|iframe|object|style)\b/iu.test(html)
+    )
+      warnings.push('Unsafe markup removed; resources are never fetched.');
   }
   const state = raw['State'];
   if (state !== undefined || current === undefined) {
-    const mapped = p.incomingStates[`${raw['Work Item Type']}\n${state ?? ''}`];
-    if (!mapped)
+    const mapped = p.incomingStates[`${remoteType}\n${state ?? ''}`];
+    if (mapped) {
+      result.status = mapped.status;
+      result.bucketId = mapped.bucketId;
+    } else if (current === undefined)
       throw invalidField(
         'State',
-        'Review a status and existing bucket mapping for this type/state (blank state for new rows without State)',
+        `Map "${remoteType}" state "${state ?? ''}" to a status and existing bucket`,
       );
-    result.status = mapped.status;
-    result.bucketId = mapped.bucketId;
+    else skip('State', `State "${state}" of "${remoteType}" has no mapping`);
   }
   if (raw['Assigned To'] !== undefined) {
-    const alias = raw['Assigned To'];
+    const alias = raw['Assigned To'].trim();
     if (alias === '') result.assigneeIds = [];
-    else if (!Object.hasOwn(p.incomingIdentities, alias))
-      throw invalidField(
-        'Assigned To',
-        'Map unknown identity to a member or explicitly unassigned',
-      );
     else {
-      const user = p.incomingIdentities[alias];
-      result.assigneeIds = user ? [user] : [];
+      const user = resolveIdentity(alias, p, options.members);
+      if (user === undefined) skip('Assigned To', `"${alias}" is not mapped to a project member`);
+      else result.assigneeIds = user ? [user] : [];
     }
     if (alias === '' && current?.assignees.length)
       warnings.push(
@@ -481,37 +601,44 @@ function normalize(
     if (value === undefined) continue;
     switch (field) {
       case 'priority':
-        if (!/^[1-4]$/u.test(value)) throw invalidField(header, 'Priority must be 1–4');
-        result.priority = Number(value);
+        if (value.trim() === '') break;
+        if (!/^[1-4]$/u.test(value.trim())) throw invalidField(header, 'Priority must be 1–4');
+        result.priority = Number(value.trim());
         break;
       case 'startDate':
       case 'dueDate':
-        if (p.dateTypes[field]?.includes(type)) result[field] = value === '' ? null : value;
-        else warnings.push(`${header} omitted: date support is not confirmed for this type.`);
+        if (p.dateTypes[field]?.includes(type))
+          try {
+            result[field] = parseAdoDate(value, p.dateOrder, header);
+          } catch (error) {
+            skip(header, error instanceof Error ? error.message : `Unreadable ${header}`);
+          }
+        else if (value.trim() !== '')
+          warnings.push(`${header} left out: date support is not confirmed for this type.`);
         break;
       case 'sprintId':
-        if (value === '') result.sprintId = null;
+        if (value.trim() === '') result.sprintId = null;
         else if (Object.hasOwn(p.iterations, value)) result.sprintId = p.iterations[value] ?? null;
-        else
-          throw invalidField(header, 'Map iteration to an existing sprint or explicitly no sprint');
+        else skip(header, `Iteration "${value}" is not mapped to a sprint`);
         break;
-      case 'labelIds':
-        result.labelIds = [
-          ...new Set(
-            value
-              .split(';')
-              .map((v) => v.trim())
-              .filter(Boolean)
-              .flatMap((tag) => {
-                const create = request.createLabels.find((l) => l.tag === tag);
-                if (create) return [`label:${tag}`];
-                if (!Object.hasOwn(p.tags, tag))
-                  throw invalidField(header, 'Review unknown tag mapping or explicit omission');
-                return p.tags[tag] ? [p.tags[tag]] : [];
-              }),
-          ),
-        ].sort();
+      case 'labelIds': {
+        const labels: string[] = [];
+        for (const tag of value
+          .split(';')
+          .map((v) => v.trim())
+          .filter(Boolean)) {
+          const mapped = tagLabel(p, tag);
+          if (options.createLabels?.some((l) => l.tag.toLowerCase() === tag.toLowerCase()))
+            labels.push(`label:${tag}`);
+          else if (mapped === undefined) {
+            if (!lenient)
+              throw invalidField(header, `Map tag "${tag}" to a label or omit it explicitly`);
+            warnings.push(`Tag "${tag}" is not mapped; it stays in ADO only.`);
+          } else if (mapped) labels.push(mapped);
+        }
+        result.labelIds = [...new Set(labels)].sort();
         break;
+      }
     }
   }
   for (const key of ['assigneeIds', 'labelIds'] as const)
@@ -524,4 +651,37 @@ function normalize(
   )
     throw invalidField('State', 'Invalid status mapping');
   return result;
+}
+
+/**
+ * Looks up a tag mapping the way ADO compares tags: ignoring case.
+ * @param p Destination profile.
+ * @param tag ADO tag.
+ * @returns Label ID, null for an explicit omission, undefined when unmapped.
+ */
+export function tagLabel(p: AdoProfile, tag: string): string | null | undefined {
+  if (Object.hasOwn(p.tags, tag)) return p.tags[tag];
+  const key = Object.keys(p.tags).find((k) => k.toLowerCase() === tag.toLowerCase());
+  return key === undefined ? undefined : p.tags[key];
+}
+
+/**
+ * Resolves an exported identity to a member: an explicit alias first, then the email inside
+ * `Display Name <email>` against aliases and member emails.
+ * @param value Exported identity.
+ * @param p Destination profile.
+ * @param members Project members.
+ * @returns Member ID, null for explicit unassigned, undefined when unknown.
+ */
+function resolveIdentity(
+  value: string,
+  p: AdoProfile,
+  members: TransferMember[],
+): string | null | undefined {
+  if (Object.hasOwn(p.incomingIdentities, value)) return p.incomingIdentities[value];
+  const email = identityEmail(value);
+  if (!email) return undefined;
+  for (const [alias, user] of Object.entries(p.incomingIdentities))
+    if ((identityEmail(alias) ?? alias.toLowerCase()) === email) return user;
+  return members.find((m) => m.email.toLowerCase() === email)?.userId;
 }

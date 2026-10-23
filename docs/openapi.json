@@ -3394,6 +3394,62 @@
         "tags": ["Ado"]
       }
     },
+    "/api/v1/projects/{id}/ado/review-policy": {
+      "put": {
+        "operationId": "AdoController_reviewPolicy",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReviewPolicyDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Sets whether Detailed review is mandatory, PM only.",
+        "tags": ["Ado"]
+      }
+    },
+    "/api/v1/projects/{id}/ado/sample": {
+      "post": {
+        "operationId": "AdoController_sample",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/SampleDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Reads a sample ADO export to suggest mappings, PM only; nothing is stored.",
+        "tags": ["Ado"]
+      }
+    },
     "/api/v1/projects/{id}/ado/export/preview": {
       "post": {
         "operationId": "AdoController_previewExport",
@@ -4326,6 +4382,27 @@
         },
         "required": ["organization", "remoteProject", "profile", "revision"]
       },
+      "ReviewPolicyDto": {
+        "type": "object",
+        "properties": {
+          "requireDetailedReview": {
+            "type": "boolean",
+            "description": "Whether every transfer must use Detailed review."
+          }
+        },
+        "required": ["requireDetailedReview"]
+      },
+      "SampleDto": {
+        "type": "object",
+        "properties": {
+          "csv": {
+            "type": "string",
+            "description": "UTF-8 file text, also checked by byte length.",
+            "maxLength": 10485760
+          }
+        },
+        "required": ["csv"]
+      },
       "SelectionDto": {
         "type": "object",
         "properties": {
@@ -4384,6 +4461,11 @@
             "type": "boolean",
             "description": "Operator freshness acknowledgement."
           },
+          "review": {
+            "description": "Review mode; Quick when omitted.",
+            "enum": ["quick", "detailed"],
+            "type": "string"
+          },
           "previewDigest": {
             "type": "string",
             "description": "Digest from preview, required by prepare.",
@@ -4405,6 +4487,11 @@
             "type": "string",
             "description": "Link-only, observation-only or reviewed import.",
             "enum": ["import", "reconcile", "observe"]
+          },
+          "review": {
+            "type": "string",
+            "description": "Review mode; Quick when omitted.",
+            "enum": ["quick", "detailed"]
           },
           "selectedRows": {
             "nullable": true,

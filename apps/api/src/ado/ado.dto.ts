@@ -21,6 +21,7 @@ import type {
   AdoField,
   AdoImportRequest,
   AdoProfile,
+  AdoReview,
   AdoSelection,
   ItemType,
 } from '@kloister/shared';
@@ -67,6 +68,8 @@ export class ExportDto implements AdoExportRequest {
   @IsObject() choices: Record<string, Partial<Record<AdoField, AdoChoice>>>;
   /** Operator freshness acknowledgement. */
   @IsBoolean() freshnessAcknowledged: boolean;
+  /** Review mode; Quick when omitted. */
+  @IsOptional() @IsIn(['quick', 'detailed']) review?: AdoReview;
   /** Digest from preview, required by prepare. */
   @IsOptional() @IsString() @MaxLength(64) previewDigest?: string;
   /** Retry identity. */
@@ -79,6 +82,8 @@ export class ImportDto implements AdoImportRequest {
   @IsString() @MaxLength(10 * 1024 * 1024) csv: string;
   /** Link-only, observation-only or reviewed import. */
   @IsIn(['import', 'reconcile', 'observe']) mode: AdoImportRequest['mode'];
+  /** Review mode; Quick when omitted. */
+  @IsOptional() @IsIn(['quick', 'detailed']) review?: AdoReview;
   /** Null explicitly selects every uploaded row. */
   @IsOptional() @IsArray() @ArrayMaxSize(1000) @ArrayUnique() @IsInt({ each: true }) selectedRows:
     number[] | null;
@@ -113,4 +118,16 @@ export class ApplyDto {
 export class CancelDto {
   /** Acknowledges that the operator may already have created remote duplicates. */
   @IsBoolean() duplicateRiskAcknowledged: boolean;
+}
+
+/** PM-only policy that makes Detailed review mandatory for the project. */
+export class ReviewPolicyDto {
+  /** Whether every transfer must use Detailed review. */
+  @IsBoolean() requireDetailedReview: boolean;
+}
+
+/** A sample ADO export, read to suggest mappings and never stored. */
+export class SampleDto {
+  /** UTF-8 file text, also checked by byte length. */
+  @IsString() @MaxLength(10 * 1024 * 1024) csv: string;
 }

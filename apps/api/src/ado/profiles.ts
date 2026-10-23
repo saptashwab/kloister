@@ -1,56 +1,19 @@
-import { type AdoProfile, type AdoProcess, ItemType, ItemStatus } from '@kloister/shared';
+import {
+  adoPreset,
+  type AdoProfile,
+  type AdoProcess,
+  ItemType,
+  ItemStatus,
+} from '@kloister/shared';
 import { invalidField } from '../common/api-exception.js';
 
 /**
- * Builds conservative editable presets. State/bucket and reverse choices require PM review.
+ * Builds an editable preset; types and states are suggestions a PM confirms.
  * @param process Selected process.
  * @returns Unconfirmed profile; dates are disabled.
  */
 export function preset(process: AdoProcess): AdoProfile {
-  const types = {
-    EPIC: 'Epic',
-    FEATURE: 'Feature',
-    STORY:
-      process === 'Scrum'
-        ? 'Product Backlog Item'
-        : process === 'CMMI'
-          ? 'Requirement'
-          : 'User Story',
-    TASK: 'Task',
-    BUG: 'Bug',
-  };
-  const forward: AdoProfile['types'] =
-    process === 'Basic'
-      ? { EPIC: null, FEATURE: 'Epic', STORY: 'Issue', TASK: 'Task', BUG: 'Issue' }
-      : types;
-  if (process === 'Custom')
-    for (const key of Object.keys(forward) as ItemType[]) forward[key] = null;
-  return {
-    process,
-    types: forward,
-    reverseTypes: {},
-    states: Object.fromEntries(
-      Object.values(ItemType).map((type) => [
-        type,
-        Object.fromEntries(Object.values(ItemStatus).map((s) => [s, null])),
-      ]),
-    ) as AdoProfile['states'],
-    incomingStates: {},
-    dateTypes: {},
-    fields: {
-      priority: 'Priority',
-      labelIds: 'Tags',
-      sprintId: 'Iteration Path',
-      area: 'Area Path',
-    },
-    identities: {},
-    incomingIdentities: {},
-    tags: {},
-    iterations: {},
-    iterationRoot: '',
-    area: '',
-    constants: [],
-  };
+  return adoPreset(process);
 }
 
 /**
@@ -89,6 +52,7 @@ export function validateProfile(value: unknown): AdoProfile {
     'iterationRoot',
     'area',
     'constants',
+    'dateOrder',
   ]);
   if (Object.keys(p).some((key) => !allowed.has(key)))
     throw invalidField('profile', 'Unknown profile property');
@@ -171,6 +135,12 @@ export function validateProfile(value: unknown): AdoProfile {
       throw invalidField('constants', 'Duplicate or reserved constant column');
     headers.add(h.toLowerCase());
   }
+  const dateOrder = p['dateOrder'];
+  if (
+    dateOrder !== undefined &&
+    (typeof dateOrder !== 'string' || !['DMY', 'MDY'].includes(dateOrder))
+  )
+    throw invalidField('dateOrder', 'Choose day/month or month/day order');
   if (p['process'] === 'Basic' && types['EPIC'] !== null)
     throw invalidField('types', 'Basic explicitly omits local Epics');
   if (JSON.stringify(p).length > 128 * 1024)

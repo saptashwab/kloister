@@ -1,185 +1,129 @@
 # Manual Azure Boards CSV transfer
 
-Use **ADO transfer** in an ordinary project. This is separate from **Export…**,
-which produces Excel/offline reading snapshots for every role's readable data.
-Transfer files are carried by an operator. Neither browser nor backend contacts
-ADO, asks for a PAT, or fetches resources mentioned in imported HTML.
+Use **ADO transfer** (the last tab of an ordinary project) to move work between Kloister and
+Azure Boards with CSV files. This is separate from **Export…**, which makes Excel/offline reading
+copies for every role. Neither the browser nor the backend contacts ADO, asks for a token or
+fetches anything mentioned in imported HTML: you carry the files.
 
-Project PMs and project Leads prepare exports. Only project PMs configure the
-destination, upload incoming files, link IDs, apply changes and cancel pending
-creates. Team leadership and system administration grant no additional transfer
-rights. Personal spaces are excluded. Archived projects reject transfer writes;
-previously prepared outbound files remain downloadable with export permission.
+Who can do what:
 
-## Configure and review
+- Project PMs and project Leads export.
+- Only project PMs change transfer settings, bring files back from ADO, link IDs, apply changes
+  and cancel pending creates.
+- Team leadership and system administration add nothing. Personal spaces are excluded, and
+  archived projects accept no transfer writes (prepared files stay downloadable).
+- In ADO, importing CSV files needs Project Administrators (or Team Foundation Administrators)
+  membership in the ADO project.
 
-A PM opens **Transfer settings**, identifies the organization/collection and ADO
-project, then reviews a Basic, Agile, Scrum, CMMI or Custom profile against actual
-query exports from that destination. Nothing is fetched from an identity URL.
-One destination belongs to each local project. Its remote tuple is not globally
-exclusive, but transfers never route between local projects. Sharing a remote
-destination grants no additional local access. Once durable links exist, changing
-destination identity is blocked. Profile changes invalidate previews and require
-reviewing remote observations again; links are retained.
+## Set up once per project
 
-Review forward types, reverse choices for new rows, states by type, identity
-aliases, optional field headers, iteration paths, tag mappings and required
-constants. A state mapping names a local status and an **existing bucket**. Board
-columns and remote states are independent. No bucket, account, membership, sprint
-or dependency is automatically created. New labels require a separate explicit
-PM-reviewed tag/name/colour list. Unknown tags, assignees and iterations need a
-mapping or explicit omission/unassigned/no-sprint choice.
+1. In the ADO project, run a query with the columns ID, Work Item Type, Title, State, Assigned To,
+   Tags, Iteration Path and any date fields you use, then choose **Export to CSV**.
+2. In Kloister, open **Transfer settings**, choose that file under **Start from a sample**, enter
+   the organization (or collection) and ADO project, and check the suggestions:
+   - process, types and states (presets follow Microsoft's default Basic, Agile, Scrum and CMMI
+     processes; customized processes may differ),
+   - each ADO state's status and existing bucket (no buckets, sprints, accounts or memberships are
+     ever created),
+   - tags (a tag without a label stays in ADO only and is kept when Kloister updates tags),
+   - iterations, and the date order of the exported dates.
+3. Save. People are matched by email; add a row only for someone who uses another address in ADO.
+   Dates are sent only for the types you tick, because ADO silently drops a date its type does not
+   have (an Agile Task has no Target Date).
 
-Dates default disabled. Enable only headers and local types confirmed to support
-them in the target process; do not assume Target Date or Due Date exists for every
-type. Mixed create trees omit optional date columns when support is not confirmed
-for every included type, with a warning. Constants cannot override reserved or
-duplicate columns. Blank forward states explicitly omit State for those updates.
-Basic omits local Epics, promotes their children, maps Features to remote Epics
-and Story/Bug to Issue. Review these losses; reverse Issue requires an explicit
-Story/Bug choice, while existing linked local types are preserved unless reviewed.
+A PM can tick **Require Detailed review** to make every transfer in the project use Detailed review.
 
-## Start with local work
+## Quick and Detailed review
 
-1. Choose **Export CSV**. Select the whole project, a sprint, a subtree or exact
-   items; any/all label filters combine with that scope. Backlog's **Transfer
-   selected to ADO** carries exact selected identities. All matching pages count.
-   Only subtree selection expands children. Ancestors default on; turning them
-   off explicitly loses hierarchy outside the selection. Done defaults included.
-2. Review selected rows, added parents, omitted types, assignee choices, files,
-   context counts and warnings. Choose one remote assignee when there are several
-   locally. Initial creation deliberately omits State and Assigned To, preserving
-   that intended local work for the subsequent real-ID update.
-3. **Prepare reviewed CSV files** reserves issued references, pending identity and
-   exact outgoing intent atomically. Download/extract the ZIP; import the create
-   files in the destination's Boards query UI, review there and **save** the rows.
-   A download is not confirmation that ADO created anything.
-4. Export the saved ADO rows with ID, Work Item Type, Title/Title hierarchy,
-   Description and relevant fields. Include Team Project and organization or
-   collection provenance where available. A PM uploads this CSV in **Link returned
-   IDs only** mode, checks the destination, row subset and identities, previews
-   and applies the links. Initial ADO state/assignment defaults do not overwrite
-   local intent. Description contains a visible random `Kloister reference:`
-   footer, with no mandatory URL, tag or custom field.
-5. If the footer/Description is absent, explicitly map the remote ID to a known
-   pending local item. Titles and row order are never matching authority. Unknown,
-   duplicate, conflicting or foreign markers block linking. A marker alone is
-   insufficient: project scope, durable issued reference, unique ID and PM review
-   are checked. Reconciliation never silently creates new local work.
-6. Return to Export CSV. Review current local, supplied remote and confirmed
-   baseline values; choose file contents explicitly. A PM must have supplied and
-   reviewed observations for every linked update/context. Acknowledge their
-   timestamps and freshness limits. Prepare the separate **update** files with
-   actual IDs, desired supported State and one mapped Assigned To. Import/save in
-   ADO, then bring a fresh query CSV back to review the resulting observation.
+Every export and import offers **Quick review** (the default) or **Detailed review**.
 
-New children under linked parents use ID-bearing existing ancestor context rows
-and ID-empty child rows in the create file. Context is never a new create. Every
-emitted context field must have a safe fresh reviewed remote value; missing
-columns or unreviewed hierarchy block generation. Supply Parent or hierarchy
-columns when remote parent relationships are needed. Shared ancestors are
-deduplicated within a file, and repeated ancestors in another file retain IDs.
+- **Quick** compares each field with the last sync. A field changed on only one side takes that
+  side's value; you choose only where both sides changed. One summary ("Update: 3 · Sent to ADO:
+  Status ×2") is shown before anything is prepared or applied. Rows that match no item still need
+  an explicit confirmation as new (one button confirms them all) or a manual match.
+- **Detailed** asks about every difference, shows both last-synced values, and asks you to confirm
+  links, rows, parents, labels and assignees one by one.
 
-## Start with ADO work, then repeat
+Both modes keep the same safety rules: permissions, idempotent retries, refused stale previews,
+tombstones, duplicate/unknown reference blocking, and "missing rows never delete anything".
 
-Upload a query CSV in **Import reviewed local changes / new rows** mode. Select
-all rows or an exact subset. A new remote ID without a validated issued reference
-needs an explicit confirmation as new. Review reverse types, destination provenance,
-parents and each changed field, then preview again and apply the error-free review.
-New local items and remote links are committed together using ordinary local
-creator, timestamps, notifications, hierarchy, assignment and item validation.
+## Start with Kloister work
 
-A parent outside the subset must resolve to an existing mapped local parent, be
-selected explicitly, or be intentionally omitted with a warning. Never infer that
-an unselected row should be created. Missing rows never delete or unlink work.
-Deleted local identities remain tombstones; this version refuses resurrection.
+1. **Export to ADO**: choose the whole project, a sprint, a subtree or exact items (Backlog's
+   **Transfer selected to ADO** carries a selection); label filters combine with it. Parents are
+   included by default. Preview, then **Prepare reviewed CSV files** and download the ZIP.
+2. In ADO: **Boards > Queries > Import work items**, choose the create file, check the rows and
+   **Save items**. New items start in ADO's default state and, by Microsoft's guidance, without an
+   assignee; Kloister keeps your intended state and assignee for the next step.
+3. Export those items from ADO (with Description, which carries a small `Kloister reference:`
+   footer) and bring the file back under **Import from ADO** in **Link returned IDs only** mode.
+   Apply. ADO's defaults do not overwrite your local state or assignees.
+4. Choose **Prepare the follow-up update (state and assignee)**, preview and prepare it, and import
+   that update file in ADO the same way.
 
-Later uploads match the destination plus remote ID. Missing columns preserve
-values. An explicitly supplied empty supported value is reviewed separately from
-omission. One returned assignee cannot silently discard additional local people;
-the previously confirmed remote assignee is managed separately, preserving extras.
-Structured checklists, notes and assignments stay structured locally: generated
-description text is never parsed into entities or attributed as historical events.
-Edited generated footers need explicit correction/manual matching before taking
-that description, avoiding repeated generated blocks.
+If the footer was removed, match each row to its waiting item by hand. Titles and row order are
+never used to identify items.
 
-Review current local, incoming, confirmed local baseline and confirmed remote
-baseline values. Choose **Keep local**, **Take incoming** or **Skip** for each
-unequal field, including first linking without baselines. Outbound choices affect
-file contents only; a Lead cannot apply incoming changes through export routes.
-Use **Review remote observations for later export** to record a PM-reviewed CSV
-without applying local field changes. Refresh a stale preview after data, rights,
-membership, referenced resources or profile changes. An apply commits all selected
-rows, mappings and audit together; retrying the same reviewed batch is idempotent.
+## Start with ADO work, then keep both in step
+
+- Bring an ADO export back in **Import reviewed local changes / new rows** mode, confirm the new
+  rows and apply. New items, their links and audit entries are saved together.
+- Later exports and imports match by ADO ID. Update files carry **only the fields you changed
+  locally**, in flat ID / Work Item Type / Title files; anything Kloister cannot represent (an ADO
+  assignee who is not a member, unmapped tags, an ADO state that shares a local status with others,
+  Area Path, embedded images) is never written back.
+- A local parent change is reported but not sent: change the parent in ADO.
+- An update needs a recent ADO export of the item, brought back by a PM (**Review remote
+  observations for later export** records it without changing anything). CSV cannot lock ADO or
+  notice edits made after that export; the preview asks you to acknowledge this.
 
 ## Recovery, storage and limits
 
-Recovery lists PM-visible batches and exact prepared files. Pending creates block
-another create export for those items. Recover their original file or reconcile
-returned IDs. **Cancel pending creates…** requires a duplicate-risk confirmation.
-Cancellation cannot undo an import already performed in ADO. Manually replaying a
-create file, removing references or bypassing reconciliation can create remote
-duplicates; CSV offers no remote transaction, uniqueness constraint or live lock.
+- **Transfer history** lists prepared files and reviews. Pending creates block another create for
+  the same items until their IDs are linked or the batch is cancelled. Cancelling cannot undo an
+  import already made in ADO, and replaying a create file in ADO can create duplicates.
+- Files without organization and project columns need an explicit destination acknowledgement;
+  contradictory provenance is rejected.
+- Uploads are limited to 10 MiB, 1,000 data rows and 1 MiB per cell; nothing is truncated. Exports
+  write UTF-8 with BOM, CRLF and RFC 4180 quoting, at most 1,000 rows per file; create files split
+  only between whole trees. Cells starting with `=` are refused; `+`, `-` and `@` are sent as text,
+  so open transfer files only in ADO, not in a spreadsheet.
+- Dates are written as `YYYY-MM-DDT12:00:00Z`, which ADO's import accepts under any user locale.
+  Exported dates follow the exporting user's locale and time zone (for example
+  `02/11/2026 05:30:00`); Kloister reads the date ADO showed that user.
+- Transfer records live in PostgreSQL and are included in database backups. Raw uploads are not
+  stored. Unapplied previews are cleared after 7 days and completed content after 90 days; links,
+  observations, tombstones, pending work and retry receipts are kept.
+- Descriptions are sanitized; embedded images, attachments, comments, dependencies and history are
+  outside CSV transfer. Checklists, extra assignees and optional notes are added to the ADO
+  description as labelled text and never read back into structured data. In Agile and CMMI, a
+  Bug's main text is Repro Steps; Kloister uses Description.
 
-Files without trustworthy project provenance require explicit destination
-acknowledgement. Supplied contradictory provenance is rejected. IDs alone cannot
-prove file origin, and even a fresh query cannot reveal later external edits.
+## What was verified
 
-Input limits are 10 MiB per upload, 1,000 data rows per applied batch and 1 MiB per
-cell, plus ordinary item-field limits. Malformed encoding/quotes, duplicate
-headers/IDs/markers and ambiguous required values are rejected. Export uses UTF-8
-BOM, CRLF, RFC 4180 quoting and true depth-first Title 1…Title N hierarchy. Pure
-creates omit ID; mixed creates use confirmed context IDs; updates use real IDs.
-Each file has at most 1,000 rows including context. Creates split only between
-whole trees; an oversized single tree blocks with guidance. Reduce a selection if
-updates plus ancestor context exceed the file limit. No content is truncated.
-Formula-like cell prefixes are blocked with a source-review error rather than
-silently modifying transferred text. Open transfer files as data; use snapshots
-when the goal is spreadsheet reading.
-
-Transfer records live in PostgreSQL and are included in database backups. Raw
-uploaded CSV bytes are not persisted: recoverable previews retain bounded parsed
-selected content and minimal hierarchy context. Completed content is cleared after
-90 days. Active link baselines, observations, tombstones, pending workflows and
-compact retry receipts survive; an expired retry cannot become a new create.
-Audit records include action, identity and counts, without descriptions or CSV text.
-
-Native attachment/image bytes, dependencies, comment history and historical audit
-authorship are outside CSV fidelity. Descriptions are sanitized and embedded images
-removed with a warning. Checklists, extra assignees and optional notes are labelled
-readable description text. Unmapped area/path data stays in transfer metadata,
-without inventing teams or dates. State transitions, required fields and supported
-headers remain subject to the actual ADO process rules.
-
-## Disposable operator acceptance drill
-
-Back up the installed database and matching files, review [UPGRADE](UPGRADE.md),
-then use a disposable local project and scratch ADO destination, never production
-work. Preserve existing PostgreSQL clusters, deployment ports and configuration.
-
-1. Review the actual target's query headers/types/states. Configure a tiny local
-   Feature → Story → Task tree, two labels and a deliberately non-default task
-   status. Export just the Task with ancestors on. Check context/row counts,
-   BOM/Unicode, descriptions and omitted state/assignment before importing.
-2. Save once in ADO, export assigned IDs and descriptions, link-only reconcile,
-   then verify local numbers, state, assignments and count did not change. Export
-   a real-ID update, inspect staged state/assignee and confirm it in ADO.
-3. Add a new child under the linked Story. Return fresh complete parent/hierarchy
-   observations; check the mixed create file keeps parent IDs/remote values and
-   counts every context row. Import once and reconcile its one new ID.
-4. From ADO, export two new scratch Tasks. Import only one with explicit reverse
-   type/status/bucket/field choices. Repeat that one row and retry apply: both
-   local and remote counts must stay stable. Import the second explicitly.
-5. Edit the linked title differently on both sides, return a fresh CSV, inspect
-   the two baselines and resolve explicitly. Make a local edit after preview and
-   verify apply refuses until reviewed again. Missing rows must never delete.
-6. Check pending recovery, missing-marker manual matching, cancelled-create
-   warning, deleted-item tombstone refusal and denied Member/Viewer/admin/team-
-   Lead writes. Keep the acceptance notes and restore drill with the runbook.
-
-Implementation checks use synthetic independent fixtures and the documented
-[Microsoft CSV contract](https://learn.microsoft.com/en-us/azure/devops/boards/queries/import-work-items-from-csv?view=azure-devops)
+Formats and behaviour were checked against Microsoft's
+[CSV guide](https://learn.microsoft.com/en-us/azure/devops/boards/queries/import-work-items-from-csv?view=azure-devops)
 and [process guidance](https://learn.microsoft.com/en-us/azure/devops/boards/work-items/guidance/choose-process?view=azure-devops),
-rechecked on 2026-10-16. No live ADO instance is available to implementation tests.
-Compatibility with the owner's target version/process and server upgrade
-acceptance remain **unverified until the operator runs this drill**.
+and against a disposable Azure DevOps Services organization with Agile, Scrum and Basic projects
+(real exports are the test fixtures; generated files were imported through the web UI).
+Automated tests never contact ADO. Azure DevOps Server, CMMI and customized processes remain
+**unverified until an operator runs the drill below**.
+
+## Operator acceptance drill
+
+Back up the database and files first ([UPGRADE](UPGRADE.md)) and use a disposable Kloister project
+and ADO project, never production work.
+
+1. Set up from a sample export as above. Export a small Feature → Story → Task tree with one
+   non-default task status; import it in ADO and save.
+2. Bring the export back in link-only mode; check that local status and assignees are unchanged.
+   Prepare the follow-up update, import it, and check the state and assignee in ADO.
+3. Add a child under the linked Story locally; export, import, link its new ID.
+4. Change a title only in ADO and bring it back with Quick review: it is taken. Change the same
+   title on both sides: you are asked. Make a local edit after previewing: apply is refused until
+   you preview again.
+5. Import two new ADO items, one at a time; repeat a file and retry an apply: counts stay stable in
+   both systems. Missing rows delete nothing.
+6. Check pending recovery, manual matching without the footer, cancelled-create warning, deleted
+   item refusal, and that Members, Viewers, team Leads and administrators without a project role
+   cannot transfer.

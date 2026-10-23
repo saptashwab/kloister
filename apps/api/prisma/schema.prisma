@@ -176,6 +176,8 @@ model AdoDestination {
   remoteProject String
   profile Json
   revision Int @default(1)
+  /// Set by a project PM: every transfer must use Detailed review.
+  requireDetailedReview Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -220,6 +222,8 @@ model AdoTransferBatch {
   creatorId String @db.Uuid
   direction String
   mode String
+  /// Review mode of this batch; batches before M8.1 were all Detailed.
+  review String @default("detailed")
   state String @default("PREVIEW")
   revision Int
   idempotencyKey String

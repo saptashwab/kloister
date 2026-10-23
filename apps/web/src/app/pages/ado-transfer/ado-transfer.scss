@@ -2,7 +2,6 @@
   padding: var(--k-space-6) var(--k-gutter);
   max-width: var(--k-size-880px);
 }
-.ado-actions,
 .ado-checks {
   display: flex;
   flex-wrap: wrap;
@@ -47,11 +46,8 @@ fieldset {
   background: var(--k-sunken);
   border-radius: var(--k-radius-sm);
 }
-pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 0;
-  font: inherit;
+dl {
+  margin-block: var(--k-space-2);
 }
 dd {
   margin-inline-start: var(--k-space-4);
@@ -66,4 +62,24 @@ dt {
 }
 mat-form-field {
   width: 100%;
+}
+.ado-review {
+  margin-block: var(--k-space-4);
+}
+.hint {
+  color: var(--k-text-2);
+}
+.ado-summary {
+  padding: var(--k-space-3);
+  margin-block: var(--k-space-3);
+  background: var(--k-sunken);
+  border-radius: var(--k-radius-sm);
+}
+.ado-swatch {
+  display: inline-block;
+  inline-size: var(--k-space-3);
+  block-size: var(--k-space-3);
+  margin-inline-end: var(--k-space-2);
+  border-radius: var(--k-radius-sm);
+  vertical-align: middle;
 }

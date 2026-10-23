@@ -64,7 +64,8 @@ restore format; they omit hidden data, accounts and server configuration.
 ## Manual database validation and restore
 
 ADO transfer records are part of PostgreSQL backups. Completed batch content has
-a separate fixed 90-day retention; pending workflows, active link observations,
+a separate fixed 90-day retention, and unapplied incoming previews are cleared after
+7 days; pending workflows, active link observations,
 tombstones and compact retry receipts are preserved independently of log retention.
 Do not manually delete mappings or receipts to retry an import. Project PMs use
 the scoped Recovery workflow; system administration adds no transfer permission.

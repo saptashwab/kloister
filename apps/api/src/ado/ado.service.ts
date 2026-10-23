@@ -5,9 +5,13 @@ import {
   type AdoDestinationDto,
   type AdoDestinationInput,
   type AdoExportRequest,
+  type AdoField,
   type AdoImportRequest,
   type AdoPreview,
   type AdoProfile,
+  type AdoReview,
+  type AdoSampleResult,
+  type AdoSummary,
   AuditAction,
   ProjectRole,
   type Page,
@@ -43,11 +47,18 @@ import {
   digest,
   incomingPlan,
   localValues,
+  SENT,
+  sentFields,
   TRANSFER_INCLUDE,
   type IncomingOperation,
   type TransferItem,
+  type TransferMember,
   type Values,
 } from './transfer.js';
+import { identityEmail, sameValue } from './values.js';
+
+/** Unapplied incoming previews keep their parsed content this long. */
+const PREVIEW_DAYS = 7;
 
 type Tx = Prisma.TransactionClient;
 type BatchContent = {
@@ -140,6 +151,92 @@ export class AdoService {
   }
 
   /**
+   * Sets whether every transfer in the project must use Detailed review. Kept apart from the
+   * profile so it neither changes the profile revision nor invalidates observations.
+   * @param auth Signed-in PM.
+   * @param access Project access.
+   * @param requireDetailedReview New policy.
+   * @returns Saved destination.
+   */
+  async setReviewPolicy(
+    auth: AuthContext,
+    access: ProjectAccess,
+    requireDetailedReview: boolean,
+  ): Promise<AdoDestinationDto> {
+    return this.transaction(async (tx) => {
+      await this.current(tx, access, true);
+      const existing = await this.requiredDestination(tx, access);
+      const saved = await tx.adoDestination.update({
+        where: { id: existing.id },
+        data: { requireDetailedReview },
+      });
+      await this.record(tx, auth, access, AuditAction.ADO_CONFIGURED, saved.id, {
+        requireDetailedReview,
+      });
+      return dto(saved);
+    });
+  }
+
+  /**
+   * Reads a sample ADO export to suggest mappings. Nothing is stored and no item is touched.
+   * @param access PM project access.
+   * @param csv Exported CSV text.
+   * @returns Distinct types, states, tags, iterations, identities and date facts.
+   */
+  async sample(access: ProjectAccess, csv: string): Promise<AdoSampleResult> {
+    await this.transaction((tx) => this.current(tx, access, true));
+    const table = readCsv(csv);
+    const distinct = (values: string[]): string[] =>
+      [...new Set(values.map((v) => v.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const cells = (header: string): string[] => table.rows.map((r) => r[header] ?? '');
+    const types = distinct(cells('Work Item Type'));
+    const dateHeaders = table.headers.filter(
+      (h) =>
+        /\b(?:date|start|finish)\b/iu.test(h) &&
+        !/^(?:Changed|Created|Closed|Resolved|Activated|State Change) Date$/iu.test(h),
+    );
+    let dateOrder: AdoSampleResult['dateOrder'] = null;
+    for (const value of dateHeaders.flatMap(cells)) {
+      const m = /^(\d{1,2})[/.-](\d{1,2})[/.-]\d{4}/u.exec(value.trim());
+      if (m && Number(m[1]) > 12) dateOrder = 'DMY';
+      if (m && Number(m[2]) > 12) dateOrder = 'MDY';
+    }
+    const has = (type: string) => types.includes(type);
+    return {
+      headers: table.headers,
+      process: has('Product Backlog Item')
+        ? 'Scrum'
+        : has('User Story')
+          ? 'Agile'
+          : has('Requirement')
+            ? 'CMMI'
+            : has('Issue') && !has('Feature')
+              ? 'Basic'
+              : null,
+      types,
+      states: [
+        ...new Map(
+          table.rows
+            .filter((r) => r['State'] !== undefined && r['Work Item Type'])
+            .map((r) => [
+              `${r['Work Item Type']}\n${r['State']}`,
+              { type: r['Work Item Type'], state: r['State'] },
+            ]),
+        ).values(),
+      ].sort((a, b) => `${a.type}${a.state}`.localeCompare(`${b.type}${b.state}`)),
+      tags: distinct(cells('Tags').flatMap((v) => v.split(';'))),
+      iterations: distinct(cells('Iteration Path')),
+      identities: distinct(cells('Assigned To')).map((value) => ({
+        value,
+        email: identityEmail(value),
+      })),
+      dateHeaders,
+      dateOrder,
+      rows: table.rows.length,
+    };
+  }
+
+  /**
    * Evaluates a read-only export preview; never accepts a remote CSV.
    * @param access PM/Lead access.
    * @param request Reviewed outbound selection.
@@ -198,9 +295,14 @@ export class AdoService {
         const reference = existing?.remoteId ? existing.reference : randomBytes(32).toString('hex');
         const suffix = intent.suffix.replaceAll(intent.reference, reference);
         for (const file of files) file.csv = file.csv.replaceAll(intent.reference, reference);
+        // An update records which fields it sent, so a later different ADO value is asked about
+        // instead of being treated as ADO's create defaults.
+        const sent = intent.create
+          ? []
+          : [...new Set([...sentFields(existing?.intent), ...(intent.sent ?? [])])];
         const data = {
           generatedSuffix: suffix,
-          intent: json(intent.values),
+          intent: json(sent.length ? { ...intent.values, [SENT]: sent } : intent.values),
           ...(intent.create ? { pendingBatchId: batchId, reference } : {}),
         };
         if (existing) await tx.adoItemLink.update({ where: { id: existing.id }, data });
@@ -225,6 +327,7 @@ export class AdoService {
           creatorId: auth.user.id,
           direction: 'OUT',
           mode: 'export',
+          review: result.review ?? 'quick',
           state: result.state,
           revision: destination.revision,
           idempotencyKey: request.idempotencyKey!,
@@ -266,7 +369,9 @@ export class AdoService {
     return this.transaction(async (tx) => {
       await this.current(tx, access, true);
       this.labelChoices(request);
-      const { destination, items, links, version } = await this.context(tx, access);
+      const context = await this.context(tx, access);
+      const { destination, items, links, members } = context;
+      const review = this.review(destination, request.review);
       const prior = await tx.adoTransferBatch.findUnique({
         where: {
           destinationId_idempotencyKey: {
@@ -281,9 +386,10 @@ export class AdoService {
         return this.receipt(prior);
       }
       const table = readCsv(request.csv);
-      const plan = incomingPlan(destination, request, items, links, table);
+      const plan = incomingPlan(destination, request, items, links, table, members);
       if (request.mode === 'import')
         plan.errors.push(...(await this.validateIncoming(tx, access, plan.operations, items)));
+      const version = this.version(context, incomingIds(plan.operations, items));
       const selected = new Set(request.selectedRows ?? table.rows.map((_, i) => i));
       const contextColumns = new Set([
         'ID',
@@ -316,6 +422,8 @@ export class AdoService {
         warnings: plan.warnings,
         errors: plan.errors,
         state: 'PREVIEW',
+        review,
+        summary: summarize(plan.rows, request.mode === 'import'),
       };
       await tx.adoTransferBatch.create({
         data: {
@@ -325,6 +433,7 @@ export class AdoService {
           creatorId: auth.user.id,
           direction: 'IN',
           mode: request.mode,
+          review,
           revision: destination.revision,
           idempotencyKey: request.idempotencyKey,
           fileDigest: digest(request),
@@ -369,13 +478,16 @@ export class AdoService {
       const content = batch.content as unknown as BatchContent;
       const request = content.request;
       if (!request) throw conflict('Preview content expired; upload again');
-      const { destination, items, links, version } = await this.context(tx, access);
+      const context = await this.context(tx, access);
+      const { destination, items, links, members } = context;
+      this.review(destination, request.review);
+      const plan = incomingPlan(destination, request, items, links, content.table, members);
+      const version = this.version(context, incomingIds(plan.operations, items));
       if (
         digest({ requestDigest: batch.fileDigest, version }) !== expectedDigest ||
         batch.revision !== destination.revision
       )
         throw conflict('Local data, references or mappings changed; review a fresh preview');
-      const plan = incomingPlan(destination, request, items, links, content.table);
       if (request.mode === 'import')
         plan.errors.push(...(await this.validateIncoming(tx, access, plan.operations, items)));
       if (plan.errors.length) throw invalidField('preview', plan.errors.join('\n'));
@@ -462,10 +574,13 @@ export class AdoService {
           observedAt: new Date(),
           observationRevision: destination.revision,
           pendingBatchId: null,
-          // Link-only records observations without declaring initial defaults synchronized.
+          // An import confirms every field. Other returns confirm only fields whose ADO value
+          // already equals the local one, never initial defaults that differ from local intent.
           ...(request.mode === 'import'
             ? { localBaseline: json(localValues(item)), remoteBaseline: json(normalized) }
-            : {}),
+            : existing
+              ? confirmedEqual(existing, localValues(item), normalized)
+              : {}),
         };
         if (existing) await tx.adoItemLink.update({ where: { id: existing.id }, data });
         else
@@ -519,7 +634,7 @@ export class AdoService {
   async history(
     access: ProjectAccess,
     page: PageQueryDto,
-  ): Promise<Page<{ id: string; state: string; mode: string; createdAt: string }>> {
+  ): Promise<Page<{ id: string; state: string; mode: string; review: string; createdAt: string }>> {
     const where = { projectId: access.project.id };
     if (
       page.cursor &&
@@ -535,6 +650,7 @@ export class AdoService {
       id: b.id,
       state: b.state,
       mode: b.mode,
+      review: b.review,
       createdAt: b.createdAt.toISOString(),
     }));
   }
@@ -615,11 +731,26 @@ export class AdoService {
     });
   }
 
-  /** Removes completed content after 90 days while retaining compact retry receipts and active links. */
+  /**
+   * Removes completed content after 90 days and unapplied incoming previews after 7 days, while
+   * retaining compact retry receipts and active links.
+   */
   @Cron('0 15 4 * * *')
   async cleanup(): Promise<void> {
     const cutoff = new Date(Date.now() - 90 * 86400000);
+    const previews = new Date(Date.now() - PREVIEW_DAYS * 86400000);
     await this.transaction(async (tx) => {
+      const stale = await tx.adoTransferBatch.findMany({
+        where: { state: 'PREVIEW', createdAt: { lt: previews }, contentExpiredAt: null },
+        select: { id: true },
+      });
+      for (const batch of stale) {
+        await tx.adoTransferRow.updateMany({ where: { batchId: batch.id }, data: { content: {} } });
+        await tx.adoTransferBatch.update({
+          where: { id: batch.id },
+          data: { content: {}, contentExpiredAt: new Date() },
+        });
+      }
       const batches = await tx.adoTransferBatch.findMany({
         where: {
           completedAt: { lt: cutoff },
@@ -795,11 +926,24 @@ export class AdoService {
 
   private async buildExport(tx: Tx, access: ProjectAccess, request: AdoExportRequest) {
     await this.current(tx, access, false);
-    const { destination, items, links, version, labels, sprints } = await this.context(tx, access);
-    const plan = exportPlan(destination, request, items, links, { labels, sprints });
+    const context = await this.context(tx, access);
+    const { destination, items, links, labels, sprints, members } = context;
+    const mode = this.review(destination, request.review);
+    const plan = exportPlan(
+      destination,
+      { ...request, review: mode },
+      items,
+      links,
+      { labels, sprints },
+      members,
+    );
     const review = { ...request };
     delete review.previewDigest;
     delete review.idempotencyKey;
+    const version = this.version(
+      context,
+      new Set(plan.rows.flatMap((r) => (r.itemId ? [r.itemId] : []))),
+    );
     const preview: AdoPreview = {
       batchId: null,
       digest: digest({ review, version }),
@@ -809,6 +953,8 @@ export class AdoService {
       warnings: plan.warnings,
       errors: plan.errors,
       state: 'PREVIEW',
+      review: mode,
+      summary: summarize(plan.rows, true),
     };
     return { preview, plan };
   }
@@ -826,7 +972,7 @@ export class AdoService {
     });
     const members = await tx.projectMember.findMany({
       where: { projectId: access.project.id },
-      include: { user: { select: { isActive: true } } },
+      include: { user: { select: { isActive: true, email: true, displayName: true } } },
       orderBy: { id: 'asc' },
     });
     const buckets = await tx.bucket.findMany({
@@ -847,17 +993,50 @@ export class AdoService {
       links,
       labels,
       sprints,
-      version: digest({
-        destination,
-        items,
-        links,
-        members,
-        buckets,
-        sprints,
-        labels,
-        project: access.project.updatedAt,
-      }),
+      buckets,
+      memberRows: members,
+      members: members
+        .filter((m) => m.user.isActive)
+        .map((m): TransferMember => ({
+          userId: m.userId,
+          email: m.user.email,
+          displayName: m.user.displayName,
+        })),
+      project: access.project.updatedAt,
     };
+  }
+
+  /**
+   * Staleness digest over the destination, the project's shared references and only the items
+   * this review touches, so edits to unrelated items do not invalidate it.
+   * @param context Loaded transfer context.
+   * @param ids Items the review reads.
+   * @returns Version digest.
+   */
+  private version(context: Awaited<ReturnType<AdoService['context']>>, ids: Set<string>): string {
+    return digest({
+      destination: context.destination,
+      items: context.items.filter((i) => ids.has(i.id)),
+      links: context.links.filter((l) => ids.has(l.itemId)),
+      members: context.memberRows,
+      buckets: context.buckets,
+      sprints: context.sprints,
+      labels: context.labels,
+      project: context.project,
+    });
+  }
+
+  /**
+   * Resolves the review mode, enforcing a PM's Detailed-only policy.
+   * @param destination Destination with its policy.
+   * @param requested Mode asked for; Quick when omitted.
+   * @returns Mode to use.
+   */
+  private review(destination: AdoDestinationDto, requested: AdoReview | undefined): AdoReview {
+    const mode = requested ?? 'quick';
+    if (mode === 'quick' && destination.requireDetailedReview)
+      throw invalidField('review', 'A project PM requires Detailed review for ADO transfers');
+    return mode;
   }
 
   private async requiredDestination(
@@ -909,7 +1088,7 @@ export class AdoService {
       rows: [],
       files: [],
       warnings: [
-        'Completed content expired after 90 days. This durable receipt prevents retry creates.',
+        'The stored review content has expired. This durable receipt still prevents duplicate creates on retry.',
       ],
       errors: [],
       state: batch.state,
@@ -1002,7 +1181,66 @@ function dto(row: AdoDestination): AdoDestinationDto {
     remoteProject: row.remoteProject,
     profile: validateProfile(row.profile),
     revision: row.revision,
+    requireDetailedReview: row.requireDetailedReview,
   };
+}
+
+/**
+ * Counts rows by kind and the fields actually sent or applied, for the one-glance summary.
+ * @param rows Reviewed rows.
+ * @param choices Whether this review applies field choices (link-only and observe do not).
+ * @returns Summary.
+ */
+function summarize(rows: AdoPreview['rows'], choices: boolean): AdoSummary {
+  const summary: AdoSummary = { kinds: {}, fields: {}, conflicts: 0 };
+  for (const row of rows) {
+    summary.kinds[row.kind] = (summary.kinds[row.kind] ?? 0) + 1;
+    for (const field of row.changes ?? []) summary.fields[field] = (summary.fields[field] ?? 0) + 1;
+    if (choices) summary.conflicts += row.differences.filter((d) => d.choice === undefined).length;
+  }
+  return summary;
+}
+
+/**
+ * Baselines extended with the fields whose observed ADO value equals the local value.
+ * @param link Existing link.
+ * @param link.localBaseline Confirmed local values.
+ * @param link.remoteBaseline Confirmed ADO values.
+ * @param local Current local values.
+ * @param remote Observed ADO values.
+ * @returns Baseline updates for the link.
+ */
+function confirmedEqual(
+  link: { localBaseline: unknown; remoteBaseline: unknown },
+  local: Values,
+  remote: Values,
+): { localBaseline: Prisma.InputJsonValue; remoteBaseline: Prisma.InputJsonValue } {
+  const lb = { ...(link.localBaseline as Values) },
+    rb = { ...(link.remoteBaseline as Values) };
+  for (const field of Object.keys(remote) as AdoField[])
+    if (field !== 'bucketId' && sameValue(field, local[field], remote[field])) {
+      lb[field] = local[field] ?? null;
+      rb[field] = remote[field] ?? null;
+    }
+  return { localBaseline: json(lb), remoteBaseline: json(rb) };
+}
+
+/**
+ * Items an incoming review reads: linked rows and their old and new parents.
+ * @param operations Planned rows.
+ * @param items Current items.
+ * @returns Item IDs.
+ */
+function incomingIds(operations: IncomingOperation[], items: TransferItem[]): Set<string> {
+  const ids = new Set<string>();
+  for (const op of operations) {
+    if (op.itemId) ids.add(op.itemId);
+    const parent = op.incoming.parentId;
+    if (typeof parent === 'string' && !parent.startsWith('remote:')) ids.add(parent);
+    const current = items.find((i) => i.id === op.itemId)?.parentId;
+    if (current) ids.add(current);
+  }
+  return ids;
 }
 function json(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;

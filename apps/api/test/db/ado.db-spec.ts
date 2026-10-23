@@ -126,6 +126,8 @@ describe('scoped durable offline transfers (CI database only)', () => {
     ['GET', 'batches/00000000-0000-4000-8000-000000000001/download', true],
     ['POST', 'batches/00000000-0000-4000-8000-000000000001/apply', false],
     ['POST', 'batches/00000000-0000-4000-8000-000000000001/cancel', false],
+    ['PUT', 'review-policy', false],
+    ['POST', 'sample', false],
   ] as const;
   for (const [method, path, lead] of routes) {
     for (const role of ['pm', 'lead', 'member', 'viewer', 'teamlead', 'admin', 'outsider']) {
@@ -228,7 +230,7 @@ describe('scoped durable offline transfers (CI database only)', () => {
     const blocked = (
       await call(app, 'POST', `${base()}/export/preview`, { sid: sids['pm'], body: request })
     ).json() as AdoPreview;
-    expect(blocked.errors.join()).toMatch(/recover or cancel/);
+    expect(blocked.errors.join()).toMatch(/link the returned ID/);
     const returned = incoming(
       `ID,Work Item Type,Title,State,Description\n901,Task,Local task,New,Kloister reference: ${l.reference}`,
     );
@@ -251,10 +253,7 @@ describe('scoped durable offline transfers (CI database only)', () => {
   });
   it('rejects stale local/config/permission changes and rolls an entire selected batch back', async () => {
     const p = await preview(incoming());
-    await prisma.workItem.update({
-      where: { id: itemId },
-      data: { title: 'Changed after preview' },
-    });
+    await prisma.bucket.update({ where: { id: bucket }, data: { name: 'Renamed after preview' } });
     expect((await apply(p)).statusCode).toBe(409);
     expect(await prisma.workItem.count({ where: { projectId: project } })).toBe(1);
     const request = incoming(
@@ -280,6 +279,74 @@ describe('scoped durable offline transfers (CI database only)', () => {
     });
     expect((await apply(atomic)).statusCode).toBe(403);
     expect(await prisma.adoItemLink.count()).toBe(0);
+  });
+  it('does not treat edits to items outside the review as stale', async () => {
+    const p = await preview(incoming());
+    await prisma.workItem.update({ where: { id: itemId }, data: { title: 'Unrelated edit' } });
+    expect((await apply(p)).statusCode).toBe(201);
+  });
+  it('enforces a PM-required Detailed review without changing the profile revision', async () => {
+    const before = await prisma.adoDestination.findFirstOrThrow({ where: { projectId: project } });
+    const policy = await call(app, 'PUT', `${base()}/review-policy`, {
+      sid: sids['pm'],
+      body: { requireDetailedReview: true },
+    });
+    expect(policy.statusCode).toBe(200);
+    expect(policy.json()).toMatchObject({ requireDetailedReview: true, revision: before.revision });
+    const quick = await call(app, 'POST', `${base()}/export/preview`, {
+      sid: sids['lead'],
+      body: outgoing(),
+    });
+    expect(quick.statusCode).toBe(400);
+    const detailed = await call(app, 'POST', `${base()}/export/preview`, {
+      sid: sids['lead'],
+      body: { ...outgoing(), review: 'detailed' },
+    });
+    expect(detailed.statusCode).toBe(201);
+    expect((detailed.json() as AdoPreview).review).toBe('detailed');
+    const imported = await call(app, 'POST', `${base()}/import/preview`, {
+      sid: sids['pm'],
+      body: incoming(),
+    });
+    expect(imported.statusCode).toBe(400);
+  });
+  it('reads a sample export to suggest mappings and stores nothing', async () => {
+    const batches = await prisma.adoTransferBatch.count();
+    const res = await call(app, 'POST', `${base()}/sample`, {
+      sid: sids['pm'],
+      body: {
+        csv: 'ID,Work Item Type,Title,State,Assigned To,Tags,Target Date\n1,User Story,A,Resolved,Mia Member <member@example.org>,b; a,18/12/2026 05:30:00\n2,Task,B,New,,,',
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toMatchObject({
+      process: 'Agile',
+      types: ['Task', 'User Story'],
+      states: [
+        { type: 'Task', state: 'New' },
+        { type: 'User Story', state: 'Resolved' },
+      ],
+      tags: ['a', 'b'],
+      identities: [{ value: 'Mia Member <member@example.org>', email: 'member@example.org' }],
+      dateHeaders: ['Target Date'],
+      dateOrder: 'DMY',
+      rows: 2,
+    });
+    expect(await prisma.adoTransferBatch.count()).toBe(batches);
+  });
+  it('expires unapplied previews after seven days but keeps the retry receipt', async () => {
+    const request = incoming();
+    const p = await preview(request);
+    await prisma.adoTransferBatch.update({
+      where: { id: p.batchId! },
+      data: { createdAt: new Date(Date.now() - 8 * 86400000) },
+    });
+    await app.get(AdoService).cleanup();
+    const batch = await prisma.adoTransferBatch.findUniqueOrThrow({ where: { id: p.batchId! } });
+    expect(batch.content).toEqual({});
+    expect(batch.contentExpiredAt).not.toBeNull();
+    expect((await apply(p)).statusCode).toBe(409);
+    expect(await prisma.workItem.count({ where: { projectId: project } })).toBe(1);
   });
   it('rolls back a first successful mutation when a later row fails, then retries once', async () => {
     const request = incoming(

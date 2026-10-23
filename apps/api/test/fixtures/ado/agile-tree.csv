@@ -1,0 +1,7 @@
+﻿ID,Work Item Type,Title 1,Title 2,Title 3,Title 4,State,Assigned To,Tags,Iteration Path,Area Path,Priority,Start Date,Target Date,Description,Parent
+"1","Epic","Checkout revamp",,,,"New",,"payments; q4","Remote_Project","Remote_Project","2","02/11/2026 05:30:00","18/12/2026 05:30:00","<p><strong>Goal:</strong> faster checkout </p><ul><li>one page </li><li>saved cards </li> </ul>",
+"2","Feature",,"Saved payment methods",,,"Active","Mia Member <member@example.org>",,"Remote_Project","Remote_Project","2",,,"<p>Store tokens, never card numbers. </p>","1"
+"3","User Story",,,"Pay with a saved card",,"Resolved","Mia Member <member@example.org>","customer; frontend","Remote_Project","Remote_Project","2",,,"<p>As a shopper I can pick a saved card. </p>","2"
+"5","Task",,,,"Build card picker","Active","Mia Member <member@example.org>",,"Remote_Project","Remote_Project","1",,,"<p>Use the token list. </p>","3"
+"6","Bug",,,,"Total rounds wrongly","New",,"backend","Remote_Project","Remote_Project","2",,,"<p>Description field on a Bug. </p>","3"
+"4","User Story",,,"Remove a saved card, ""quickly""",,"Closed",,,"Remote_Project","Remote_Project","2",,,"<p>Line one </p><p>Line two with a comma, and quotes &quot;x&quot; </p>","2"

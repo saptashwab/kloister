@@ -80,11 +80,6 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
         <p class="k-alert warn archived" role="status">This project is archived and read-only.</p>
       }
       <nav mat-tab-nav-bar mat-stretch-tabs="false" [tabPanel]="panel" aria-label="Project views">
-        @if (ctx.has(adoPermission) && project.ownerId === null) {
-          <a mat-tab-link [routerLink]="['/p', project.key, 'ado']" [active]="activeTab() === 'ado'"
-            >ADO transfer</a
-          >
-        }
         @for (tab of tabs; track tab.path) {
           <a
             mat-tab-link
@@ -95,6 +90,11 @@ import { NewItemDialog, type NewItemData } from './new-item-dialog';
             "
             [active]="activeTab() === tab.path"
             ><span class="tab"><app-icon [name]="tab.icon" />{{ tab.label }}</span></a
+          >
+        }
+        @if (ctx.has(adoPermission) && project.ownerId === null) {
+          <a mat-tab-link [routerLink]="['/p', project.key, 'ado']" [active]="activeTab() === 'ado'"
+            >ADO transfer</a
           >
         }
       </nav>

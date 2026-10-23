@@ -85,7 +85,8 @@ export function readCsv(text: string): CsvTable {
 }
 
 /**
- * Produces UTF-8 BOM/CRLF CSV. Formula-like text is rejected instead of mutating its content.
+ * Produces UTF-8 BOM/CRLF CSV. Text starting with `=` is rejected instead of mutating its content;
+ * ADO imports `+`, `-` and `@` as text, so ordinary titles such as "- fix login" still transfer.
  * @param headers Explicit reviewed columns.
  * @param rows Complete data rows.
  * @returns CSV bytes for import, never a spreadsheet formula.
@@ -93,7 +94,7 @@ export function readCsv(text: string): CsvTable {
 export function writeCsv(headers: string[], rows: string[][]): string {
   if (rows.length > ADO_LIMITS.rows) throw invalidField('csv', 'CSV exceeds 1,000 rows');
   const quote = (s: string): string => {
-    if (/^[\s\uFEFF]*[=+@-]/u.test(s))
+    if (/^[\s\uFEFF]*=/u.test(s))
       throw invalidField(
         'csv',
         'Formula-like cell blocked; review the source value before transfer',

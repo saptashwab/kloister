@@ -53,6 +53,7 @@ describe('capability-composed introduction', () => {
     const transfer = HELP_ARTICLES.find((article) => article.id === 'ado');
     expect(transfer?.role).toContain('project PM only');
     expect(transfer?.text).toContain('link returned IDs only');
+    expect(transfer?.text).toContain('Quick review is the default');
     expect(transfer?.text).toContain('No token or external connection');
     expect(HELP_ARTICLES.find((article) => article.id === 'snapshots')?.text).toContain(
       'Every matching page',

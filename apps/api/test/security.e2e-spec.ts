@@ -43,6 +43,8 @@ describe('API security without a session (e2e)', () => {
     ['GET', `/api/v1/projects/${SOME_ID}/ado/batches/${SOME_ID}/download`],
     ['POST', `/api/v1/projects/${SOME_ID}/ado/batches/${SOME_ID}/apply`],
     ['POST', `/api/v1/projects/${SOME_ID}/ado/batches/${SOME_ID}/cancel`],
+    ['PUT', `/api/v1/projects/${SOME_ID}/ado/review-policy`],
+    ['POST', `/api/v1/projects/${SOME_ID}/ado/sample`],
     ['GET', '/api/v1/me'],
     ['GET', '/api/v1/me/work'],
     ['GET', '/api/v1/me/personal'],

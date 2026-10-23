@@ -22,7 +22,15 @@ import {
   RequireProjectPermission,
 } from '../projects/project-access.guard.js';
 import type { ProjectAccess } from '../projects/project-access.service.js';
-import { ApplyDto, CancelDto, DestinationDto, ExportDto, ImportDto } from './ado.dto.js';
+import {
+  ApplyDto,
+  CancelDto,
+  DestinationDto,
+  ExportDto,
+  ImportDto,
+  ReviewPolicyDto,
+  SampleDto,
+} from './ado.dto.js';
 import { AdoService } from './ado.service.js';
 
 /** Project-scoped offline transfer endpoints; team leadership and system administration add no rights. */
@@ -72,6 +80,36 @@ export class AdoController {
     @Body() body: DestinationDto,
   ) {
     return this.ado.configure(auth, access, body);
+  }
+
+  /**
+   * Sets whether Detailed review is mandatory, PM only.
+   * @param auth Acting PM.
+   * @param access Project access.
+   * @param body New policy.
+   * @returns Saved destination.
+   */
+  @Put('review-policy')
+  @RequireProjectPermission(P.IMPORT_ADO)
+  reviewPolicy(
+    @CurrentAuth() auth: AuthContext,
+    @CurrentProject() access: ProjectAccess,
+    @Body() body: ReviewPolicyDto,
+  ) {
+    return this.ado.setReviewPolicy(auth, access, body.requireDetailedReview);
+  }
+
+  /**
+   * Reads a sample ADO export to suggest mappings, PM only; nothing is stored.
+   * @param access Project access.
+   * @param body Exported CSV.
+   * @returns Distinct values found in the file.
+   */
+  @Post('sample')
+  @RouteConfig({ bodyLimit: 24 * 1024 * 1024 })
+  @RequireProjectPermission(P.IMPORT_ADO)
+  sample(@CurrentProject() access: ProjectAccess, @Body() body: SampleDto) {
+    return this.ado.sample(access, body.csv);
   }
 
   /**
