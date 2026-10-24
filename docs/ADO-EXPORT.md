@@ -108,10 +108,12 @@ never used to identify items.
 Formats and behaviour were checked against Microsoft's
 [CSV guide](https://learn.microsoft.com/en-us/azure/devops/boards/queries/import-work-items-from-csv?view=azure-devops)
 and [process guidance](https://learn.microsoft.com/en-us/azure/devops/boards/work-items/guidance/choose-process?view=azure-devops),
-and against a disposable Azure DevOps Services organization with Agile, Scrum and Basic projects
-(real exports are the test fixtures; generated files were imported through the web UI).
-Automated tests never contact ADO. Azure DevOps Server, CMMI and customized processes remain
-**unverified until an operator runs the drill below**.
+and against a disposable Azure DevOps Services organization with Agile, Scrum, Basic and a
+customized (inherited Agile) project: real exports are the test fixtures, and create, link-only
+and follow-up update files were imported through the web UI in all four. Automated tests never
+contact ADO. Azure DevOps Server and CMMI remain **unverified until an operator runs the drill
+below**. Users find a step-by-step walkthrough with screenshots in the app's **Help &
+FAQ**; [ADO-TRANSFER-GUIDE](ADO-TRANSFER-GUIDE.md) is the same guide as text.
 
 ## Operator acceptance drill
 

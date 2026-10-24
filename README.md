@@ -4,11 +4,11 @@ Self-hosted project tracking for teams that keep their work on their own server.
 Plan on Kanban boards, organize a backlog and manage personal tasks without SSO,
 outbound email or external services at runtime.
 
-**MIT licensed · v1.0 pre-release · Production target: RHEL 8.10 x86_64**
+**MIT licensed · v1.2 pre-release · Production target: RHEL 8.10 x86_64**
 
 ## Features
 
-- Configurable boards, labels, assignments, priorities, due dates and status rules.
+- Configurable boards, labels, assignments, priorities, due dates with optional times and status rules.
 - Epics, Features, Stories, Tasks and Bugs, with hierarchy, dependencies and sprints.
 - My work across projects, private personal spaces, project roles and optional teams.
 - Rich descriptions, checklists, notes, mentions, attachments and pasted images.
@@ -19,8 +19,9 @@ outbound email or external services at runtime.
 
 Kloister also moves work to and from Azure Boards with manual CSV files: setup from
 a sample ADO export, Quick review by default (with Detailed review when you want every
-choice), returned-ID linking and durable retry recovery. See
-[ADO transfer](docs/ADO-EXPORT.md) for permissions, limits and the acceptance drill.
+choice), returned-ID linking and durable retry recovery. The
+[step-by-step guide](docs/ADO-TRANSFER-GUIDE.md) covers Agile, Scrum, Basic and customized
+processes; [ADO transfer](docs/ADO-EXPORT.md) lists permissions, limits and the acceptance drill.
 
 ![Project board with example data](docs/screenshots/board.png)
 
@@ -108,5 +109,5 @@ backups default to **02:00 server time**, with **14-day retention**, and cover t
 database only. Back up files/configuration separately and test restoration.
 Excel/offline snapshots are reading copies, not restorable backups.
 
-[Installation](docs/INSTALL.md) · [Upgrades](docs/UPGRADE.md) ·
+[Installation](docs/INSTALL.md) · [Upgrades and rollback](docs/UPGRADE.md) ·
 [Administration and recovery](docs/ADMIN.md) · [MIT license](LICENSE)

@@ -52,9 +52,15 @@ describe('capability-composed introduction', () => {
     ).not.toMatch(/ADO|Azure DevOps/);
     const transfer = HELP_ARTICLES.find((article) => article.id === 'ado');
     expect(transfer?.role).toContain('project PM only');
-    expect(transfer?.text).toContain('link returned IDs only');
-    expect(transfer?.text).toContain('Quick review is the default');
-    expect(transfer?.text).toContain('No token or external connection');
+    // The guide's steps live in sections; check the whole article.
+    const guide = [
+      transfer?.text ?? '',
+      ...(transfer?.sections ?? []).flatMap((s) => [s.heading, s.text ?? '', ...(s.steps ?? [])]),
+    ].join(' ');
+    expect(guide).toContain('Link returned IDs only');
+    expect(guide).toContain('Quick review is the default');
+    expect(guide).toContain('Kloister never connects to ADO and uses no token');
+    expect(guide).toContain('Starting in ADO');
     expect(HELP_ARTICLES.find((article) => article.id === 'snapshots')?.text).toContain(
       'Every matching page',
     );

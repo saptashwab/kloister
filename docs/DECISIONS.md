@@ -1,5 +1,25 @@
 # Decisions
 
+## v1.2.0 preparation (2026-10-24)
+
+- Owner decisions: the guided upgrade/rollback helper ships in the release
+  (`deploy/upgrade-helper.sh`, version-neutral), archives the earlier `.previous`
+  rollback copies into the new backup and never deletes older backups or recovery
+  databases, and only detects build tools (the operator exports CC/CXX/PYTHON).
+  It installs the new dependencies in `backend.next` before stopping anything, using
+  the installed runtime's headers, and `upgrade.sh` accepts that exact staged folder.
+- The ADO transfer guide is self-contained in Help & FAQ for app users: both
+  starting points, data-safety advice (work existing on both sides cannot be linked,
+  cleared cells count as changes in Quick review, what is never overwritten or
+  deleted), per-process notes and screenshots served from `public/help/ado/` and
+  loaded only with that topic. The screenshots come from a CI browser test with
+  example data. `docs/ADO-TRANSFER-GUIDE.md` is a text copy for administrators. ADO
+  web screens are described, not pictured, because they show organization and
+  account names.
+- Follow-up for a later milestone: in Detailed review, a brand-new ADO row labels
+  every field "changed on both sides" and shows a raw validation message until each
+  value is chosen; it works but reads badly.
+
 ## M8.5 implementation (2026-10-23)
 
 M8.5 CI (2026-10-24): run 40010850119 (`7eea93b`, which includes M8.5) passed every
