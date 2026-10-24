@@ -11,6 +11,13 @@ check_payload
 [[ -f $APP_DIR/config/installed && ! -L $APP_DIR && ! -L $APP_DIR/backend ]] || fail 'A completed managed install is required'
 [[ ! -e $APP_DIR/backend.previous && ! -e /var/www/html/$APP_NAME.previous ]] || fail 'Archive previous rollback copies before upgrading'
 [[ -x $NODE_DIR/bin/node ]] || fail 'Keep NODE_VERSION unchanged; runtime upgrades require operator planning'
+# deploy/upgrade-helper.sh installs dependencies in $APP_DIR/backend.next before
+# stopping anything; accept only that exact app-owned directory.
+staged=${KLOISTER_STAGED_BACKEND:-}
+if [[ -n $staged ]]; then
+  [[ $staged == "$APP_DIR/backend.next" && -d $staged && ! -L $staged &&
+     $(stat -c %U "$staged") == "$APP_NAME" && -d $staged/node_modules ]] || fail 'Unexpected staged backend directory'
+fi
 open_log upgrade
 check_installed_config
 
@@ -42,12 +49,17 @@ else
   as_app /bin/bash "$APP_DIR/scripts/stop.sh" >&8 2>&1
 fi
 mv "$APP_DIR/backend" "$APP_DIR/backend.previous"
-install -d -m 0750 -o "$APP_NAME" -g "$APP_NAME" "$APP_DIR/backend"
-tar -C "$RELEASE/backend" -cf - . | runuser -u "$APP_NAME" -- tar -C "$APP_DIR/backend" -xf - --no-same-owner --no-same-permissions
+if [[ -n $staged ]]; then
+  # Dependencies were installed and checked before the backend was stopped.
+  mv "$staged" "$APP_DIR/backend"
+else
+  install -d -m 0750 -o "$APP_NAME" -g "$APP_NAME" "$APP_DIR/backend"
+  tar -C "$RELEASE/backend" -cf - . | runuser -u "$APP_NAME" -- tar -C "$APP_DIR/backend" -xf - --no-same-owner --no-same-permissions
+fi
 
 # Install only runtime dependencies and apply committed migrations as non-root.
 action 'Installing new runtime dependencies and migrating database'
-as_app npm ci --omit=dev >&8 2>&1
+if [[ -z $staged ]]; then as_app npm ci --omit=dev >&8 2>&1; fi
 as_app node node_modules/prisma/build/index.js migrate deploy >&8 2>&1
 action 'Replacing compiled frontend and control scripts'
 copy_frontend

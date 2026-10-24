@@ -226,3 +226,88 @@ test('Viewers retain snapshots and cannot open transfer controls or API', async 
   await page.goto('/p/KLO/ado');
   await expect(page.getByRole('alert')).toContainText('requires project PM or project Lead');
 });
+
+test('guide walkthrough: settings, Quick export, return, follow-up and Detailed review', async ({
+  page,
+}, info) => {
+  // Named screenshots for docs/ADO-TRANSFER-GUIDE.md, taken with example data.
+  const { project, bucket } = await setup(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const shot = async (name: string): Promise<void> => {
+    await expect(page.getByText('Working…')).toHaveCount(0);
+    await info.attach(`guide: ${name}`, {
+      body: await page.locator('app-ado-transfer').screenshot(),
+      contentType: 'image/png',
+    });
+  };
+  const source = (await (
+    await page.request.post(`api/v1/projects/${project}/items`, {
+      headers,
+      // The example profile maps a Task's Blocked status to Active, so the follow-up sends it.
+      data: { type: 'TASK', title: 'Guide example task', status: 'BLOCKED', bucketId: bucket },
+    })
+  ).json()) as WorkItemDto;
+
+  await page.goto('/p/KLO/ado');
+  await page.getByRole('tab', { name: 'Transfer settings', exact: true }).click();
+  const sample = [
+    'ID,Work Item Type,Title,State,Assigned To,Tags,Target Date',
+    '1,User Story,Sample story,Active,Example Person <person@example.org>,sample-tag,18/12/2026 05:30:00',
+    '2,Task,Sample task,New,,,',
+  ].join('\r\n');
+  await page.locator('input[type=file]').setInputFiles({
+    name: 'ado-sample.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(sample, 'utf8'),
+  });
+  await expect(page.getByRole('status').filter({ hasText: 'Looks like Agile' })).toBeVisible();
+  await shot('01 transfer settings from a sample export');
+
+  await page.goto(`/p/KLO/ado?items=${source.id}`);
+  await page.getByRole('button', { name: 'Preview export CSV', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Prepare reviewed CSV files' })).toBeVisible();
+  await shot('02 quick export preview');
+  await page.getByRole('button', { name: 'Prepare reviewed CSV files' }).click();
+  const create = await csvFromDownload(page);
+  const reference = create.match(/Kloister reference: ([a-f0-9]{64})/)?.[1];
+  expect(reference).toBeTruthy();
+  await shot('03 create file prepared');
+
+  await page.getByRole('tab', { name: 'Import from ADO', exact: true }).click();
+  const description = `<hr /><p>Kloister transfer details (generated; not structured entities)</p><p>Kloister reference: ${reference}</p>`;
+  await upload(
+    page,
+    `ID,Work Item Type,Title,State,Description,Parent,Assigned To\r\n73001,Task,Guide example task,New,${description},,\r\n`,
+  );
+  await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
+  await expect(
+    page.getByRole('button', { name: 'Apply 1 reviewed row', exact: true }),
+  ).toBeVisible();
+  await shot('04 link returned IDs, quick summary');
+  await page.getByRole('button', { name: 'Apply 1 reviewed row', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /Review.*Applied/ })).toBeVisible();
+  await shot('05 linked, follow-up offered');
+  await page
+    .getByRole('button', { name: 'Prepare the follow-up update (state and assignee)' })
+    .click();
+  await page.getByRole('checkbox', { name: /I reviewed observation times/ }).check();
+  await page.getByRole('button', { name: 'Preview export CSV', exact: true }).click();
+  await expect(page.getByText(/Sent to ADO: Status ×1/)).toBeVisible();
+  await shot('06 follow-up update preview');
+
+  await page.getByRole('tab', { name: 'Import from ADO', exact: true }).click();
+  await page.getByRole('radio', { name: 'Detailed review' }).click();
+  await choose(page, 'Incoming workflow', 'Import reviewed local changes / new rows');
+  await upload(page, 'ID,Work Item Type,Title,State\r\n73002,Task,Started in ADO,New\r\n');
+  await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
+  await page.getByRole('button', { name: 'Confirm all unmatched rows as new items' }).click();
+  await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
+  await expect(
+    page.getByRole('combobox', { name: /Choose Title for Started in ADO/ }),
+  ).toBeVisible();
+  await shot('07 detailed review of a new ADO row');
+  await page.getByRole('radio', { name: 'Quick review' }).click();
+
+  await page.getByRole('tab', { name: 'Transfer history', exact: true }).click();
+  await shot('08 transfer history');
+});
