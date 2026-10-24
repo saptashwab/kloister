@@ -2,6 +2,11 @@
 
 ## v1.2.0 preparation (2026-10-24)
 
+v1.2.0 was published as a GitHub prerelease on 2026-10-24 (owner approved): annotated
+tag `v1.2.0` at `3a573da`, built and verified by release run 40091522793, with
+`kloister-1.2.0.zip` and `SHA256SUMS` attached. CI on that commit is green (run
+40090451476). Upgrade acceptance on the owner's RHEL VM is an operator step.
+
 - Owner decisions: the guided upgrade/rollback helper ships in the release
   (`deploy/upgrade-helper.sh`, version-neutral), archives the earlier `.previous`
   rollback copies into the new backup and never deletes older backups or recovery
