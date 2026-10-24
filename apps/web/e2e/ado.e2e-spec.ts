@@ -233,10 +233,25 @@ test('guide walkthrough: settings, Quick export, return, follow-up and Detailed 
   // Named screenshots for docs/ADO-TRANSFER-GUIDE.md, taken with example data.
   const { project, bucket } = await setup(page);
   await page.setViewportSize({ width: 1280, height: 900 });
-  const shot = async (name: string): Promise<void> => {
+  // Toasts and closing overlays are hidden and animations stopped, so each shot shows
+  // only the transfer screen; maxHeight keeps long forms to their first part.
+  const shot = async (name: string, maxHeight?: number): Promise<void> => {
     await expect(page.getByText('Working…')).toHaveCount(0);
+    const options = {
+      animations: 'disabled' as const,
+      style: '.cdk-overlay-container, .k-toast { display: none !important; }',
+    };
+    const screen = page.locator('app-ado-transfer');
+    const box = await screen.boundingBox();
+    if (!box) throw new Error('Transfer screen not visible');
     await info.attach(`guide: ${name}`, {
-      body: await page.locator('app-ado-transfer').screenshot(),
+      body:
+        maxHeight === undefined
+          ? await screen.screenshot(options)
+          : await page.screenshot({
+              ...options,
+              clip: { ...box, height: Math.min(box.height, maxHeight) },
+            }),
       contentType: 'image/png',
     });
   };
@@ -261,7 +276,7 @@ test('guide walkthrough: settings, Quick export, return, follow-up and Detailed 
     buffer: Buffer.from(sample, 'utf8'),
   });
   await expect(page.getByRole('status').filter({ hasText: 'Looks like Agile' })).toBeVisible();
-  await shot('01 transfer settings from a sample export');
+  await shot('01 transfer settings from a sample export', 760);
 
   await page.goto(`/p/KLO/ado?items=${source.id}`);
   await page.getByRole('button', { name: 'Preview export CSV', exact: true }).click();
@@ -295,17 +310,22 @@ test('guide walkthrough: settings, Quick export, return, follow-up and Detailed 
   await expect(page.getByText(/Sent to ADO: Status ×1/)).toBeVisible();
   await shot('06 follow-up update preview');
 
+  // The same linked item retitled on both sides: Detailed review asks which wording wins.
+  const renamed = await page.request.patch(`api/v1/projects/${project}/items/${source.id}`, {
+    headers,
+    data: { title: 'Guide example task (Kloister wording)' },
+  });
+  expect(renamed.status()).toBe(200);
   await page.getByRole('tab', { name: 'Import from ADO', exact: true }).click();
   await page.getByRole('radio', { name: 'Detailed review' }).click();
   await choose(page, 'Incoming workflow', 'Import reviewed local changes / new rows');
-  await upload(page, 'ID,Work Item Type,Title,State\r\n73002,Task,Started in ADO,New\r\n');
+  await upload(
+    page,
+    'ID,Work Item Type,Title,State\r\n73001,Task,Guide example task (ADO wording),New\r\n',
+  );
   await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
-  await page.getByRole('button', { name: 'Confirm all unmatched rows as new items' }).click();
-  await page.getByRole('button', { name: 'Preview incoming CSV' }).click();
-  await expect(
-    page.getByRole('combobox', { name: /Choose Title for Started in ADO/ }),
-  ).toBeVisible();
-  await shot('07 detailed review of a new ADO row');
+  await expect(page.getByRole('combobox', { name: /^Choose Title for / })).toBeVisible();
+  await shot('07 detailed review of a title changed on both sides');
   await page.getByRole('radio', { name: 'Quick review' }).click();
 
   await page.getByRole('tab', { name: 'Transfer history', exact: true }).click();
