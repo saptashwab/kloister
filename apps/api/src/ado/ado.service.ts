@@ -804,6 +804,8 @@ export class AdoService {
             (id) => !id.startsWith('label:'),
           );
         if (op.itemId) await checked(UpdateItemDto, validatedFields);
+        // A new item still missing reviewed values is already reported field by field.
+        else if (!op.changes.title || !op.changes.type || !op.changes.status || !bucketId) continue;
         else await checked(CreateItemDto, { ...validatedFields, bucketId });
         const type = value.type as TransferItem['type'];
         const bucket = await findBucketFor(

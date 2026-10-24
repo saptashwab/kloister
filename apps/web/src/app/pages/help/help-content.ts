@@ -144,7 +144,7 @@ const ADO_GUIDE: readonly HelpSection[] = [
   },
   {
     heading: 'Good to know',
-    text: 'Titles and row order never identify items: without the Kloister reference footer, match rows to waiting items by hand. A file imported twice in ADO is refused when brought back because two rows carry the same reference: delete the duplicates in ADO, export again and link. If Apply is refused after a preview, Kloister data or settings changed: preview again. Files, comments, dependencies and history are not transferred; checklists and extra assignees become description text. Due times stay in Kloister: files carry the due date only. Deleted items are never recreated. Limits are 10 MiB, 1,000 rows and 1 MiB per cell. Open transfer files only in ADO, not in a spreadsheet.',
+    text: 'Titles and row order never identify items: without the Kloister reference footer, match rows to waiting items by hand. A file imported twice in ADO is refused when brought back because two rows carry the same reference: delete the duplicates in ADO, export again and link. In Detailed review, each value of a row that becomes a new Kloister item needs Take ADO value or Leave out; its title, type, status and bucket must be taken. If Apply is refused after a preview, Kloister data or settings changed: preview again. Files, comments, dependencies and history are not transferred; checklists and extra assignees become description text. Due times stay in Kloister: files carry the due date only. Deleted items are never recreated. Limits are 10 MiB, 1,000 rows and 1 MiB per cell. Open transfer files only in ADO, not in a spreadsheet.',
   },
 ];
 

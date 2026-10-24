@@ -543,7 +543,8 @@ describe('incoming explicit review, provenance and tombstones', () => {
     r.review = 'detailed';
     const preview = incomingPlan(d, r, [], []);
     expect(preview.rows[0].differences.map((f) => f.field)).not.toContain('assigneeIds');
-    expect(preview.errors.join()).toMatch(/require reviewed title/);
+    // Each value of a new row is asked for; the summary line waits until all are chosen.
+    expect(preview.errors.join()).toMatch(/choose Title \(value for this new item\)/);
   });
   it('rejects duplicate IDs, foreign provenance and unknown markers before applying any row', () => {
     const d = destination();
@@ -1075,5 +1076,30 @@ describe('update files use the states of the row’s own ADO type', () => {
     plan = exportPlan(custom(), outgoing(), [story], [l], undefined, members);
     expect(plan.files).toEqual([]);
     expect(plan.rows[0].warnings.join()).toMatch(/Blocked has no ADO state for Spike/);
+  });
+});
+
+describe('Detailed review of rows that become new items', () => {
+  it('asks for each value of a new row without calling it a conflict', () => {
+    const request = incoming('ID,Work Item Type,Title,State\r\n21,Task,Started in ADO,New\r\n');
+    request.review = 'detailed';
+    let plan = incomingPlan(destination(), request, [], []);
+    const differences = plan.rows[0].differences;
+    expect(differences.length).toBeGreaterThan(0);
+    for (const d of differences) expect(d).toMatchObject({ newItem: true, conflict: false });
+    expect(plan.errors.join('\n')).toMatch(/choose Title \(value for this new item\)/);
+    expect(plan.errors.join('\n')).not.toMatch(/changed on both sides|new items require/);
+    // Taking every value leaves nothing to resolve.
+    request.choices['21'] = Object.fromEntries(differences.map((d) => [d.field, 'incoming']));
+    plan = incomingPlan(destination(), request, [], []);
+    expect(plan.errors).toEqual([]);
+    // "Keep local" submitted for a new item still counts as unchosen.
+    request.choices['21'] = { ...request.choices['21'], title: 'local' };
+    plan = incomingPlan(destination(), request, [], []);
+    expect(plan.errors.join('\n')).toMatch(/choose Title \(value for this new item\)/);
+    // Leaving out the title is reported once, as a missing required value.
+    request.choices['21'] = { ...request.choices['21'], title: 'skip' };
+    plan = incomingPlan(destination(), request, [], []);
+    expect(plan.errors.join('\n')).toMatch(/new items require reviewed title/);
   });
 });

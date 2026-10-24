@@ -509,23 +509,35 @@ export function incomingPlan(
               }
             : d,
         )
+        // A new item has nothing to conflict with: Quick review takes ADO's values,
+        // Detailed review asks for each one.
         .map((d) =>
-          !current && review === 'quick' && choices[d.field] === undefined
-            ? { ...d, choice: 'incoming' as const, auto: true, conflict: false }
-            : d,
+          current
+            ? d
+            : review === 'quick' && choices[d.field] === undefined
+              ? { ...d, choice: 'incoming' as const, auto: true, conflict: false, newItem: true }
+              : // "Keep local" means nothing for a new item; it still needs a choice.
+                {
+                  ...d,
+                  conflict: false,
+                  newItem: true,
+                  ...(d.choice === 'local' ? { choice: undefined } : {}),
+                },
         );
       const changes: Values = {};
       if (request.mode === 'import')
         for (const d of row.differences) {
           if (d.choice === undefined)
             errors.push(
-              `Row ${index + 1}: choose ${FIELD_NAMES[d.field]} (${d.conflict ? 'changed on both sides' : 'difference'}).`,
+              `Row ${index + 1}: choose ${FIELD_NAMES[d.field]} (${d.newItem ? 'value for this new item' : d.conflict ? 'changed on both sides' : 'difference'}).`,
             );
           if (d.choice === 'incoming') changes[d.field] = incoming[d.field];
         }
+      // Asked only once every value is chosen, so it never repeats the per-field requests.
       if (
         !current &&
         request.mode === 'import' &&
+        row.differences.every((d) => d.choice !== undefined) &&
         (!changes.title || !changes.type || !changes.status || !changes.bucketId)
       )
         errors.push(

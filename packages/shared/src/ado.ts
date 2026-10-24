@@ -177,6 +177,11 @@ export interface AdoDifference {
   choice?: AdoChoice;
   /** True when Quick review chose this because only one side changed. */
   auto?: boolean;
+  /**
+   * True for a row that becomes a new Kloister item: there is no Kloister value
+   * or last sync to compare, so the only choices are to take or leave out ADO's value.
+   */
+  newItem?: boolean;
 }
 
 /** One reviewed row, without raw CSV or hidden-project information. */

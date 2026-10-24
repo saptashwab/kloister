@@ -798,21 +798,25 @@
                   <h5>
                     {{ fieldLabels[d.field] }} ·
                     {{
-                      d.conflict
-                        ? 'changed on both sides'
-                        : d.auto
-                          ? d.choice === 'incoming'
-                            ? 'changed in ADO only'
-                            : 'changed here only'
-                          : 'different'
+                      d.newItem
+                        ? 'new from ADO'
+                        : d.conflict
+                          ? 'changed on both sides'
+                          : d.auto
+                            ? d.choice === 'incoming'
+                              ? 'changed in ADO only'
+                              : 'changed here only'
+                            : 'different'
                     }}
                   </h5>
                   <dl>
-                    <dt>Here</dt>
-                    <dd>{{ show(d.field, d.local) }}</dd>
+                    @if (!d.newItem) {
+                      <dt>Here</dt>
+                      <dd>{{ show(d.field, d.local) }}</dd>
+                    }
                     <dt>ADO</dt>
                     <dd>{{ show(d.field, d.incoming) }}</dd>
-                    @if (p.review === 'detailed') {
+                    @if (p.review === 'detailed' && !d.newItem) {
                       <dt>Last sync here</dt>
                       <dd>{{ show(d.field, d.baselineLocal) }}</dd>
                       <dt>Last sync in ADO</dt>
@@ -825,13 +829,22 @@
                       ><mat-select
                         [ngModel]="choiceOf(row, d)"
                         (ngModelChange)="choose(row, d.field, $event)"
-                        ><mat-option value="local">{{
-                          tab() === 'export' ? 'Use local in file' : 'Keep local'
+                      >
+                        @if (!d.newItem) {
+                          <mat-option value="local">{{
+                            tab() === 'export' ? 'Use local in file' : 'Keep local'
+                          }}</mat-option>
+                        }
+                        <mat-option value="incoming">{{
+                          d.newItem
+                            ? 'Take ADO value'
+                            : tab() === 'export'
+                              ? 'Keep the ADO value'
+                              : 'Take incoming'
                         }}</mat-option
-                        ><mat-option value="incoming">{{
-                          tab() === 'export' ? 'Keep the ADO value' : 'Take incoming'
-                        }}</mat-option
-                        ><mat-option value="skip">Skip this field</mat-option></mat-select
+                        ><mat-option value="skip">{{
+                          d.newItem ? 'Leave out' : 'Skip this field'
+                        }}</mat-option></mat-select
                       ></mat-form-field
                     >
                   }

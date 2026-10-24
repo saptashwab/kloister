@@ -526,7 +526,8 @@ resolve ambiguous types and validate the ordinary hierarchy rules.
   - After linking, the follow-up update file (State, Assigned To) is offered at once.
 - **Detailed** (per-transfer toggle): the M8 review, with explicit choices for every
   difference, manual link confirmation, row selection, three-way values, parent
-  omission, label creation and per-item assignee choice.
+  omission, label creation and per-item assignee choice. A row that becomes a new item
+  has nothing to compare: each value is shown as new from ADO, to take or leave out.
 - A project PM may require Detailed review for every transfer in the project.
 - Both modes keep the same permissions, idempotency, staleness checks, tombstones and
   "missing rows never delete" rules. Applying incoming changes stays PM-only.

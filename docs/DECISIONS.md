@@ -16,9 +16,12 @@
   example data. `docs/ADO-TRANSFER-GUIDE.md` is a text copy for administrators. ADO
   web screens are described, not pictured, because they show organization and
   account names.
-- Follow-up for a later milestone: in Detailed review, a brand-new ADO row labels
-  every field "changed on both sides" and shows a raw validation message until each
-  value is chosen; it works but reads badly.
+- Detailed review of a row that becomes a new item no longer reads as a conflict:
+  its fields are marked new from ADO (`AdoDifference.newItem`), show only the ADO
+  value, and offer Take ADO value or Leave out; errors ask for the value for this new
+  item, the required-values summary appears only once every value is chosen, and the
+  create validation waits for complete choices instead of showing raw validator
+  text. Quick review is unchanged (it takes ADO's values).
 
 ## M8.5 implementation (2026-10-23)
 

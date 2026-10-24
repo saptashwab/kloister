@@ -189,6 +189,9 @@ checked; run the operator drill in [ADO-EXPORT](ADO-EXPORT.md) before relying on
   the update again.
 - **"Choose … (changed on both sides)"**: someone changed the same field in both systems.
   Pick which value wins, or skip it.
+- **"Choose … (value for this new item)"**: in Detailed review, each value of a row that
+  becomes a new Kloister item needs Take ADO value or Leave out. Title, type, status and a
+  bucket must be taken.
 - **Apply is refused after a preview**: Kloister data or settings changed after the
   preview. Preview again.
 - **A create file was imported twice in ADO**: the returned export is refused because two

@@ -172,6 +172,55 @@ describe('lazy transfer review lifecycle', () => {
     ).toBe(true);
     expect(field?.textContent).toContain('Choose Title for Remote starting example');
   });
+  it('shows a new ADO row as new values to take or leave out, not as conflicts', async () => {
+    const { page, fixture } = await render();
+    page.preview.set({
+      batchId: null,
+      digest: 'review',
+      review: 'detailed',
+      destination: {
+        organization: 'collection',
+        remoteProject: 'remote',
+        profile: { process: 'Agile' },
+        revision: 1,
+      } as AdoDestinationDto,
+      rows: [
+        {
+          index: 0,
+          itemId: null,
+          remoteId: '72002',
+          title: 'Started in ADO',
+          kind: 'create',
+          selected: true,
+          differences: [
+            {
+              field: 'title',
+              local: null,
+              incoming: 'Started in ADO',
+              baselineLocal: null,
+              baselineRemote: null,
+              conflict: false,
+              newItem: true,
+            },
+          ],
+          warnings: [],
+        },
+      ],
+      files: [],
+      warnings: [],
+      errors: [],
+      state: 'PREVIEW',
+    });
+    await settle(fixture);
+    const root = fixture.nativeElement as HTMLElement;
+    const difference = root.querySelector('.ado-difference');
+    expect(difference?.querySelector('h5')?.textContent).toContain('new from ADO');
+    expect(difference?.textContent).not.toMatch(/changed on both sides|Last sync|Here/);
+    difference?.querySelector<HTMLElement>('.mat-mdc-select-trigger')?.click();
+    await settle(fixture);
+    const options = [...document.querySelectorAll('mat-option')].map((o) => o.textContent?.trim());
+    expect(options).toEqual(['Take ADO value', 'Leave out']);
+  });
   it('discards a delayed old-project preview and clears approvals on project navigation', async () => {
     const { page, api, fixture, project } = await render();
     let resolve!: (p: AdoPreview) => void;

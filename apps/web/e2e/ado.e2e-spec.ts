@@ -161,7 +161,7 @@ test('ADO starting point needs explicit new-row confirmation and preserves count
   // Quick review takes every value of a confirmed new row; the choices stay visible and editable.
   await expect(
     page.getByRole('combobox', { name: 'Choose Title for Remote starting example' }),
-  ).toContainText('Take incoming');
+  ).toContainText('Take ADO value');
   await page.getByRole('button', { name: 'Apply 1 reviewed row', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Review.*Applied/ })).toBeVisible();
   await upload(page, csv);
