@@ -89,8 +89,10 @@ export function formatMoment(value: string | Date): string {
 }
 
 /**
- * Reads a typed date: `2026-10-23`, `23 Oct 2026` or `23 October 2026`
- * (month names in English, any case).
+ * Reads a typed date: day first as `23/10/2026` (also `23-10-2026`,
+ * `23.10.2026` or `3/1/2026`), `2026-10-23`, `23 Oct 2026` or
+ * `23 October 2026` (month names in English, any case). Numeric dates are
+ * always read day first (DESIGN §15), never month first.
  *
  * @param text What the person typed.
  * @returns `YYYY-MM-DD`, or null when it is not a real date.
@@ -100,8 +102,12 @@ export function parseDay(text: string): string | null {
   let year: number, month: number, day: number;
   const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(value);
   const named = /^(\d{1,2})\s+([A-Za-z]{3,})\.?,?\s+(\d{4})$/.exec(value);
+  // One separator used twice, so "23/10-2026" is not a date.
+  const dayFirst = /^(\d{1,2})([/.-])(\d{1,2})\2(\d{4})$/.exec(value);
   if (iso) {
     [year, month, day] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
+  } else if (dayFirst) {
+    [year, month, day] = [Number(dayFirst[4]), Number(dayFirst[3]), Number(dayFirst[1])];
   } else if (named) {
     const name = named[2].toLowerCase();
     // The abbreviation or the full English name, nothing longer ("Octopus" is not a month).
@@ -111,6 +117,8 @@ export function parseDay(text: string): string | null {
     if (index < 0) return null;
     [year, month, day] = [Number(named[3]), index + 1, Number(named[1])];
   } else return null;
+  // Four-digit years only, so the result is always `YYYY-MM-DD`.
+  if (year < 1000) return null;
   const date = new Date(year, month - 1, day);
   if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day)
     return null;

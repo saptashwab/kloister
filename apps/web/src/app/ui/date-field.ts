@@ -23,9 +23,21 @@ const FORMATS: MatDateFormats = {
 };
 
 /**
+ * Placeholder of every empty date input: dates show as "23 Oct 2026" but are
+ * typed day first (DESIGN §15).
+ */
+export const DATE_PLACEHOLDER = 'dd/mm/yyyy';
+
+/**
+ * Overlay pane class of the due-time list, which a global rule widens past its
+ * narrow input so every time is readable (DESIGN §15).
+ */
+export const TIME_PANEL_CLASS = 'k-time-panel';
+
+/**
  * Date adapter for the app's one date format (DESIGN §15, M8.5): shows
- * "23 Oct 2026", reads that or `2026-10-23`, and uses 24-hour times. Values
- * are local Dates at midnight, so no time zone can shift a calendar day.
+ * "23 Oct 2026", reads that, day-first `23/10/2026` or `2026-10-23`, and uses
+ * 24-hour times. Values are local Dates at midnight, so no time zone can shift a calendar day.
  */
 @Injectable()
 export class AppDateAdapter extends NativeDateAdapter {
@@ -92,8 +104,9 @@ export const DATE_PROVIDERS = [
 
 /**
  * The app's date control (M8.5): a compact text input with a Material
- * calendar, reading and emitting `YYYY-MM-DD`. Typing "23 Oct 2026" or
- * "2026-10-23" works; clearing the text emits null.
+ * calendar, reading and emitting `YYYY-MM-DD`. Typing day first
+ * ("23/10/2026"), "23 Oct 2026" or "2026-10-23" works; clearing the text
+ * emits null.
  */
 @Component({
   selector: 'app-date-field',
@@ -104,23 +117,22 @@ export const DATE_PROVIDERS = [
       class="k-inline"
       type="text"
       autocomplete="off"
-      placeholder="d Mmm yyyy"
+      [placeholder]="placeholder"
       [attr.aria-label]="label()"
       [matDatepicker]="picker"
       [min]="minDate()"
       [value]="date()"
       (dateChange)="changed($event.value)"
-    /><mat-datepicker-toggle
-      [for]="picker"
-      [attr.aria-label]="'Choose ' + label()"
-    /><mat-datepicker #picker />`,
+    /><mat-datepicker-toggle [for]="picker" [aria-label]="'Choose ' + label()" /><mat-datepicker
+      #picker
+    />`,
   styles: `
     :host {
       display: inline-flex;
       align-items: center;
     }
     input {
-      width: 8.5em;
+      width: var(--k-date-input-width);
     }
   `,
 })
@@ -133,6 +145,9 @@ export class DateField {
   readonly min = input<string | null>(null);
   /** Emits the chosen date, or null when cleared. */
   readonly valueChange = output<string | null>();
+
+  /** Placeholder shown while empty. */
+  protected readonly placeholder = DATE_PLACEHOLDER;
 
   /** The value as a local Date for the picker. */
   protected readonly date = computed(() => {
@@ -174,17 +189,19 @@ export class DateField {
       [matTimepicker]="picker"
       [value]="time()"
       (blur)="typed($any($event.target).value)"
-    /><mat-timepicker-toggle
-      [for]="picker"
-      [attr.aria-label]="'Choose ' + label()"
-    /><mat-timepicker #picker interval="30m" (selected)="picked($event.value)" />`,
+    /><mat-timepicker-toggle [for]="picker" [aria-label]="'Choose ' + label()" /><mat-timepicker
+      #picker
+      interval="30m"
+      [panelClass]="panelClass"
+      (selected)="picked($event.value)"
+    />`,
   styles: `
     :host {
       display: inline-flex;
       align-items: center;
     }
     input {
-      width: 4.5em;
+      width: var(--k-time-input-width);
     }
   `,
 })
@@ -195,6 +212,9 @@ export class TimeField {
   readonly label = input.required<string>();
   /** Emits the chosen time, or null when cleared. */
   readonly valueChange = output<string | null>();
+
+  /** Class of the time list's overlay pane, widened by a global rule. */
+  protected readonly panelClass = TIME_PANEL_CLASS;
 
   /** The value as a Date for the picker. */
   protected readonly time = computed(() => {

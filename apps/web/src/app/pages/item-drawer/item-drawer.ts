@@ -457,7 +457,7 @@ const FIELD_NAMES: Record<string, string> = {
                     <app-time-field
                       label="Due time"
                       [value]="d.dueTime"
-                      (valueChange)="addingTime.set(false); save({ dueTime: $event })"
+                      (valueChange)="saveTime($event)"
                     />
                   } @else if (d.dueDate) {
                     <button type="button" class="k-action" (click)="addingTime.set(true)">
@@ -1041,6 +1041,19 @@ export class ItemDrawer {
     const d = this.detail();
     if (d === null || title === '' || title === d.title) return;
     await this.save({ title });
+  }
+
+  /**
+   * Saves the due time. A newly added time field stays until the saved item
+   * carries the time, so the field, its open list and focus are not replaced
+   * by "Add time" while the request runs.
+   *
+   * @param dueTime `HH:MM`, or null to clear it.
+   * @returns Resolves once saved.
+   */
+  protected async saveTime(dueTime: string | null): Promise<void> {
+    await this.save({ dueTime });
+    this.addingTime.set(false);
   }
 
   /**

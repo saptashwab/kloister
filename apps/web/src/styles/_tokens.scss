@@ -161,6 +161,10 @@
   --k-label-row-width: 560px;
   --k-label-preview-width: 120px;
   --k-control-height: 36px;
+  /* Date and due-time fields (DESIGN §15): room for dd/mm/yyyy, hh:mm and the time list. */
+  --k-date-input-width: 8.5em;
+  --k-time-input-width: 5.5em;
+  --k-time-panel-width: 7.5rem;
   --k-target: 24px;
   --k-line: 1px;
   --k-focus-width: 2px;

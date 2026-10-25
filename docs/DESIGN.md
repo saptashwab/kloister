@@ -510,12 +510,17 @@ suggestions, and label creation reuses the shared label palette.
 ## 15. M8.5 patterns
 
 - **Dates and times.** Dates show as `23 Oct 2026` everywhere (they read the same in every locale);
-  moments as `23 Oct 2026, 14:05` in the viewer's time zone, 24-hour. Cards keep their short relative
-  wording ("Due today", "Due in 3 days", "Fri 24 Oct"), adding a due time when one is set ("Due today
-  17:00", "Overdue since 17:00"). Every date is entered with the Material datepicker (typing `23 Oct
-2026` or `2026-10-23` works) and every due time with the Material time list in 30-minute steps
-  (typing any `HH:MM` works). Compact drawer fields use the `k-inline` look; forms use outlined
-  Material fields. The `appDate` pipe and the date/time fields load only with the screens using them.
+  moments as `23 Oct 2026, 14:05` in the viewer's time zone, 24-hour. Cards keep their short
+  relative wording ("Due today", "Due in 3 days", "Fri 24 Oct"), adding a due time when one is set
+  ("Due today 17:00", "Overdue since 17:00"). Every date is entered with the Material datepicker.
+  Typed dates are read day first: an empty date field shows the placeholder `dd/mm/yyyy` (outlined
+  form fields repeat it as a hint), and `23/10/2026`, `23-10-2026`, `23.10.2026` or `3/1/2026` work,
+  as do `23 Oct 2026` and `2026-10-23`; impossible dates such as `30/02/2026` are refused (v1.2.1).
+  Every due time uses the Material time list in 30-minute steps (typing any `HH:MM` works; the empty
+  field shows `hh:mm`). The list is at least `--k-time-panel-width` wide so every time reads in
+  full, even though its input is compact. Compact drawer fields use the `k-inline` look; forms use
+  outlined Material fields. The `appDate` pipe and the date/time fields load only with the screens
+  using them.
 - **Phone cards.** Below 600 px, wide tables (Projects, Users, Audit log, Members, Sprints, Backlog)
   render as a list of cards: the row's main value as the title, other columns as a two-column
   label/value list and the row's actions underneath. Pages render a real table on wider screens

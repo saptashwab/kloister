@@ -44,7 +44,20 @@ describe('app dates (M8.5)', () => {
     expect(parseDay('30 Feb 2026')).toBeNull();
     expect(parseDay('23 Octopus 2026')).toBeNull();
     expect(parseDay('1 Sept 2026')).toBeNull();
-    expect(parseDay('23/10/2026')).toBeNull();
+    // Numeric dates are day first.
+    expect(parseDay('23/10/2026')).toBe('2026-10-23');
+    expect(parseDay('26-10-2026')).toBe('2026-10-26');
+    expect(parseDay('26.10.2026')).toBe('2026-10-26');
+    expect(parseDay('6/1/2026')).toBe('2026-01-06');
+    expect(parseDay(' 15/03/2030 ')).toBe('2030-03-15');
+    expect(parseDay('30/02/2026')).toBeNull();
+    expect(parseDay('10/23/2026')).toBeNull();
+    expect(parseDay('0/1/2026')).toBeNull();
+    expect(parseDay('23/10-2026')).toBeNull();
+    expect(parseDay('23/10/26')).toBeNull();
+    expect(parseDay('123/10/2026')).toBeNull();
+    expect(parseDay('15/03/0203')).toBeNull();
+    expect(parseDay('0203-03-15')).toBeNull();
     expect(parseTime('9:30')).toBe('09:30');
     expect(parseTime('17:00')).toBe('17:00');
     expect(parseTime('24:00')).toBeNull();

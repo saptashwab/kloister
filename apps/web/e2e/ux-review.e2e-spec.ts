@@ -68,6 +68,13 @@ test('the audit log reads as words and records one entry per admin visit', async
   await page.goto(`/p/${PROJECT_KEY}/backlog`);
   await expect(page.locator('app-skeleton')).toHaveCount(0);
   await page.goto('/admin/audit');
+  // Empty date filters show the day-first entry format.
+  for (const name of ['From', 'To']) {
+    await expect(page.getByRole('textbox', { name, exact: true })).toHaveAttribute(
+      'placeholder',
+      'dd/mm/yyyy',
+    );
+  }
   await page.locator('mat-form-field', { hasText: 'Action' }).locator('mat-select').click();
   await page
     .getByRole('option', { name: 'Admin opened a project they are not a member of', exact: true })
@@ -111,19 +118,55 @@ test('due dates take a time from the drawer and cards show it', async ({ page })
     (r) => r.request().method() === 'PATCH' && r.url().includes(`/items/`),
   );
   await due.fill('');
-  await due.fill('2030-03-15');
+  await expect(due).toHaveValue('');
+  await expect(due).toHaveAttribute('placeholder', 'dd/mm/yyyy');
+  // Numeric dates are typed day first and shown with the month name.
+  await due.fill('15/03/2030');
   await due.press('Tab');
   expect((await savedDate).status()).toBe(200);
   await expect(due).toHaveValue('15 Mar 2030');
   await drawer.getByRole('button', { name: 'Add time', exact: true }).click();
   // The Material time input is a combobox with its list of times.
   const time = drawer.getByRole('combobox', { name: 'Due time', exact: true });
+  await expect(time).toHaveAttribute('placeholder', 'hh:mm');
+  await drawer.getByRole('button', { name: 'Choose Due time', exact: true }).click();
+  const list = page.getByRole('listbox');
+  const option = list.getByRole('option', { name: '17:00', exact: true });
+  await option.scrollIntoViewIfNeeded();
+  await expect(option).toBeVisible();
+  // The list is wider than the compact input, so each time reads in full.
+  const panel = (await list.boundingBox())!;
+  const label = (await option.locator('.mdc-list-item__primary-text').boundingBox())!;
+  expect(label.x).toBeGreaterThanOrEqual(panel.x);
+  expect(label.x + label.width).toBeLessThanOrEqual(panel.x + panel.width);
+  expect(
+    await option.evaluate((el) => {
+      const text = el.querySelector('.mdc-list-item__primary-text')!;
+      return text.scrollWidth <= text.clientWidth;
+    }),
+    'time option text is not clipped',
+  ).toBe(true);
+  await snap(page, 'due time list');
   const savedTime = page.waitForResponse(
     (r) => r.request().method() === 'PATCH' && r.url().includes(`/items/`),
   );
-  await time.fill('17:00');
-  await time.press('Tab');
+  await option.click();
   expect((await savedTime).status()).toBe(200);
+  await expect(list).toHaveCount(0);
+  // At phone width the wider list still fits inside the screen.
+  await page.setViewportSize({ width: 320, height: 700 });
+  await drawer.getByRole('button', { name: 'Choose Due time', exact: true }).click();
+  await option.scrollIntoViewIfNeeded();
+  await expect(option).toBeVisible();
+  const phonePanel = (await list.boundingBox())!;
+  expect(phonePanel.x).toBeGreaterThanOrEqual(0);
+  expect(phonePanel.x + phonePanel.width).toBeLessThanOrEqual(320);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  await snap(page, 'due time list at phone width');
+  // Picking the same time closes the list without another save.
+  await option.click();
+  await expect(list).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 720 });
   const stored = await itemOf(page, ITEMS.taskB);
   expect(stored).toMatchObject({ dueDate: '2030-03-15', dueTime: '17:00' });
   await snap(page, 'drawer due date and time');

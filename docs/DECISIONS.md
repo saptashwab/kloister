@@ -1,5 +1,30 @@
 # Decisions
 
+## v1.2.1 date entry and due-time list (2026-10-26)
+
+A small UI fix release on the owner's decision of 2026-10-26; no API, schema or
+migration change.
+
+- Dates still show as `26 Oct 2026`. Typed numeric dates are read day first
+  (`26/10/2026`, `26-10-2026`, `26.10.2026`, `6/1/2026`; one separator used twice);
+  `26 Oct 2026` and `2026-10-26` keep working. Impossible dates and years below
+  1000 are refused, so the result is always `YYYY-MM-DD`. Empty date fields show
+  `dd/mm/yyyy` (DateField in the drawer and Audit log; the outlined sprint form
+  repeats it as a hint) instead of the old `d Mmm yyyy`.
+- The due-time list's overlay pane takes the compact input's width, which clipped
+  the times. The timepicker now gets the pane class `k-time-panel`, which a global
+  rule gives a minimum width from the `--k-time-panel-width` token; the input width
+  is a token too. It fits at 320 px (browser test).
+- The date and time toggles now bind Material's `aria-label` input, so their buttons
+  are named "Choose Due date"/"Choose Due time" rather than the generic "Open
+  calendar"/"Open timepicker options" (the old host attribute named nothing).
+- From independent review: a newly added due-time field stays until its save
+  returns, so picking a time no longer swaps the field (and keyboard focus) back to
+  "Add time" while the request runs.
+- Not changed (noted in review): in the sprint form an unreadable typed date leaves
+  the text in the field while the stored value is empty; a visible parse error could
+  follow later.
+
 ## v1.2.0 preparation (2026-10-24)
 
 v1.2.0 was published as a GitHub prerelease on 2026-10-24 (owner approved): annotated

@@ -411,6 +411,11 @@ button.k-avatar {
   }
 }
 
+/* The due-time list: its overlay takes the compact input's width, so it gets room for "23:30". */
+.cdk-overlay-pane.k-time-panel {
+  min-width: var(--k-time-panel-width);
+}
+
 /* Destructive confirm button in dialogs. */
 .k-danger-btn.mat-mdc-unelevated-button:not(:disabled) {
   background: var(--k-danger-ink);

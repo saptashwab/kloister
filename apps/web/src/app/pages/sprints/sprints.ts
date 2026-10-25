@@ -30,7 +30,7 @@ import { PageActions } from '../../core/page-actions';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { dayOf } from '../../core/format';
 import { AppDatePipe } from '../../ui/app-date.pipe';
-import { DATE_PROVIDERS, localDay } from '../../ui/date-field';
+import { DATE_PLACEHOLDER, DATE_PROVIDERS, localDay } from '../../ui/date-field';
 import { NgTemplateOutlet } from '@angular/common';
 import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
 
@@ -87,11 +87,13 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
               <input
                 matInput
                 autocomplete="off"
+                [placeholder]="datePlaceholder"
                 [matDatepicker]="startPicker"
                 [value]="asDate(form.controls.startDate.value)"
                 (dateChange)="setDay('startDate', $event.value)"
               />
               <mat-datepicker-toggle matIconSuffix [for]="startPicker" />
+              <mat-hint>{{ datePlaceholder }}</mat-hint>
               <mat-datepicker #startPicker />
             </mat-form-field>
             <mat-form-field>
@@ -99,12 +101,14 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
               <input
                 matInput
                 autocomplete="off"
+                [placeholder]="datePlaceholder"
                 [matDatepicker]="endPicker"
                 [min]="asDate(form.controls.startDate.value)"
                 [value]="asDate(form.controls.endDate.value)"
                 (dateChange)="setDay('endDate', $event.value)"
               />
               <mat-datepicker-toggle matIconSuffix [for]="endPicker" />
+              <mat-hint>{{ datePlaceholder }}</mat-hint>
               <mat-datepicker #endPicker />
             </mat-form-field>
             <mat-form-field>
@@ -255,6 +259,8 @@ export class SprintsPage implements OnInit {
   protected readonly nameMax = BOARD_NAME_MAX;
   /** Longest iteration path. */
   protected readonly pathMax = ITERATION_PATH_MAX;
+  /** Placeholder and hint of the date inputs: typed day first. */
+  protected readonly datePlaceholder = DATE_PLACEHOLDER;
 
   /** The sprint being edited, or null when the form creates one. */
   protected readonly editing = signal<SprintDto | null>(null);
