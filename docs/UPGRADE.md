@@ -28,7 +28,8 @@ clusters or the Node runtime, never installs packages and never deletes earlier 
    ```
 
    The application name defaults to `kloister`; the HTTPS origin (no path) is optional and
-   adds a check through your existing httpd.
+   adds a check through your existing httpd. The check verifies the certificate strictly, so leave the origin
+   out on hosts with a self-signed certificate and open the health URL in a browser instead.
 
 What it does, in order (each step is printed; details go to a private log under
 `/var/tmp/kloister-upgrade-helper.*`):

@@ -21,6 +21,14 @@ tag `v1.2.0` at `3a573da`, built and verified by release run 40091522793, with
   example data. `docs/ADO-TRANSFER-GUIDE.md` is a text copy for administrators. ADO
   web screens are described, not pictured, because they show organization and
   account names.
+- Follow-up (owner, 2026-10-26, not scheduled): the upgrade helper's optional HTTPS
+  health check uses strict certificate verification, so it fails on self-signed
+  certificates after an otherwise successful upgrade. Until an option to pass a CA
+  file is added, leave out the HTTPS origin argument on such hosts and check HTTPS in
+  a browser. docs/UPGRADE.md says so.
+- Owner decision (2026-10-26) for v1.2.1: dates stay displayed as `26 Oct 2026`, but
+  date fields accept day-first entry (`26/10/2026`) with a `dd/mm/yyyy` placeholder,
+  and the due-time list becomes wide enough to show its times.
 - Detailed review of a row that becomes a new item no longer reads as a conflict:
   its fields are marked new from ADO (`AdoDifference.newItem`), show only the ADO
   value, and offer Take ADO value or Leave out; errors ask for the value for this new
