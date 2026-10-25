@@ -3,7 +3,12 @@
 ## v1.2.1 date entry and due-time list (2026-10-26)
 
 A small UI fix release on the owner's decision of 2026-10-26; no API, schema or
-migration change.
+migration change. Published as a GitHub prerelease on 2026-10-26 (owner approved):
+annotated tag `v1.2.1` at `796b75c`, built and verified by release run 40240245733,
+with `kloister-1.2.1.zip` and `SHA256SUMS` attached. CI on that commit is green (run
+40238823612; its first attempt failed only the backup "run now" database test, which
+found no recorded run and passed on the re-run, so it is treated as a one-off).
+Upgrade acceptance on the owner's RHEL VM is an operator step.
 
 - Dates still show as `26 Oct 2026`. Typed numeric dates are read day first
   (`26/10/2026`, `26-10-2026`, `26.10.2026`, `6/1/2026`; one separator used twice);
