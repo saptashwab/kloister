@@ -21,6 +21,11 @@ migration change.
 - From independent review: a newly added due-time field stays until its save
   returns, so picking a time no longer swaps the field (and keyboard focus) back to
   "Add time" while the request runs.
+- CI (owner, 2026-10-26): the Postgres service image now comes from
+  `mirror.gcr.io/library/postgres` (Google's mirror of the official Docker Hub image)
+  instead of Amazon ECR Public, whose anonymous data limit (`toomanyrequests`)
+  stopped repeated runs before any test. Same image and tag; Docker Hub itself is
+  still not pulled directly.
 - Not changed (noted in review): in the sprint form an unreadable typed date leaves
   the text in the field while the stored value is empty; a visible parse error could
   follow later.

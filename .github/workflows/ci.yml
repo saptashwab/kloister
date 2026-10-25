@@ -30,11 +30,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
-    # Disposable Postgres for the database tests. Pulled from the Amazon ECR
-    # Public mirror of the official image to avoid Docker Hub pull rate limits.
+    # Disposable Postgres for the database tests. Pulled from Google's mirror of
+    # the official Docker Hub image, which avoids both Docker Hub pull rate limits
+    # and the anonymous data limit of Amazon ECR Public.
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:18-alpine
+        image: mirror.gcr.io/library/postgres:18-alpine
         env:
           POSTGRES_USER: kloister
           POSTGRES_PASSWORD: kloister
