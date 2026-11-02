@@ -603,3 +603,13 @@ DECISIONS apply.
   a changed pin or kept list alone does not refuse it.
 - A date edit that names no halves (an ADO import, a bulk edit) never fails on
   them: an impossible same-day order finishes the item at the end of the day.
+- Owner refinements after the first CI run (2026-11-02): the Type cell is a
+  menu of the types the hierarchy allows (it was read-only); columns resize with
+  a drag handle on each header edge or the arrow keys on that handle (Home
+  resets, "Reset column widths" in Columns); a Rows choice (Compact, titles on
+  2 lines, titles on 3 lines) sets one row height for every row, so bars,
+  arrows and the grid stay aligned, with the full title on hover; the optional
+  Progress column became % complete (Done 100, otherwise the checklist share;
+  parents weighted by working days). "Show on board" and "Show on timeline" are
+  icon links in the drawer header rather than menu items, so read-only drawers
+  keep their previous controls.

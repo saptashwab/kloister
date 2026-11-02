@@ -1,0 +1,63 @@
+// Timeline toolbar, selection bar and plan strip (SPEC §6.4), loaded with the timeline route only.
+app-timeline {
+  .tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--k-space-2);
+  }
+  .tools mat-form-field {
+    width: var(--k-size-140px);
+  }
+  .grow {
+    flex: 1;
+  }
+  .mode {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--k-space-1);
+    padding: var(--k-space-1) var(--k-space-3);
+    border-radius: var(--k-radius-full);
+    background: var(--k-sunken);
+    color: var(--k-text-2);
+    font-size: var(--k-small);
+  }
+  .mode.auto {
+    background: var(--k-success-soft);
+    color: var(--k-success-ink);
+  }
+  .bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--k-space-2);
+    padding: var(--k-space-2) var(--k-space-3);
+    border: var(--k-line) solid var(--k-primary-line);
+    border-radius: var(--k-radius-md);
+    background: var(--k-primary-soft);
+    color: var(--k-primary-ink);
+  }
+  .bulk mat-form-field {
+    width: var(--k-size-140px);
+  }
+  .plan {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--k-space-4);
+    align-items: baseline;
+    padding: var(--k-space-2) var(--k-space-3);
+    border: var(--k-line) solid var(--k-border);
+    border-radius: var(--k-radius-md) var(--k-radius-md) 0 0;
+    border-bottom: 0;
+    background: var(--k-surface);
+  }
+  .plan b {
+    font-size: 1.05rem;
+  }
+  .muted {
+    color: var(--k-muted);
+  }
+  .tools .rows {
+    width: var(--k-size-170px);
+  }
+}

@@ -40,8 +40,17 @@ async function seedPlan(page: Page, key: string): Promise<Plan> {
     return (await res.json()) as WorkItemDetailDto;
   };
   const epic = await make({ type: 'EPIC', title: 'Relaunch the website' });
+  // Tasks sit under a Feature (or Story), never straight under an Epic.
+  const feature = await make({ type: 'FEATURE', title: 'Content', parentId: epic.id });
   const task = (title: string, startDate: string, dueDate: string) =>
-    make({ type: 'TASK', title, parentId: epic.id, bucketId: buckets[0].id, startDate, dueDate });
+    make({
+      type: 'TASK',
+      title,
+      parentId: feature.id,
+      bucketId: buckets[0].id,
+      startDate,
+      dueDate,
+    });
   const draft = await task('Draft copy', '2026-11-02', '2026-11-04');
   const review = await task('Editorial review', '2026-11-05', '2026-11-06');
   const launch = await task('Launch', '2026-11-09', '2026-11-09');
@@ -111,17 +120,18 @@ test('plans by typing, moves dependent items automatically and undoes exactly', 
   await expect(page.getByText('Dependent items move automatically')).toBeVisible();
   // Summary row: the Epic spans its tasks (2 Nov – 9 Nov: 6 working days).
   await expect(cell(page, `${k}-1`, 3)).toHaveText('6');
+  await expect(cell(page, `${k}-2`, 3)).toHaveText('6');
   await snap(page, 'timeline-desktop-light');
 
   // Typing a longer duration for Draft copy pushes Review and Launch later.
-  const days = cell(page, `${k}-2`, 3);
+  const days = cell(page, `${k}-3`, 3);
   await days.click();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Control+a');
   await page.keyboard.type('5');
   await page.keyboard.press('Tab');
   const toast = page.locator('.k-toast').filter({ hasText: 'moved' }).first();
-  await expect(toast).toContainText(`moved ${k}-3, ${k}-4`);
+  await expect(toast).toContainText(`moved ${k}-4, ${k}-5`);
   await expect
     .poll(() => datesOf(page, plan, plan.ids.review))
     // Draft now ends on Friday 6 Nov, so Review starts Monday and keeps 2 days.
@@ -159,7 +169,7 @@ test('asks before moving on existing projects and lets a PM switch to automatic'
   expect(off.ok()).toBe(true);
   await page.goto(`/p/${k}/timeline`);
   await expect(page.getByText('Dependent moves are confirmed')).toBeVisible();
-  const due = cell(page, `${k}-2`, 4);
+  const due = cell(page, `${k}-3`, 4);
   await due.click();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Control+a');
@@ -188,8 +198,8 @@ test('selects rows for bulk status, moves a bar by keyboard and links to the boa
   const plan = await seedPlan(page, 'TLBULK');
   const k = plan.project.key!;
   await page.goto(`/p/${k}/timeline`);
-  await page.getByRole('checkbox', { name: `Select ${k}-2` }).click();
-  await page.getByRole('checkbox', { name: `Select ${k}-4` }).click({ modifiers: ['Control'] });
+  await page.getByRole('checkbox', { name: `Select ${k}-3` }).click();
+  await page.getByRole('checkbox', { name: `Select ${k}-5` }).click({ modifiers: ['Control'] });
   const bar = page.getByRole('region', { name: 'Selected rows' });
   await expect(bar).toContainText('2 selected');
   await bar.locator('mat-form-field', { hasText: 'Set status' }).locator('mat-select').click();
@@ -197,7 +207,7 @@ test('selects rows for bulk status, moves a bar by keyboard and links to the boa
   await expect(page.getByText('2 updated, 0 already set, 0 skipped, 0 refused.')).toBeVisible();
 
   // Keyboard on a bar: Shift+Right twice adds a day to Launch; Enter saves.
-  const launchBar = page.getByRole('button', { name: new RegExp(`^${k}-4 Launch`) });
+  const launchBar = page.getByRole('button', { name: new RegExp(`^${k}-5 Launch`) });
   await launchBar.focus();
   await page.keyboard.press('Shift+ArrowRight');
   await page.keyboard.press('Shift+ArrowRight');
@@ -210,10 +220,12 @@ test('selects rows for bulk status, moves a bar by keyboard and links to the boa
     });
 
   // The key opens the drawer; it links to the board card.
-  await cell(page, `${k}-3`, 0).getByRole('link').click();
-  await page.getByRole('button', { name: 'More actions' }).click();
-  await page.getByRole('menuitem', { name: 'Show on board' }).click();
-  await expect(page).toHaveURL(new RegExp(`/p/${k}/items/3`));
+  await cell(page, `${k}-4`, 0).getByRole('link').click();
+  await page
+    .getByRole('dialog', { name: 'Item details', exact: true })
+    .getByRole('link', { name: 'Show on board' })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/p/${k}/items/4`));
 });
 
 test('Viewers read the timeline without editing; phones get a list; dark mode reads', async ({

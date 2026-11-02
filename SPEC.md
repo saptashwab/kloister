@@ -408,7 +408,10 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   and rows the caller may not edit are skipped and reported. The same selection can be assigned, given a status,
   shifted by working days (dependent items follow), indented or outdented, linked in order or unlinked, given a
   priority, labels or a bucket, or deleted after a confirmation, each under the existing rules.
-- Status is a default grid column; Progress (checklist ticks, or done and total children for parents) is optional.
+- Status is a default grid column; % complete is optional (Done items 100, otherwise the share of the checklist
+  ticked; parents weight their items by working days). The Type cell changes an item's type within SPEC 4.1.
+  Columns can be resized by dragging or with the keyboard, and rows can be compact or wrap titles onto two or
+  three lines; both choices are remembered per browser.
   Timeline keys appear in the keyboard-shortcuts dialog and in button tooltips.
 - Scheduling: dependencies are finish-to-start with no lag. A Not started item with predecessors starts at the
   next working half day after its latest visible predecessor with a due date finishes, or at its pin if that is

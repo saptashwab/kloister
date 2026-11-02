@@ -25,3 +25,16 @@ export class TimelineGridStyles {}
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TimelineBarStyles {}
+
+/**
+ * The timeline toolbar, selection bar and plan strip styles, loaded with the
+ * timeline route (SPEC §6.4).
+ */
+@Component({
+  selector: 'app-timeline-tool-styles',
+  template: '',
+  styleUrl: '../../../styles/_timeline-tools.scss',
+  encapsulation: ViewEncapsulation.None,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class TimelineToolStyles {}

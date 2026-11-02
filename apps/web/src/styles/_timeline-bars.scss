@@ -3,7 +3,7 @@ app-timeline {
   .track {
     position: relative;
     flex: none;
-    height: var(--k-size-34px);
+    height: var(--tl-row, var(--k-size-34px));
     border-bottom: var(--k-line) solid var(--k-border);
     box-sizing: border-box;
   }
@@ -23,7 +23,7 @@ app-timeline {
   }
   .bar {
     position: absolute;
-    top: var(--k-size-9px);
+    top: calc(var(--tl-row, var(--k-size-34px)) / 2 - var(--k-space-2));
     height: var(--k-space-4);
     box-sizing: border-box;
     border-radius: var(--k-radius-sm);
@@ -69,7 +69,7 @@ app-timeline {
   }
   .marker {
     position: absolute;
-    top: 10px;
+    top: calc(var(--tl-row, var(--k-size-34px)) / 2 - 6px);
     width: 12px;
     height: 12px;
     margin-left: -6px;
@@ -80,7 +80,7 @@ app-timeline {
   }
   .bracket {
     position: absolute;
-    top: 13px;
+    top: calc(var(--tl-row, var(--k-size-34px)) / 2 - 4px);
     height: 6px;
     background: var(--k-text-2);
     border-radius: 2px;
@@ -102,7 +102,7 @@ app-timeline {
   }
   .own {
     position: absolute;
-    top: 8px;
+    top: calc(var(--tl-row, var(--k-size-34px)) / 2 - 9px);
     height: 18px;
     border: 1.5px dashed var(--k-border-strong);
     border-radius: var(--k-radius-sm);
@@ -110,7 +110,7 @@ app-timeline {
   }
   .blabel {
     position: absolute;
-    top: var(--k-size-9px);
+    top: calc(var(--tl-row, var(--k-size-34px)) / 2 - var(--k-space-2));
     height: var(--k-space-4);
     display: flex;
     align-items: center;

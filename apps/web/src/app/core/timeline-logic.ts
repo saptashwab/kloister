@@ -3,11 +3,13 @@ import {
   isAllowedParent,
   ItemType,
   type PlanEdge,
+  requiresBucket,
   type ScheduleDates,
   scheduleSpan,
   type ScheduleSpan,
   startSlot,
   type WorkItemDto,
+  workingDuration,
 } from '@kloister/shared';
 import { flattenTree, type TreeNode } from './board-logic';
 import { parseDay } from './format';
@@ -547,4 +549,52 @@ export function rebaseDescendants(
     const at = item.ancestors.findIndex((a) => a.id === moved.id);
     return at < 0 ? item : { ...item, ancestors: [...head, ...item.ancestors.slice(at + 1)] };
   });
+}
+
+/**
+ * The types an item may change to (SPEC §4.1): allowed under its parent,
+ * able to hold its visible children, and on the board when it must be.
+ *
+ * @param item The item.
+ * @param childTypes Types of its visible children.
+ * @returns Types in the usual order, its own included.
+ */
+export function allowedTypes(item: WorkItemDto, childTypes: readonly ItemType[]): ItemType[] {
+  const parent = item.ancestors[item.ancestors.length - 1];
+  return Object.values(ItemType).filter(
+    (type) =>
+      (parent === undefined || isAllowedParent(type, parent.type)) &&
+      childTypes.every((child) => isAllowedParent(child, type)) &&
+      (!requiresBucket(type) || item.bucketId !== null),
+  );
+}
+
+/**
+ * Percent complete of a row (docs/M9-PLAN.md §3.1, Progress column): an item
+ * is 100 when Done, otherwise the share of its checklist ticked (0 without a
+ * checklist). A parent averages its visible items without children, each
+ * weighted by its working days (at least half a day), as Microsoft Project does.
+ *
+ * @param node The row's tree node.
+ * @returns Whole percent, or null for a title-only row without visible items.
+ */
+export function percentComplete(node: TreeNode): number | null {
+  const own = (item: WorkItemDto): number =>
+    item.status === 'DONE'
+      ? 100
+      : item.checklist.total > 0
+        ? (item.checklist.done / item.checklist.total) * 100
+        : 0;
+  const leaves = (n: TreeNode): WorkItemDto[] =>
+    n.children.length === 0 ? (n.item === null ? [] : [n.item]) : n.children.flatMap(leaves);
+  const items = leaves(node);
+  if (items.length === 0) return null;
+  let weight = 0;
+  let done = 0;
+  for (const item of items) {
+    const w = Math.max(0.5, workingDuration(item));
+    weight += w;
+    done += w * own(item);
+  }
+  return Math.round(done / weight);
 }

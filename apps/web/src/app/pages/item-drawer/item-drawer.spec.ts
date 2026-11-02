@@ -141,8 +141,9 @@ describe('ItemDrawer', () => {
     expect(root.querySelectorAll('mat-select').length).toBe(0);
     expect(root.querySelectorAll('app-date-field, app-time-field').length).toBe(0);
     expect(root.querySelector('dl.fields')?.textContent).toContain('Bob');
-    // Only read-only navigation is offered (M9: Show on timeline).
-    expect(root.querySelector('[aria-label="More actions"]')).not.toBeNull();
+    expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
+    // Read-only navigation stays available (M9).
+    expect(root.querySelector('a[aria-label="Show on timeline"]')).not.toBeNull();
     expect(root.querySelector('input[aria-label="New checklist line"]')).toBeNull();
     expect(root.querySelector('app-rich-text-editor')).toBeNull();
   });
@@ -186,9 +187,6 @@ describe('ItemDrawer', () => {
       (b) => b.tagName === 'BUTTON',
     );
     const label = (b: HTMLButtonElement) => b.textContent?.trim() ?? '';
-    expect(document.querySelector('a.mat-mdc-menu-item')?.textContent).toContain(
-      'Show on timeline',
-    );
     expect(items.map(label).slice(0, 2)).toEqual([
       'Move to top of bucket',
       'Move to bottom of bucket',
@@ -359,6 +357,7 @@ describe('ItemDrawer', () => {
     const project = makeProject({ archivedAt: '2026-10-01T00:00:00.000Z' });
     const { root } = await render(makeItem(4), [], project);
     expect(root.querySelector('app-rich-text-editor')).toBeNull();
+    expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
     expect(root.querySelectorAll('mat-select').length).toBe(0);
   });
 });

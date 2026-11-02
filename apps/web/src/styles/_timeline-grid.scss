@@ -6,63 +6,6 @@ app-timeline {
     gap: var(--k-space-2);
     padding: var(--k-space-3) var(--k-gutter) var(--k-space-6);
   }
-  .tools {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--k-space-2);
-  }
-  .tools mat-form-field {
-    width: var(--k-size-140px);
-  }
-  .grow {
-    flex: 1;
-  }
-  .mode {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--k-space-1);
-    padding: var(--k-space-1) var(--k-space-3);
-    border-radius: var(--k-radius-full);
-    background: var(--k-sunken);
-    color: var(--k-text-2);
-    font-size: var(--k-small);
-  }
-  .mode.auto {
-    background: var(--k-success-soft);
-    color: var(--k-success-ink);
-  }
-  .bulk {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--k-space-2);
-    padding: var(--k-space-2) var(--k-space-3);
-    border: var(--k-line) solid var(--k-primary-line);
-    border-radius: var(--k-radius-md);
-    background: var(--k-primary-soft);
-    color: var(--k-primary-ink);
-  }
-  .bulk mat-form-field {
-    width: var(--k-size-140px);
-  }
-  .plan {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--k-space-4);
-    align-items: baseline;
-    padding: var(--k-space-2) var(--k-space-3);
-    border: var(--k-line) solid var(--k-border);
-    border-radius: var(--k-radius-md) var(--k-radius-md) 0 0;
-    border-bottom: 0;
-    background: var(--k-surface);
-  }
-  .plan b {
-    font-size: 1.05rem;
-  }
-  .muted {
-    color: var(--k-muted);
-  }
   .scroller {
     position: relative;
     overflow: auto;
@@ -82,7 +25,7 @@ app-timeline {
     flex-wrap: nowrap;
     gap: 0;
     align-items: stretch;
-    height: var(--k-size-34px);
+    height: var(--tl-row, var(--k-size-34px));
   }
   .cells {
     position: sticky;
@@ -120,7 +63,7 @@ app-timeline {
     display: flex;
     align-items: center;
     gap: var(--k-space-1);
-    height: var(--k-size-34px);
+    height: var(--tl-row, var(--k-size-34px));
     padding: 0 var(--k-space-2);
     box-sizing: border-box;
     overflow: hidden;
@@ -200,5 +143,31 @@ app-timeline {
   }
   .pin {
     color: var(--k-primary);
+  }
+
+  .head .cell {
+    position: relative;
+    height: var(--k-size-34px);
+  }
+  .resize {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--k-size-7px);
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .resize:hover,
+  .resize:focus-visible {
+    background: var(--k-primary-line);
+    outline: none;
+  }
+  &.wrap .cell.title .text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--tl-lines);
+    white-space: normal;
+    line-height: 1.25;
   }
 }

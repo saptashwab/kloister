@@ -164,13 +164,37 @@ const FIELD_NAMES: Record<string, string> = {
           }
         </nav>
         <span class="spacer"></span>
+        @if (isProject() && detail(); as it) {
+          @if (onTimeline()) {
+            @if (it.bucketId) {
+              <a
+                class="k-icon-btn"
+                aria-label="Show on board"
+                title="Show on board"
+                [routerLink]="['/p', ctx.project()?.key, 'items', it.number]"
+              >
+                <app-icon name="board" [size]="17" />
+              </a>
+            }
+          } @else {
+            <a
+              class="k-icon-btn"
+              aria-label="Show on timeline"
+              title="Show on timeline"
+              [routerLink]="['/p', ctx.project()?.key, 'timeline']"
+              [queryParams]="{ item: it.number }"
+            >
+              <app-icon name="timeline" [size]="17" />
+            </a>
+          }
+        }
         <button type="button" class="k-icon-btn" aria-label="Copy link" (click)="copyLink()">
           <app-icon name="link" [size]="17" />
         </button>
         @if (detail(); as source) {
           <app-item-copy-action [item]="source" />
         }
-        @if (canDelete() || canReorder() || isProject()) {
+        @if (canDelete() || canReorder()) {
           <button
             type="button"
             class="k-icon-btn"
@@ -180,23 +204,6 @@ const FIELD_NAMES: Record<string, string> = {
             <app-icon name="more" [size]="17" [stroke]="3" />
           </button>
           <mat-menu #more="matMenu">
-            @if (isProject() && detail(); as it) {
-              @if (onTimeline()) {
-                @if (it.bucketId) {
-                  <a mat-menu-item [routerLink]="['/p', ctx.project()?.key, 'items', it.number]">
-                    <app-icon name="board" />&nbsp;Show on board
-                  </a>
-                }
-              } @else {
-                <a
-                  mat-menu-item
-                  [routerLink]="['/p', ctx.project()?.key, 'timeline']"
-                  [queryParams]="{ item: it.number }"
-                >
-                  <app-icon name="timeline" />&nbsp;Show on timeline
-                </a>
-              }
-            }
             @if (canReorder()) {
               <button
                 mat-menu-item
@@ -1348,6 +1355,8 @@ export class ItemDrawer {
     const target = event.target as HTMLElement | null;
     if (event.defaultPrevented || target?.closest('[aria-expanded="true"]')) return;
     if (this.matDialog.openDialogs.length > 0) return;
+    // An open select list or menu closes first, whatever has focus.
+    if (document.querySelector('.mat-mdc-select-panel, .mat-mdc-menu-panel') !== null) return;
     this.close();
   }
 

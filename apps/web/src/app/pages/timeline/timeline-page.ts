@@ -64,6 +64,8 @@ import {
   parsePasted,
   parsePredecessors,
   planSpan,
+  allowedTypes,
+  percentComplete,
   rebaseDescendants,
   scaleTicks,
   shortDay,
@@ -79,7 +81,7 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
-import { TimelineBarStyles, TimelineGridStyles } from './timeline-styles';
+import { TimelineBarStyles, TimelineGridStyles, TimelineToolStyles } from './timeline-styles';
 
 /** Grid columns (docs/M9-PLAN.md §3.1). */
 type ColumnId =
@@ -120,12 +122,12 @@ const COLUMNS: Column[] = [
   { id: 'pred', label: 'Pred.', width: 56, edit: 'text' },
   { id: 'who', label: 'Who', width: 56, edit: 'menu' },
   { id: 'status', label: 'Status', width: 108, edit: 'menu' },
-  { id: 'type', label: 'Type', width: 96, edit: null },
+  { id: 'type', label: 'Type', width: 96, edit: 'menu' },
   { id: 'bucket', label: 'Bucket', width: 110, edit: null },
   { id: 'sprint', label: 'Sprint', width: 110, edit: 'menu' },
   { id: 'priority', label: 'Priority', width: 70, edit: null },
   { id: 'work', label: 'Work', width: 58, edit: null },
-  { id: 'progress', label: 'Progress', width: 76, edit: null },
+  { id: 'progress', label: '% complete', width: 100, edit: null },
 ];
 const DEFAULT_COLUMNS: ColumnId[] = [
   'key',
@@ -141,8 +143,17 @@ const OPTIONAL = COLUMNS.filter(
   (c) => !DEFAULT_COLUMNS.includes(c.id) || c.id === 'who' || c.id === 'status',
 );
 const COLUMNS_KEY = 'kloister.timeline.columns';
-/** Row height in px; grid rows and bar tracks match. */
-const ROW = 34;
+/** Storage key of the dragged column widths. */
+const WIDTHS_KEY = 'kloister.timeline.widths';
+/** Storage key of the row height choice. */
+const DENSITY_KEY = 'kloister.timeline.rows';
+/** Row heights: one line, or titles wrapping to two or three lines. */
+type Density = 'compact' | 'two' | 'three';
+const ROW_HEIGHT: Record<Density, number> = { compact: 34, two: 52, three: 70 };
+const ROW_LINES: Record<Density, number> = { compact: 1, two: 2, three: 3 };
+/** Narrowest and widest a column can be dragged. */
+const MIN_WIDTH = 40;
+const MAX_WIDTH = 600;
 /** Width of the selection checkbox column. */
 const CHECK = 36;
 
@@ -170,6 +181,11 @@ interface BarDraft {
  */
 @Component({
   selector: 'app-timeline',
+  host: {
+    '[style.--tl-row.px]': 'rowHeight()',
+    '[style.--tl-lines]': 'lines()',
+    '[class.wrap]': "density() !== 'compact'",
+  },
   imports: [
     NgTemplateOutlet,
     RouterOutlet,
@@ -189,9 +205,10 @@ interface BarDraft {
     TypeIcon,
     TimelineGridStyles,
     TimelineBarStyles,
+    TimelineToolStyles,
   ],
   template: `
-    <app-timeline-grid-styles /><app-timeline-bar-styles />
+    <app-timeline-grid-styles /><app-timeline-bar-styles /><app-timeline-tool-styles />
     <div class="tools" role="toolbar" aria-label="Timeline">
       @if (canCreate()) {
         <button mat-stroked-button type="button" (click)="focusAdd(null)">
@@ -261,6 +278,14 @@ interface BarDraft {
       <button mat-stroked-button type="button" (click)="scrollToDay(todayDay)">Today</button>
       <button mat-stroked-button type="button" (click)="fitPlan()">Fit plan</button>
       <button mat-stroked-button type="button" [matMenuTriggerFor]="columnsMenu">Columns</button>
+      <mat-form-field subscriptSizing="dynamic" class="rows">
+        <mat-label>Rows</mat-label>
+        <mat-select [value]="density()" (valueChange)="setDensity($event)">
+          <mat-option value="compact">Compact</mat-option>
+          <mat-option value="two">2 lines</mat-option>
+          <mat-option value="three">3 lines</mat-option>
+        </mat-select>
+      </mat-form-field>
       <button mat-button type="button" (click)="collapsed.set(emptySet)">Expand all</button>
       <button mat-button type="button" (click)="collapsed.set(parentIds())">Collapse all</button>
       <mat-menu #columnsMenu="matMenu">
@@ -275,6 +300,7 @@ interface BarDraft {
             <app-icon [name]="shown().has(c.id) ? 'check' : 'plus'" />{{ c.label }}
           </button>
         }
+        <button mat-menu-item type="button" (click)="resetWidths()">Reset column widths</button>
       </mat-menu>
     </div>
 
@@ -466,9 +492,24 @@ interface BarDraft {
                 <div
                   class="cell"
                   [style.width.px]="c.width"
-                  [class.num]="c.id === 'days' || c.id === 'work'"
+                  [class.num]="c.id === 'days' || c.id === 'work' || c.id === 'progress'"
                 >
                   {{ c.label }}
+                  <span
+                    class="resize"
+                    role="separator"
+                    tabindex="0"
+                    aria-orientation="vertical"
+                    [attr.aria-label]="'Resize the ' + c.label + ' column'"
+                    [attr.aria-valuenow]="c.width"
+                    [attr.aria-valuetext]="c.width + ' pixels'"
+                    [attr.aria-valuemin]="minWidth"
+                    [attr.aria-valuemax]="maxWidth"
+                    title="Drag, or use the arrow keys, to resize"
+                    (pointerdown)="resizeStart($event, c)"
+                    (keydown)="resizeKey($event, c)"
+                    (dblclick)="setWidth(c.id, null)"
+                  ></span>
                 </div>
               }
               <div class="cell" [style.width.px]="check">
@@ -541,7 +582,8 @@ interface BarDraft {
                       role="gridcell"
                       [id]="'c-' + i + '-' + ci"
                       [style.width.px]="c.width"
-                      [class.num]="c.id === 'days' || c.id === 'work'"
+                      [class.num]="c.id === 'days' || c.id === 'work' || c.id === 'progress'"
+                      [class.title]="c.id === 'title'"
                       [class.focus]="focus().row === i && focus().col === ci"
                       [attr.tabindex]="focus().row === i && focus().col === ci ? 0 : -1"
                       [attr.aria-readonly]="!editable(r, c) || null"
@@ -692,7 +734,7 @@ interface BarDraft {
             <svg
               class="links"
               [attr.width]="barsWidth()"
-              [attr.height]="rows().length * row"
+              [attr.height]="rows().length * rowHeight()"
               aria-hidden="true"
             >
               @for (l of links(); track l.key) {
@@ -734,9 +776,13 @@ interface BarDraft {
               </button>
             }
             <app-type-icon [type]="r.node.ref.type" />
-            <span class="text" [class.title-only]="!r.node.item" [class.sum]="r.summary">{{
-              r.node.ref.title
-            }}</span>
+            <span
+              class="text"
+              [attr.title]="r.node.ref.title"
+              [class.title-only]="!r.node.item"
+              [class.sum]="r.summary"
+              >{{ r.node.ref.title }}</span
+            >
           </span>
         }
         @case ('start') {
@@ -887,6 +933,13 @@ interface BarDraft {
         }
       </ng-template>
     </mat-menu>
+    <mat-menu #typeMenu="matMenu">
+      <ng-template matMenuContent let-it>
+        @for (t of typesFor(it); track t) {
+          <button mat-menu-item type="button" (click)="setType(it, t)">{{ typeLabels[t] }}</button>
+        }
+      </ng-template>
+    </mat-menu>
     <mat-menu #sprintMenu="matMenu">
       <ng-template matMenuContent let-it>
         <button mat-menu-item type="button" (click)="setSprint(it, null)">No sprint</button>
@@ -929,8 +982,6 @@ export class TimelinePage implements OnInit {
   private readonly editor = viewChild<ElementRef<HTMLInputElement>>('editor');
   private readonly menuAnchor = viewChild('menuAnchor', { read: MatMenuTrigger });
 
-  /** Row height, for the template. */
-  protected readonly row = ROW;
   /** Selection column width, for the template. */
   protected readonly check = CHECK;
   protected readonly none = NONE;
@@ -984,8 +1035,24 @@ export class TimelinePage implements OnInit {
   protected readonly menuAt = signal({ x: 0, y: 0 });
   /** Shown optional columns (remembered per browser). */
   protected readonly shown = signal<ReadonlySet<ColumnId>>(new Set(loadColumns()));
+  /** Column widths the viewer dragged (remembered per browser). */
+  protected readonly widths = signal<Partial<Record<ColumnId, number>>>(loadWidths());
+  /** Row height: compact, or titles wrapping to two or three lines. */
+  protected readonly density = signal<Density>(loadDensity());
+  /** Row height in px; grid rows, bar tracks and links share it. */
+  protected readonly rowHeight = computed(() => ROW_HEIGHT[this.density()]);
+  /** Lines a wrapped title may take. */
+  protected readonly lines = computed(() => ROW_LINES[this.density()]);
+  /** Narrowest column, for the resize handles. */
+  protected readonly minWidth = MIN_WIDTH;
+  /** Widest column, for the resize handles. */
+  protected readonly maxWidth = MAX_WIDTH;
 
   protected readonly columns = computed(() =>
+    this.visibleColumns().map((c) => ({ ...c, width: this.widths()[c.id] ?? c.width })),
+  );
+  /** The columns shown, at their default widths. */
+  private readonly visibleColumns = computed(() =>
     COLUMNS.filter(
       (c) =>
         (DEFAULT_COLUMNS.includes(c.id) && c.id !== 'who' && c.id !== 'status') ||
@@ -1085,9 +1152,9 @@ export class TimelinePage implements OnInit {
       const sb = this.shownBox(succ);
       if (pb === null || sb === null) continue;
       const x1 = pb.left + pb.width;
-      const y1 = a * ROW + ROW / 2;
+      const y1 = a * this.rowHeight() + this.rowHeight() / 2;
       const x2 = sb.left;
-      const y2 = b * ROW + ROW / 2;
+      const y2 = b * this.rowHeight() + this.rowHeight() / 2;
       const d =
         x2 >= x1 + 10
           ? `M${x1} ${y1}H${x1 + 6}V${y2}H${x2}`
@@ -1225,18 +1292,15 @@ export class TimelinePage implements OnInit {
   }
 
   /**
-   * The Progress cell: checklist ticks, or done and total children.
+   * The % complete cell: Done items 100, otherwise the checklist share; parents
+   * weight their items by working days.
    *
    * @param row The row.
-   * @returns E.g. "3/5".
+   * @returns E.g. "60%", or empty for a title-only row.
    */
   protected progress(row: TimelineRow): string {
-    if (row.node.children.length > 0) {
-      const kids = row.node.children.filter((c) => c.item !== null);
-      return `${kids.filter((c) => c.item?.status === ItemStatus.DONE).length}/${kids.length}`;
-    }
-    const c = row.node.item?.checklist;
-    return c === undefined || c.total === 0 ? '' : `${c.done}/${c.total}`;
+    const percent = percentComplete(row.node);
+    return percent === null ? '' : `${percent}%`;
   }
 
   /**
@@ -1616,13 +1680,17 @@ export class TimelinePage implements OnInit {
         ? this.statusMenuRef()
         : column === 'who'
           ? this.whoMenuRef()
-          : this.sprintMenuRef(),
+          : column === 'type'
+            ? this.typeMenuRef()
+            : this.sprintMenuRef(),
     );
     afterNextRender(() => this.menuAnchor()?.openMenu(), { injector: this.injector });
   }
 
   private readonly statusMenuRef = viewChild.required<MatMenu>('statusMenu');
   private readonly whoMenuRef = viewChild.required<MatMenu>('whoMenu');
+  /** The Type cell's menu. */
+  private readonly typeMenuRef = viewChild.required<MatMenu>('typeMenu');
   private readonly sprintMenuRef = viewChild.required<MatMenu>('sprintMenu');
 
   /**
@@ -2532,7 +2600,117 @@ export class TimelinePage implements OnInit {
     });
   }
 
-  // --- Columns -------------------------------------------------------------
+  // --- Columns and rows ----------------------------------------------------
+
+  /**
+   * The types a row's item may change to.
+   *
+   * @param item The item.
+   * @returns Allowed types.
+   */
+  protected typesFor(item: WorkItemDto): ItemType[] {
+    const children = this.ctx
+      .items()
+      .filter((i) => i.parentId === item.id)
+      .map((i) => i.type);
+    return allowedTypes(item, children);
+  }
+
+  /**
+   * Changes an item's type from the Type cell.
+   *
+   * @param item The item.
+   * @param type New type.
+   * @returns Resolves once saved.
+   */
+  protected async setType(item: WorkItemDto, type: ItemType): Promise<void> {
+    if (type === item.type) return;
+    try {
+      this.ctx.upsert(await this.api.update(this.ctx.project()!.id, item.id, { type }));
+    } catch (error) {
+      this.toast.error(error);
+    }
+  }
+
+  /**
+   * Sets a column's width, or resets it with null, and remembers it.
+   *
+   * @param id Column id.
+   * @param width Width in px, or null for the default.
+   * @param remember Store the widths now (false while dragging).
+   */
+  protected setWidth(id: ColumnId, width: number | null, remember = true): void {
+    this.widths.update((all) => {
+      const next = { ...all };
+      if (width === null) delete next[id];
+      else next[id] = clampWidth(width);
+      if (remember) store(WIDTHS_KEY, next);
+      return next;
+    });
+  }
+
+  /**
+   * Resets every column to its default width.
+   */
+  protected resetWidths(): void {
+    this.widths.set({});
+    store(WIDTHS_KEY, {});
+  }
+
+  /**
+   * Starts dragging a column edge.
+   *
+   * @param event The pointer event.
+   * @param column The column.
+   */
+  protected resizeStart(event: PointerEvent, column: Column): void {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.target as HTMLElement;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startWidth = column.width;
+    const move = (e: PointerEvent) =>
+      this.setWidth(column.id, startWidth + e.clientX - startX, false);
+    const up = () => {
+      store(WIDTHS_KEY, this.widths());
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  }
+
+  /**
+   * Resizes a column from the keyboard: arrows by 8 px, with Shift by 32 px;
+   * Home resets it.
+   *
+   * @param event The key event.
+   * @param column The column.
+   */
+  protected resizeKey(event: KeyboardEvent, column: Column): void {
+    const step = event.shiftKey ? 32 : 8;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.setWidth(column.id, column.width + (event.key === 'ArrowLeft' ? -step : step));
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      this.setWidth(column.id, null);
+    }
+  }
+
+  /**
+   * Chooses the row height and remembers it.
+   *
+   * @param density Compact, or titles on two or three lines.
+   */
+  protected setDensity(density: Density): void {
+    this.density.set(density);
+    store(DENSITY_KEY, density);
+  }
 
   /**
    * Shows or hides an optional column, remembered in this browser.
@@ -2552,6 +2730,72 @@ export class TimelinePage implements OnInit {
       return next;
     });
   }
+}
+
+/**
+ * Reads a remembered value; storage may be unavailable (private windows).
+ *
+ * @param key Storage key.
+ * @param fallback Value when nothing usable is stored.
+ * @returns The value.
+ */
+function loadStored<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw === null ? fallback : (JSON.parse(raw) as T);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
+ * Remembers a value in this browser when storage is available.
+ *
+ * @param key Storage key.
+ * @param value The value.
+ */
+function store(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // The choice then lasts this visit only.
+  }
+}
+
+/**
+ * Keeps a column width within the allowed range.
+ *
+ * @param width Width in px.
+ * @returns The clamped, whole width.
+ */
+function clampWidth(width: number): number {
+  return Math.round(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width)));
+}
+
+/**
+ * The remembered column widths, keeping only known columns with numbers.
+ *
+ * @returns Widths by column.
+ */
+function loadWidths(): Partial<Record<ColumnId, number>> {
+  const raw = loadStored<unknown>(WIDTHS_KEY, {});
+  const out: Partial<Record<ColumnId, number>> = {};
+  if (typeof raw !== 'object' || raw === null) return out;
+  for (const [id, width] of Object.entries(raw)) {
+    if (COLUMNS.some((c) => c.id === id) && typeof width === 'number' && Number.isFinite(width))
+      out[id as ColumnId] = clampWidth(width);
+  }
+  return out;
+}
+
+/**
+ * The remembered row height, compact by default.
+ *
+ * @returns The density.
+ */
+function loadDensity(): Density {
+  const value = loadStored<string>(DENSITY_KEY, 'compact');
+  return value === 'two' || value === 'three' ? value : 'compact';
 }
 
 /**

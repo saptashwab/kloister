@@ -114,8 +114,12 @@ test('due dates take a time from the drawer and cards show it', async ({ page })
   await page.goto(`/p/${PROJECT_KEY}/items/${ITEMS.taskB}`);
   const drawer = page.getByRole('dialog', { name: 'Item details', exact: true });
   const due = drawer.getByRole('textbox', { name: 'Due date', exact: true });
+  // In a project, drawer dates go through the timeline reschedule (M9).
   const savedDate = page.waitForResponse(
-    (r) => r.request().method() === 'PATCH' && r.url().includes(`/items/`),
+    (r) =>
+      r.request().method() === 'POST' &&
+      r.url().includes('/timeline/reschedule') &&
+      (r.request().postDataJSON() as { mode?: string }).mode !== 'preview',
   );
   await due.fill('');
   await expect(due).toHaveValue('');

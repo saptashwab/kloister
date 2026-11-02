@@ -27,6 +27,10 @@ interface TimelineInternals {
   bulk(field: 'status', value: string): Promise<void>;
   outline(direction: 1 | -1): Promise<void>;
   linkInOrder(): Promise<void>;
+  typesFor(item: WorkItemDetailDto): string[];
+  setType(item: WorkItemDetailDto, type: string): Promise<void>;
+  resizeKey(event: KeyboardEvent, column: { id: string; width: number }): void;
+  setDensity(density: 'compact' | 'two' | 'three'): void;
 }
 
 const readOnly = { edit: false, move: false, delete: false, deleteCascade: false, annotate: false };
@@ -174,5 +178,29 @@ describe('TimelinePage (M9)', () => {
     page.startEdit(1, 1, null);
     expect(root.querySelector('.cell input[aria-label^="Title"]')).toBeNull();
     expect(root.querySelector('.bar .edge')).toBeNull();
+  });
+
+  it('changes types within the hierarchy, resizes columns and wraps titles', async () => {
+    localStorage.removeItem('kloister.timeline.widths');
+    const { page, itemsApi, root, fixture } = await render([epic, a, b]);
+    // Under an Epic only a Feature fits the hierarchy.
+    expect(page.typesFor(a)).toEqual(['FEATURE']);
+    itemsApi.update.mockResolvedValue({ ...epic, type: 'FEATURE' });
+    expect(page.typesFor(epic)).toContain('FEATURE');
+    await page.setType(epic, 'FEATURE');
+    expect(itemsApi.update).toHaveBeenCalledWith('p1', 'i1', { type: 'FEATURE' });
+    const title = { id: 'title', width: 200 };
+    page.resizeKey(new KeyboardEvent('keydown', { key: 'ArrowRight', shiftKey: true }), title);
+    await settle(fixture);
+    const header = root.querySelector<HTMLElement>(
+      '[role="separator"][aria-label="Resize the Title column"]',
+    );
+    expect(header?.getAttribute('aria-valuenow')).toBe('232');
+    page.setDensity('two');
+    await settle(fixture);
+    expect((fixture.nativeElement as HTMLElement).style.getPropertyValue('--tl-row')).toBe('52px');
+    expect((fixture.nativeElement as HTMLElement).classList.contains('wrap')).toBe(true);
+    page.setDensity('compact');
+    localStorage.removeItem('kloister.timeline.widths');
   });
 });

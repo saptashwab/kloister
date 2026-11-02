@@ -182,6 +182,7 @@ export class NavigationDialog {
     { key: 'Insert', action: 'Add a row below' },
     { key: 'Left / Right (bar)', action: 'Move the bar by half a day; Enter saves' },
     { key: 'Shift + Left / Right (bar)', action: 'Change the duration by half a day' },
+    { key: 'Left / Right (column edge)', action: 'Resize the column; Home resets it' },
   ];
   /** Destinations filtered by the typed text; no directory or new API call. */
   protected readonly results = computed(() => {

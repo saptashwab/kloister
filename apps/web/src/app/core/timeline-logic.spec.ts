@@ -1,6 +1,8 @@
 import { makeItem as item } from '../../testing/fixtures';
 import { buildTree } from './board-logic';
 import {
+  allowedTypes,
+  percentComplete,
   barBox,
   childTypeOf,
   conflicts,
@@ -177,5 +179,41 @@ describe('rebaseDescendants (M9)', () => {
     });
     const [, rebased] = rebaseDescendants([moved, child], moved);
     expect(rebased?.ancestors.map((a) => a.id)).toEqual(['i1', 'i2']);
+  });
+});
+
+describe('allowedTypes (M9)', () => {
+  it('offers only types that fit the parent, the children and the board', () => {
+    const story = { id: 's', number: 3, key: 'KLO-3', type: 'STORY' as const, title: 'S' };
+    const task = item(4, { ancestors: [story], parentId: 's' });
+    expect(allowedTypes(task, [])).toEqual(['TASK', 'BUG']);
+    const feature = item(2, { type: 'FEATURE', bucketId: null });
+    expect(allowedTypes(feature, ['STORY'])).toEqual(['FEATURE']);
+    expect(allowedTypes(item(5), [])).toEqual(['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG']);
+  });
+});
+
+describe('percentComplete (M9)', () => {
+  it('weights children by working days and reads checklists', () => {
+    const epic = item(1, { type: 'EPIC' });
+    const ref = { id: 'i1', number: 1, key: 'KLO-1', type: 'EPIC' as const, title: 'E' };
+    // 4 days done, 1 day with half its checklist ticked: (4*100 + 1*50) / 5 = 90.
+    const done = item(2, {
+      parentId: 'i1',
+      ancestors: [ref],
+      status: 'DONE',
+      startDate: '2026-11-02',
+      dueDate: '2026-11-05',
+    });
+    const half = item(3, {
+      parentId: 'i1',
+      ancestors: [ref],
+      checklist: { done: 1, total: 2 },
+      startDate: '2026-11-06',
+      dueDate: '2026-11-06',
+    });
+    const [root] = buildTree([epic, done, half]);
+    expect(percentComplete(root)).toBe(90);
+    expect(percentComplete(root.children[1])).toBe(50);
   });
 });

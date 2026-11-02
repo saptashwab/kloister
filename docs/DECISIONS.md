@@ -2,6 +2,12 @@
 
 ## M9 timeline implementation (2026-11-02)
 
+- First CI run: the database tests passed; seven browser tests failed. Fixes: the timeline test data put Tasks
+  under an Epic (refused by SPEC §4.1); read-only drawers again show no actions menu (the board and timeline
+  links became header icons); the drawer leaves Escape to an open select list or menu; the due-time test waits
+  for the reschedule request that project drawers now send. Owner additions recorded in docs/M9-PLAN.md §13:
+  editable Type cell, resizable columns, wrapped-title row heights and % complete.
+
 - Schema: one additive migration (`20261102120000_timeline_half_days`) adds
   `startSecondHalf`, `dueFirstHalf`, `startNoEarlierThan` and
   `startNoEarlierThanSecondHalf` to `WorkItem`, with defaults that leave existing
