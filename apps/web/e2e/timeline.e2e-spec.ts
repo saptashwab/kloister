@@ -323,6 +323,8 @@ test('admins add and remove instance holidays; others cannot use them', async ({
   await page.getByRole('button', { name: 'Remove Example closure' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
   await expect(page.getByText('No instance holidays yet.')).toBeVisible();
+  // A live session sends /login straight on, so drop it before changing user.
+  await page.context().clearCookies();
   await signIn(page, USERS.pm);
   expect((await page.request.get('api/v1/admin/holidays')).status()).toBe(403);
 });
