@@ -175,7 +175,10 @@ export class CreateItemDto implements CreateItemRequest {
   @Max(PRIORITY_MAX)
   priority?: number;
 
-  /** Bucket. */
+  /**
+   * Bucket. A Story, Task or Bug without one starts in the project's "New items
+   * start in" bucket, or the first bucket the caller can see it in (M12).
+   */
   @Nullable()
   @LowercaseUuid()
   @IsUUID()

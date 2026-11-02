@@ -6428,7 +6428,7 @@
           "bucketId": {
             "type": "string",
             "nullable": true,
-            "description": "Bucket.",
+            "description": "Bucket. A Story, Task or Bug without one starts in the project's \"New items\nstart in\" bucket, or the first bucket the caller can see it in (M12).",
             "format": "uuid"
           },
           "sprintId": {

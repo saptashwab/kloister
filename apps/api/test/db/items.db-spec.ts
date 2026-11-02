@@ -1144,8 +1144,14 @@ describe('work items (db)', () => {
     });
 
     it('requires a bucket for stories, tasks and bugs, not for epics and features', async () => {
-      expect((await as('pm', 'POST', items(), { type: 'TASK', title: 'x' })).statusCode).toBe(400);
-      expect((await as('pm', 'POST', items(), { type: 'EPIC', title: 'x' })).statusCode).toBe(201);
+      // Without one, a Task starts in the project's "New items start in" bucket,
+      // by default the first bucket (M12); an Epic stays off the board.
+      const task = await as('pm', 'POST', items(), { type: 'TASK', title: 'x' });
+      expect(task.statusCode).toBe(201);
+      expect((task.json() as WorkItemDetailDto).bucketId).toBe(buckets.todo);
+      const epic = await as('pm', 'POST', items(), { type: 'EPIC', title: 'x' });
+      expect(epic.statusCode).toBe(201);
+      expect((epic.json() as WorkItemDetailDto).bucketId).toBeNull();
       const off = await as('pm', 'POST', `${item(N.mine)}/move`, { bucketId: null });
       expect(off.statusCode).toBe(400);
       const epicOn = await as('pm', 'POST', `${item(N.epic)}/move`, { bucketId: buckets.todo });

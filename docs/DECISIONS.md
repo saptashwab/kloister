@@ -14,6 +14,10 @@
   the first remaining one when only trashed items were left), so a restore always finds a bucket; sprint close,
   sprint and team deletion counts and the due-date job skip trashed items.
 - Delete answers 200 with `{ batchId, count }` instead of 204, so the toast's Undo can restore the batch.
+- Creating a Story, Task or Bug without a bucket (omitted or null) no longer answers 400: the item starts
+  in the "New items start in" bucket, or the first bucket the caller can see it in (plan section 2). A
+  project always has at least one bucket, so a bucket is always found; moving such an item off the board
+  is still refused. The request field's documentation (and so the API reference) says so.
 - Restore: PMs and Leads restore any batch; others a single item they deleted or whose team they lead
   (cascades, the only batches of several items, are for PMs and Leads). A batch whose deleted item the caller
   cannot see is 404. Purging a batch first clears the parent of items of earlier batches that sat under it.

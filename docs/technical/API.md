@@ -3397,25 +3397,25 @@ Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.m
 
 ### CreateItemDto
 
-| Field             | Type                                                    | Required | Description                                                                                   |
-| ----------------- | ------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
-| `type`            | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`     | yes      | Item type.                                                                                    |
-| `title`           | string                                                  | yes      | Title.                                                                                        |
-| `description`     | string                                                  | no       | HTML description; sanitized before storing.                                                   |
-| `parentId`        | string (uuid) or null                                   | no       | Parent item.                                                                                  |
-| `status`          | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"` | no       | Initial status.                                                                               |
-| `priority`        | number                                                  | no       | Priority.                                                                                     |
-| `bucketId`        | string (uuid) or null                                   | no       | Bucket.                                                                                       |
-| `sprintId`        | string (uuid) or null                                   | no       | Sprint; never on Epics and Features. A Story's child starts in its sprint when omitted (M12). |
-| `adHoc`           | boolean                                                 | no       | Ad hoc: not part of the plan; Tasks and Bugs without parent only (M12).                       |
-| `teamId`          | string (uuid) or null                                   | no       | Team.                                                                                         |
-| `startDate`       | string or null                                          | no       | Start date.                                                                                   |
-| `startSecondHalf` | boolean                                                 | no       | Starts in the 2nd half of the start date (M9).                                                |
-| `dueDate`         | string or null                                          | no       | Due date.                                                                                     |
-| `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9).                                             |
-| `dueTime`         | string or null                                          | no       | Due time `HH:MM` on the due date.                                                             |
-| `assigneeIds`     | string (uuid)[]                                         | no       | Assignees.                                                                                    |
-| `labelIds`        | string (uuid)[]                                         | no       | Labels.                                                                                       |
+| Field             | Type                                                    | Required | Description                                                                                                                                       |
+| ----------------- | ------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`            | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`     | yes      | Item type.                                                                                                                                        |
+| `title`           | string                                                  | yes      | Title.                                                                                                                                            |
+| `description`     | string                                                  | no       | HTML description; sanitized before storing.                                                                                                       |
+| `parentId`        | string (uuid) or null                                   | no       | Parent item.                                                                                                                                      |
+| `status`          | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"` | no       | Initial status.                                                                                                                                   |
+| `priority`        | number                                                  | no       | Priority.                                                                                                                                         |
+| `bucketId`        | string (uuid) or null                                   | no       | Bucket. A Story, Task or Bug without one starts in the project's "New items start in" bucket, or the first bucket the caller can see it in (M12). |
+| `sprintId`        | string (uuid) or null                                   | no       | Sprint; never on Epics and Features. A Story's child starts in its sprint when omitted (M12).                                                     |
+| `adHoc`           | boolean                                                 | no       | Ad hoc: not part of the plan; Tasks and Bugs without parent only (M12).                                                                           |
+| `teamId`          | string (uuid) or null                                   | no       | Team.                                                                                                                                             |
+| `startDate`       | string or null                                          | no       | Start date.                                                                                                                                       |
+| `startSecondHalf` | boolean                                                 | no       | Starts in the 2nd half of the start date (M9).                                                                                                    |
+| `dueDate`         | string or null                                          | no       | Due date.                                                                                                                                         |
+| `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9).                                                                                                 |
+| `dueTime`         | string or null                                          | no       | Due time `HH:MM` on the due date.                                                                                                                 |
+| `assigneeIds`     | string (uuid)[]                                         | no       | Assignees.                                                                                                                                        |
+| `labelIds`        | string (uuid)[]                                         | no       | Labels.                                                                                                                                           |
 
 ### UpdateItemDto
 
