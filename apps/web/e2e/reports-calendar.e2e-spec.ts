@@ -131,7 +131,7 @@ test('shares are set inline and by typing, and the Member’s workload follows l
   browser,
 }) => {
   const pm = await person(browser, USERS.admin);
-  const s = await setup(pm, 'RPSHARE');
+  const s = await setup(pm, 'RPSH');
   const k = s.project.key!;
   const member = await person(browser, USERS.member);
 
