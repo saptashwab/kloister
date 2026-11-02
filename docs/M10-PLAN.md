@@ -82,7 +82,8 @@ Presence (who else is looking at or editing an item) is part of M10 at the owner
   (my card does not jump out from under the pointer).
 - When I drop on Done, my move is saved: it is the later deliberate action. Because Anne's move arrived during my
   drag, I get a toast: "Anne had moved this card to Review. It is now in Done." with **Put back in Review**. On
-  Anne's screen the card then moves to Done with the usual highlight and "Moved by me just now".
+  Anne's screen the card then moves to Done with the usual highlight, naming the person who moved it
+  ("Moved by <my name> just now"); a highlight always names whoever made that change.
 - If Anne's move reaches the server after my drop instead, the same happens the other way round. Bucket rules
   (status mapping, entry rules) apply to each move as today, and both moves are in the item history.
 - Timeline bars already carry version checks (SPEC §6.4). With live updates, a bar dragged while someone else
