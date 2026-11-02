@@ -199,6 +199,7 @@ test('settings tabs, bucket menus, header Export… and project counts', async (
     'Teams',
     'Buckets',
     'Labels',
+    'Trash',
   ]);
   await sections.getByRole('tab', { name: 'Buckets', exact: true }).click();
   const actions = page.getByRole('button', { name: /^Actions for / }).first();

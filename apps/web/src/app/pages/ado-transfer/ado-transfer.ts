@@ -356,7 +356,11 @@ export class AdoTransferPage {
    */
   protected async requireDetailed(required: boolean): Promise<void> {
     await this.run(async () => {
-      const destination = await this.answer(this.api.reviewPolicy(this.projectId, required));
+      // A saved setting stays saved when the user moves on to another tab
+      // meanwhile, so only another project discards the answer.
+      const project = this.projectId;
+      const destination = await this.api.reviewPolicy(project, required);
+      if (project !== this.projectId) return;
       this.destination.set(destination);
       if (required) this.setReview('detailed');
       this.toast.show(

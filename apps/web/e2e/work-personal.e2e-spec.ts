@@ -71,7 +71,8 @@ async function removeTask(page: Page, projectId: string, itemId: string): Promis
   const removed = await page.request.delete(`api/v1/projects/${projectId}/items/${itemId}`, {
     headers: { 'x-requested-with': 'kloister' },
   });
-  expect(removed.status()).toBe(204);
+  // Deleting moves the task to the owner's trash (M12).
+  expect(removed.status()).toBe(200);
 }
 
 test('My work shares list/board filters, shows personal tasks, and changes status by keyboard', async ({

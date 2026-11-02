@@ -97,7 +97,7 @@ test('a PM mentions a Member in a note, who is notified through the bell', async
   const drawer = page.locator('app-item-drawer');
   const composer = drawer.getByRole('textbox', { name: 'New note' });
   await expect(
-    drawer.getByText('Type @ to mention someone, paste or drop an image.'),
+    drawer.getByText('Type @ to mention someone, # to link an item, paste or drop an image.'),
   ).toBeVisible();
   await composer.click();
   await page.keyboard.type('Can you check the totals, @Mi');

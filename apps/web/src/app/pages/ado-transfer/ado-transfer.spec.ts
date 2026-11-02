@@ -29,6 +29,8 @@ interface Internals {
   confirmAllNew(): void;
   incomingRows: { set(value: unknown[]): void };
   setReview(mode: 'quick' | 'detailed'): void;
+  requireDetailed(required: boolean): Promise<void>;
+  switchTab(tab: string): void;
 }
 
 async function render(
@@ -305,6 +307,25 @@ describe('lazy transfer review lifecycle', () => {
     expect((required.fixture.nativeElement as HTMLElement).textContent).toContain(
       'A project PM requires Detailed review',
     );
+  });
+  it('keeps a required Detailed review when the tab changes while it saves', async () => {
+    const destination = {
+      id: 'd',
+      organization: 'collection',
+      remoteProject: 'remote',
+      profile: { process: 'Agile' },
+      revision: 1,
+      requireDetailedReview: false,
+    } as unknown as AdoDestinationDto;
+    const { page, api } = await render(['EXPORT_ADO', 'IMPORT_ADO'], destination);
+    let resolve: (value: AdoDestinationDto) => void = () => undefined;
+    api.reviewPolicy.mockReturnValue(new Promise((r) => (resolve = r)));
+    const saving = page.requireDetailed(true);
+    page.switchTab('export');
+    resolve({ ...destination, requireDetailedReview: true });
+    await saving;
+    expect(page.destination()?.requireDetailedReview).toBe(true);
+    expect(page.review()).toBe('detailed');
   });
   it('fills suggested mappings from a sample export without saving them', async () => {
     const { page, api, fixture } = await render();
