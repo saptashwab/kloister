@@ -117,16 +117,27 @@ app-timeline {
     color: var(--k-muted);
     font-style: italic;
   }
+  // Title column: toggle (or an empty slot) then the type icon, close together.
+  .tree {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--k-space-1);
+    min-width: 0;
+  }
   .toggle {
     display: inline-grid;
+    flex: none;
     place-items: center;
-    width: 18px;
-    height: 18px;
+    width: var(--k-size-14px);
+    height: var(--k-size-18px);
     padding: 0;
     border: 0;
     background: transparent;
     color: var(--k-muted);
     cursor: pointer;
+  }
+  .toggle.slot {
+    cursor: default;
   }
   .toggle.open app-icon {
     transform: rotate(90deg);

@@ -756,10 +756,7 @@ interface BarDraft {
           }
         }
         @case ('title') {
-          <span
-            [style.padding-left.px]="r.depth * 16"
-            style="display: inline-flex; align-items: center; gap: 6px; min-width: 0"
-          >
+          <span class="tree" [style.padding-left.px]="r.depth * 16">
             @if (r.node.children.length > 0) {
               <button
                 type="button"
@@ -774,6 +771,9 @@ interface BarDraft {
               >
                 <app-icon name="chevronRight" [size]="12" />
               </button>
+            } @else {
+              <!-- Same width as the toggle, so sibling icons line up and children sit one step in. -->
+              <span class="toggle slot" aria-hidden="true"></span>
             }
             <app-type-icon [type]="r.node.ref.type" />
             <span
