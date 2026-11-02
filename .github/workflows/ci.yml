@@ -113,8 +113,29 @@ jobs:
           DATABASE_URL: postgresql://kloister:kloister@localhost:5432/kloister_e2e
         run: npm run migrate:deploy -w @kloister/api
 
+      # The browser download took about four minutes per run and pushed the job
+      # towards its time limit, so the downloaded browser is cached per
+      # Playwright version; a version bump downloads it once again.
+      - name: Read the Playwright version
+        id: playwright
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the cached Playwright browser
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+
       - name: Install the Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
+
+      # The cache holds only the browser; the system libraries it needs are
+      # installed on every run (the runner starts clean).
+      - name: Install the browser's system libraries
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
 
       - name: Browser tests
         env:
