@@ -92,6 +92,18 @@ Presence (who else is looking at or editing an item) is part of M10 at the owner
 - Timeline, board and backlog: a row or card someone else has open shows a small avatar at its edge; a cell or
   bar someone is editing or dragging gets a thin outline in a neutral colour with their initials. The project
   header shows the people currently on the project's pages (at most four avatars, then "+3").
+- The text names what the person is doing, in plain words:
+
+  | They are                                          | Text                                                                           |
+  | ------------------------------------------------- | ------------------------------------------------------------------------------ |
+  | Looking at the item (drawer open, nothing active) | Ann is viewing                                                                 |
+  | Editing a field or grid cell                      | Ann is editing the due date (the field's own name: title, start date, status…) |
+  | Dragging a card or bar                            | Ann is moving this card / this bar                                             |
+  | Writing a note                                    | Ann is writing a note                                                          |
+
+  Only one action shows per person (the most recent); several people are listed together, for example
+  "Ann is editing the due date · Bo is viewing".
+
 - Presence is a hint, never a lock: anyone may still edit. The conflict notice in section 4.3 remains the
   safeguard.
 - It is quiet: presence appears after someone has stayed about two seconds (so passing clicks do not flicker)
@@ -167,8 +179,9 @@ Presence (who else is looking at or editing an item) is part of M10 at the owner
 ### 5.5 Presence
 
 - The page reports what the tab is doing through the stream's control route:
-  `PUT /api/v1/events/:streamId/presence` with `{ itemId, field }` (both nullable) when an item is opened, a
-  field or cell edit starts or ends, or a drag starts or ends; at most once a second per tab.
+  `PUT /api/v1/events/:streamId/presence` with `{ itemId, action, field }` (action: viewing, editing, moving or
+  noting; field only when editing) when an item is opened, an edit, drag or note starts or ends; at most once a
+  second per tab.
 - Presence lives only in API memory (a map per project, with expiry); it is never stored, audited or exported.
   The API sends `presence` events (user id, item id, field, viewing or editing) to the project's other streams
   that pass `canViewItem` for that item, after the two-second delay, and a removal on leave or expiry.
@@ -189,7 +202,7 @@ Presence (who else is looking at or editing an item) is part of M10 at the owner
 | `PUT /api/v1/events/:streamId/project`     | Body `{ projectId: string \| null }`; 404 for a project the caller cannot see; 404 for another user's stream |
 | `GET /api/v1/projects/:id/items?ids=a,b,…` | Existing list route gains an `ids` filter (at most 100), scoped as usual                                     |
 
-| `PUT /api/v1/events/:streamId/presence` | Body `{ itemId: string \| null, field: string \| null }`; the item must be visible (404 otherwise) |
+| `PUT /api/v1/events/:streamId/presence` | Body `{ itemId: string \| null, action: 'viewing' \| 'editing' \| 'moving' \| 'noting' \| null, field: string \| null }`; the item must be visible (404 otherwise) |
 
 Event kinds: `hello`, `item-changed`, `item-removed`, `links-changed`, `board-changed` (buckets, labels,
 sprints, teams, holidays), `access-changed`, `notification`, `presence`, `project-resync`, `resync`.
