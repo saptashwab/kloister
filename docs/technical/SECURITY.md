@@ -138,6 +138,17 @@ The route permission is only the first check. `ProjectAccessService`
   authors, PMs, Leads and the item's team Leads may delete notes and attachments.
 - **Assign**: assigning only yourself needs nothing extra; assigning others needs `ASSIGN_OTHERS`
   or leading the item's team.
+- **Shares** (M13): changing an assignee's share, or adding someone at a share other than 100%, is
+  a plan change (the plan rule above). Adding or removing people at 100% follows the assign rule.
+- **Reports** (M13): every member, Viewers included, reads the Overview, Sprint, Workload and Plan
+  health reports (`VIEW_ITEMS`). Each is computed from the caller's scoped item query, links count
+  only when both ends are visible, and sprint history is read only for visible items, so hidden
+  items are never counted, listed or hinted at; a sprint of another project is 404. Personal spaces
+  have Overview and Workload only (the others 404), for their owner.
+- **My work calendar** (M13): `GET /me/calendar` lists the caller's own items across their member
+  projects and personal space through the same cross-project scoping as My work; administrators
+  get no cross-project reads and no audit entries from it. Moves go through the ordinary
+  reschedule and item routes.
 - **Team of an item**: PMs and Leads set any team; others only move items between no team and the
   teams they lead, and a team Member may create an item in their own team.
 
@@ -234,7 +245,8 @@ backup access can still read the data, which docs/ADMIN.md states.
 ## Exports
 
 Excel snapshots and offline archives contain only what the caller can read; they add no
-visibility. ADO export is limited to PMs and Leads, ADO import and settings to PMs; system
+visibility. The Reports sheet of a project workbook (M13) is computed like the dashboards, from
+the reader's visible items. ADO export is limited to PMs and Leads, ADO import and settings to PMs; system
 administration adds no transfer rights, and personal spaces are excluded.
 
 ## Live updates

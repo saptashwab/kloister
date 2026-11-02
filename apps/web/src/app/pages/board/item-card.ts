@@ -1,3 +1,4 @@
+import { sharesOf } from '../../core/shares';
 import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ItemStatus, LabelStyle, type WorkItemDto } from '@kloister/shared';
@@ -51,6 +52,11 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
       background: var(--k-surface);
       box-shadow: var(--k-rest);
       cursor: pointer;
+    }
+    .k-avatars > .share {
+      margin: 0 0 0 var(--k-size-3px);
+      color: var(--k-muted);
+      font-size: var(--k-small);
     }
     :host:focus-within,
     :host(.cdk-drag-preview) {
@@ -175,6 +181,11 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
           <span class="k-avatars">
             @for (person of assignees(); track person.id) {
               <app-avatar [userId]="person.id" [name]="person.name" [email]="person.email" />
+              @if (person.share !== 100) {
+                <span class="share" [attr.aria-label]="person.name + ' has ' + person.share + '%'"
+                  >{{ person.share }}%</span
+                >
+              }
             }
           </span>
         </div>
@@ -211,12 +222,17 @@ export class ItemCard {
     this.style() === LabelStyle.COVER ? (this.labels()[0]?.colour ?? null) : null,
   );
 
-  /** Assignees with names and emails. */
+  /** Assignees with names, emails and shares (M13). */
   protected readonly assignees = computed(() => {
     const byId = this.ctx.membersById();
-    return this.item().assigneeIds.map((id) => {
+    return sharesOf(this.item()).map(({ userId: id, share }) => {
       const member = byId.get(id);
-      return { id, name: member?.displayName ?? 'Former member', email: member?.email ?? '' };
+      return {
+        id,
+        name: member?.displayName ?? 'Former member',
+        email: member?.email ?? '',
+        share,
+      };
     });
   });
 

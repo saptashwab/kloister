@@ -1,3 +1,4 @@
+import { sharesOf } from './shares';
 import {
   dueNow,
   isOverdueAt,
@@ -135,6 +136,18 @@ export function revertFields(before: WorkItemDto, after: WorkItemDto): UpdateIte
     const b = after[key];
     const same = Array.isArray(a) && Array.isArray(b) ? sameIds(a, b) : a === b;
     if (!same) request[key] = Array.isArray(a) ? [...a] : a;
+  }
+  // Shares go back with the assignee list they belong to (M13), when the
+  // caller may change shares (a plan change); otherwise people come back at 100%.
+  const shares = sharesOf(before);
+  const sharesAfter = sharesOf(after);
+  if (
+    after.can.plan &&
+    (shares.length !== sharesAfter.length ||
+      shares.some((s) => sharesAfter.find((t) => t.userId === s.userId)?.share !== s.share))
+  ) {
+    delete request['assigneeIds'];
+    request['assignees'] = shares;
   }
   return Object.keys(request).length === 0 ? null : request;
 }

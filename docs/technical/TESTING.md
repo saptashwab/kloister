@@ -74,6 +74,9 @@ for (const [name, status] of cases) {
 Also cover visibility: an item outside the caller's scope must answer 404 on every route that
 names it, and lists must leave it out.
 
+M13 adds `reports.db-spec.ts`: shares under the plan setting, every report and the My work
+calendar per role, and reports that never count hidden items.
+
 ## Web unit tests
 
 Components and services are tested with Angular's `TestBed`; HTTP calls go through

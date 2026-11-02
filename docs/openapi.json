@@ -1922,6 +1922,9 @@
                       "position": 1024,
                       "createdById": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
                       "assigneeIds": ["6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f"],
+                      "assigneeShares": [
+                        { "userId": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f", "share": 100 }
+                      ],
                       "labelIds": [],
                       "checklist": { "done": 0, "total": 0 },
                       "childCount": 0,
@@ -2014,6 +2017,9 @@
                   "position": 1024,
                   "createdById": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
                   "assigneeIds": ["6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f"],
+                  "assigneeShares": [
+                    { "userId": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f", "share": 100 }
+                  ],
                   "labelIds": [],
                   "checklist": { "done": 0, "total": 0 },
                   "childCount": 0,
@@ -2095,7 +2101,12 @@
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/UpdateItemDto" },
-              "example": { "status": "IN_PROGRESS", "dueDate": "2026-11-12", "dueTime": "15:00" }
+              "example": {
+                "status": "IN_PROGRESS",
+                "dueDate": "2026-11-12",
+                "dueTime": "15:00",
+                "assignees": [{ "userId": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f", "share": 50 }]
+              }
             }
           }
         },
@@ -4244,6 +4255,158 @@
         "security": [{ "session": [], "csrf": [] }]
       }
     },
+    "/api/v1/projects/{id}/reports/overview": {
+      "get": {
+        "operationId": "ReportsController_overview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/OverviewReportDto" } }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        },
+        "summary": "Counts the visible items by status, due date and bucket. Permissions: any member and admin (`VIEW_ITEMS`), visible items only.",
+        "tags": ["Reports"],
+        "x-permission": "Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "description": "**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "security": [{ "session": [] }]
+      }
+    },
+    "/api/v1/projects/{id}/reports/sprint": {
+      "get": {
+        "operationId": "ReportsController_sprint",
+        "parameters": [
+          {
+            "name": "sprint",
+            "required": false,
+            "in": "query",
+            "description": "Sprint to report on; the active sprint when omitted.",
+            "schema": { "format": "uuid", "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/SprintReportDto" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        },
+        "summary": "Reports on the active (or a chosen) sprint from visible items and their history. Permissions: any member and admin (`VIEW_ITEMS`), visible items only; personal spaces 404.",
+        "tags": ["Reports"],
+        "x-permission": "Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "description": "**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "security": [{ "session": [] }]
+      }
+    },
+    "/api/v1/projects/{id}/reports/workload": {
+      "get": {
+        "operationId": "ReportsController_workload",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "description": "A day in the first week (`YYYY-MM-DD`); this week when omitted.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "weeks",
+            "required": false,
+            "in": "query",
+            "description": "Number of weeks, 1 to 26; default 8.",
+            "schema": { "minimum": 1, "maximum": 26, "type": "number" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/WorkloadReportDto" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        },
+        "summary": "Spreads visible planned work over people and weeks, by assignee share. Permissions: any member and admin (`VIEW_ITEMS`), visible items only.",
+        "tags": ["Reports"],
+        "x-permission": "Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "description": "**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "security": [{ "session": [] }]
+      }
+    },
+    "/api/v1/projects/{id}/reports/plan-health": {
+      "get": {
+        "operationId": "ReportsController_planHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlanHealthReportDto" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        },
+        "summary": "Lists past-due items, timeline conflicts, undated sprint work and late pins. Permissions: any member and admin (`VIEW_ITEMS`), visible items and links only; personal spaces 404.",
+        "tags": ["Reports"],
+        "x-permission": "Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "description": "**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "security": [{ "session": [] }]
+      }
+    },
+    "/api/v1/me/calendar": {
+      "get": {
+        "operationId": "CalendarController_mine",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "description": "First day (`YYYY-MM-DD`).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "description": "Last day (`YYYY-MM-DD`), at most 100 days after `from`.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/MyCalendarDto" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        },
+        "summary": "Lists the caller's items and holidays in a date range of at most 100 days. Permissions: any signed-in user; own visible items only.",
+        "tags": ["Calendar"],
+        "x-permission": "Any signed-in user.",
+        "description": "**Permission:** Any signed-in user.",
+        "security": [{ "session": [] }]
+      }
+    },
     "/api/v1/projects/{id}/items/{item}/notes": {
       "get": {
         "operationId": "NotesController_list",
@@ -6005,8 +6168,16 @@
       "description": "Audit log viewer API (SPEC §6 Admin, §8 `admin/audit`)."
     },
     {
+      "name": "Calendar",
+      "description": "The signed-in user's calendar under `/api/v1/me/calendar` (SPEC §6.5, M13)."
+    },
+    {
       "name": "References",
       "description": "Item references in rich text (M12): previews for hover cards and the \"Referenced in\" list of an item."
+    },
+    {
+      "name": "Reports",
+      "description": "Project reports under `/api/v1/projects/:id/reports` (SPEC §6.5, M13)."
     },
     {
       "name": "Trash",
@@ -6399,6 +6570,23 @@
           }
         }
       },
+      "AssigneeShareRequestDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "description": "User id of a project member.",
+            "format": "uuid"
+          },
+          "share": {
+            "type": "number",
+            "description": "Percent of the item's work: 5 to 100 in steps of 5.",
+            "minimum": 5,
+            "maximum": 100
+          }
+        },
+        "required": ["userId", "share"]
+      },
       "CreateItemDto": {
         "type": "object",
         "properties": {
@@ -6463,10 +6651,16 @@
             "description": "Due time `HH:MM` on the due date."
           },
           "assigneeIds": {
-            "description": "Assignees.",
+            "description": "Assignees, each with a share of 100%.",
             "uniqueItems": true,
             "type": "array",
             "items": { "type": "string", "format": "uuid" }
+          },
+          "assignees": {
+            "description": "Assignees with their shares (M13); instead of `assigneeIds`, not with it.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AssigneeShareRequestDto" }
           },
           "labelIds": {
             "description": "Labels.",
@@ -6553,10 +6747,16 @@
             "description": "New due time `HH:MM`, or null; needs a due date."
           },
           "assigneeIds": {
-            "description": "Full assignee list.",
+            "description": "Full assignee list; people who stay keep their share, new ones get 100%.",
             "uniqueItems": true,
             "type": "array",
             "items": { "type": "string", "format": "uuid" }
+          },
+          "assignees": {
+            "description": "Assignees with their shares (M13); instead of `assigneeIds`, not with it; changing a share is a plan change (M9.2).",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AssigneeShareRequestDto" }
           },
           "labelIds": {
             "description": "Full label list.",
@@ -7796,6 +7996,11 @@
             "items": { "type": "string" },
             "description": "Assignee user ids."
           },
+          "assigneeShares": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AssigneeShareDto" },
+            "description": "Every assignee with their share, in the order of `assigneeIds` (M13)."
+          },
           "labelIds": {
             "type": "array",
             "items": { "type": "string" },
@@ -7850,6 +8055,7 @@
           "position",
           "createdById",
           "assigneeIds",
+          "assigneeShares",
           "labelIds",
           "checklist",
           "childCount",
@@ -7884,6 +8090,18 @@
         "description": "Work item status; independent of the bucket (SPEC §4.2).",
         "type": "string",
         "enum": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"]
+      },
+      "AssigneeShareDto": {
+        "description": "One assignee and their share of the item's work (M13).",
+        "type": "object",
+        "properties": {
+          "userId": { "type": "string", "description": "User id of a project member." },
+          "share": {
+            "type": "number",
+            "description": "Percent of the item's work, 5 to 100 in steps of 5."
+          }
+        },
+        "required": ["userId", "share"]
       },
       "ItemCapabilitiesDto": {
         "description": "What the caller may do with an item; the UI uses this only to hide controls.",
@@ -7991,6 +8209,11 @@
             "items": { "type": "string" },
             "description": "Assignee user ids."
           },
+          "assigneeShares": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AssigneeShareDto" },
+            "description": "Every assignee with their share, in the order of `assigneeIds` (M13)."
+          },
           "labelIds": {
             "type": "array",
             "items": { "type": "string" },
@@ -8048,6 +8271,7 @@
           "position",
           "createdById",
           "assigneeIds",
+          "assigneeShares",
           "labelIds",
           "checklist",
           "childCount",
@@ -8566,6 +8790,510 @@
         "description": "Why a reached item was left where it is.",
         "type": "string",
         "enum": ["NOT_EDITABLE", "STARTED", "PINNED"]
+      },
+      "OverviewReportDto": {
+        "description": "Answer of `GET /projects/:id/reports/overview`.",
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "string",
+            "description": "The day the report was computed for, server time (`YYYY-MM-DD`)."
+          },
+          "weekStart": { "type": "string", "description": "Monday of this week." },
+          "weekEnd": { "type": "string", "description": "Sunday of this week." },
+          "total": { "type": "number", "description": "Visible items." },
+          "byStatus": {
+            "type": "object",
+            "properties": {
+              "NOT_STARTED": { "type": "number" },
+              "IN_PROGRESS": { "type": "number" },
+              "BLOCKED": { "type": "number" },
+              "DONE": { "type": "number" }
+            },
+            "required": ["NOT_STARTED", "IN_PROGRESS", "BLOCKED", "DONE"],
+            "description": "Visible items per status."
+          },
+          "overdue": {
+            "type": "number",
+            "description": "Unfinished items past their due date (and time)."
+          },
+          "dueThisWeek": {
+            "type": "number",
+            "description": "Unfinished items due from today to Sunday, not yet overdue."
+          },
+          "doneRecently": {
+            "type": "number",
+            "description": "Items finished in the last 14 days."
+          },
+          "openByBucket": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ReportBucketCountDto" },
+            "description": "Open items per bucket, in board order."
+          },
+          "adHocOpen": { "type": "number", "description": "Open ad-hoc items." }
+        },
+        "required": [
+          "today",
+          "weekStart",
+          "weekEnd",
+          "total",
+          "byStatus",
+          "overdue",
+          "dueThisWeek",
+          "doneRecently",
+          "openByBucket",
+          "adHocOpen"
+        ]
+      },
+      "ReportBucketCountDto": {
+        "description": "Open items in one bucket.",
+        "type": "object",
+        "properties": {
+          "bucketId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Bucket id, or null for Epics and Features off the board."
+          },
+          "name": { "type": "string", "description": "Bucket name, or \"Off the board\"." },
+          "count": { "type": "number", "description": "Open (not Done) visible items in it." }
+        },
+        "required": ["bucketId", "name", "count"]
+      },
+      "SprintReportDto": {
+        "description": "Answer of `GET /projects/:id/reports/sprint`.",
+        "type": "object",
+        "properties": {
+          "sprint": {
+            "allOf": [{ "$ref": "#/components/schemas/SprintDto" }],
+            "nullable": true,
+            "description": "The sprint shown: the chosen one, else the active one; null when there is none."
+          },
+          "startedAt": {
+            "type": "string",
+            "nullable": true,
+            "description": "When additions start counting: the sprint's start, or its first day."
+          },
+          "items": {
+            "type": "object",
+            "properties": { "done": { "type": "number" }, "remaining": { "type": "number" } },
+            "required": ["done", "remaining"],
+            "description": "Visible items in the sprint now, by done and not done."
+          },
+          "days": {
+            "type": "object",
+            "properties": { "done": { "type": "number" }, "remaining": { "type": "number" } },
+            "required": ["done", "remaining"],
+            "description": "Working days of those items, by done and not done."
+          },
+          "sprintDays": {
+            "type": "object",
+            "properties": { "total": { "type": "number" }, "elapsed": { "type": "number" } },
+            "required": ["total", "elapsed"],
+            "description": "Working days of the sprint, and how many of them have passed."
+          },
+          "burndown": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/BurndownPointDto" },
+            "description": "Remaining working days per working day of the sprint."
+          },
+          "added": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SprintChangeDto" },
+            "description": "Items that joined after the start, from item history."
+          },
+          "removed": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/SprintChangeDto" },
+            "description": "Items that left after the start, from item history."
+          },
+          "atRisk": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ReportItemDto" },
+            "description": "Unfinished items due after the sprint ends."
+          }
+        },
+        "required": [
+          "sprint",
+          "startedAt",
+          "items",
+          "days",
+          "sprintDays",
+          "burndown",
+          "added",
+          "removed",
+          "atRisk"
+        ]
+      },
+      "BurndownPointDto": {
+        "description": "One day of a sprint burndown.",
+        "type": "object",
+        "properties": {
+          "date": { "type": "string", "description": "`YYYY-MM-DD`, a working day of the sprint." },
+          "remaining": {
+            "type": "number",
+            "nullable": true,
+            "description": "Working days of unfinished items in the sprint at the end of that day; null for days to come."
+          },
+          "ideal": {
+            "type": "number",
+            "description": "The straight line from the first day's total to zero."
+          }
+        },
+        "required": ["date", "remaining", "ideal"]
+      },
+      "SprintChangeDto": {
+        "description": "An item that joined or left a sprint after it started.",
+        "type": "object",
+        "properties": {
+          "item": {
+            "allOf": [{ "$ref": "#/components/schemas/ReportItemDto" }],
+            "description": "The item."
+          },
+          "at": { "type": "string", "description": "ISO timestamp of the change." }
+        },
+        "required": ["item", "at"]
+      },
+      "ReportItemDto": {
+        "description": "A visible item listed in a report.",
+        "type": "object",
+        "properties": {
+          "status": {
+            "allOf": [{ "$ref": "#/components/schemas/ItemStatus" }],
+            "description": "Status."
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`, or null."
+          },
+          "dueDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`, or null."
+          },
+          "assigneeIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Assignee user ids."
+          },
+          "id": { "type": "string", "description": "Item id (uuid)." },
+          "number": { "type": "number", "description": "Per-project number." },
+          "key": { "type": "string", "description": "Display key, e.g. `KLO-42`." },
+          "type": {
+            "allOf": [{ "$ref": "#/components/schemas/ItemType" }],
+            "description": "Item type."
+          },
+          "title": { "type": "string", "description": "Title." }
+        },
+        "required": [
+          "status",
+          "startDate",
+          "dueDate",
+          "assigneeIds",
+          "id",
+          "number",
+          "key",
+          "type",
+          "title"
+        ]
+      },
+      "WorkloadReportDto": {
+        "description": "Answer of `GET /projects/:id/reports/workload`.",
+        "type": "object",
+        "properties": {
+          "weeks": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkloadWeekDto" },
+            "description": "The weeks, from the week of `from`."
+          },
+          "rows": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkloadRowDto" },
+            "description": "Active members (and anyone else with planned work), then unassigned work."
+          }
+        },
+        "required": ["weeks", "rows"]
+      },
+      "WorkloadWeekDto": {
+        "description": "One week of a workload report.",
+        "type": "object",
+        "properties": {
+          "start": { "type": "string", "description": "Monday, `YYYY-MM-DD`." },
+          "end": { "type": "string", "description": "Sunday, `YYYY-MM-DD`." },
+          "available": {
+            "type": "number",
+            "description": "Working days that week (holidays excluded)."
+          }
+        },
+        "required": ["start", "end", "available"]
+      },
+      "WorkloadRowDto": {
+        "description": "One row of a workload report.",
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The person, or null for planned work nobody is assigned to."
+          },
+          "cells": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkloadCellDto" },
+            "description": "One cell per week, in the order of `weeks`."
+          }
+        },
+        "required": ["userId", "cells"]
+      },
+      "WorkloadCellDto": {
+        "description": "A person's (or the unassigned work's) week.",
+        "type": "object",
+        "properties": {
+          "planned": {
+            "type": "number",
+            "description": "Planned working days: each item's days that week times the share."
+          },
+          "load": {
+            "type": "number",
+            "nullable": true,
+            "description": "Planned ÷ available, or null when nothing is available that week."
+          },
+          "level": {
+            "allOf": [{ "$ref": "#/components/schemas/WorkloadLevel" }],
+            "description": "How loaded."
+          },
+          "entries": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkloadEntryDto" },
+            "description": "The items behind the number."
+          }
+        },
+        "required": ["planned", "load", "level", "entries"]
+      },
+      "WorkloadLevel": {
+        "description": "How loaded a person is in a week.",
+        "type": "string",
+        "enum": ["none", "ok", "high", "over"]
+      },
+      "WorkloadEntryDto": {
+        "description": "One item's part of a workload cell.",
+        "type": "object",
+        "properties": {
+          "item": {
+            "allOf": [{ "$ref": "#/components/schemas/ReportItemDto" }],
+            "description": "The item."
+          },
+          "days": {
+            "type": "number",
+            "description": "The item's working days in that week (half days count 0.5)."
+          },
+          "share": {
+            "type": "number",
+            "description": "The person's share in percent (100 for unassigned work)."
+          }
+        },
+        "required": ["item", "days", "share"]
+      },
+      "PlanHealthReportDto": {
+        "description": "Answer of `GET /projects/:id/reports/plan-health`.",
+        "type": "object",
+        "properties": {
+          "pastDue": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ReportItemDto" },
+            "description": "Unfinished items past their due date."
+          },
+          "conflicts": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PlanConflictDto" },
+            "description": "Items starting before their predecessors finish."
+          },
+          "sprint": {
+            "allOf": [{ "$ref": "#/components/schemas/SprintDto" }],
+            "nullable": true,
+            "description": "The active sprint, or null."
+          },
+          "undatedInSprint": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ReportItemDto" },
+            "description": "Stories and Tasks without dates in the active sprint."
+          },
+          "pinnedLate": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PinnedLateDto" },
+            "description": "Items held later by their pin than their predecessors require."
+          }
+        },
+        "required": ["pastDue", "conflicts", "sprint", "undatedInSprint", "pinnedLate"]
+      },
+      "PlanConflictDto": {
+        "description": "An item that starts before its predecessors finish.",
+        "type": "object",
+        "properties": {
+          "item": {
+            "allOf": [{ "$ref": "#/components/schemas/ReportItemDto" }],
+            "description": "The item."
+          },
+          "predecessors": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/ReportItemDto" },
+            "description": "Its visible predecessors that finish too late."
+          }
+        },
+        "required": ["item", "predecessors"]
+      },
+      "PinnedLateDto": {
+        "description": "An item whose pin holds it later than its predecessors require.",
+        "type": "object",
+        "properties": {
+          "item": {
+            "allOf": [{ "$ref": "#/components/schemas/ReportItemDto" }],
+            "description": "The item."
+          },
+          "pin": {
+            "allOf": [{ "$ref": "#/components/schemas/HalfDay" }],
+            "description": "The pin (\"start no earlier than\")."
+          },
+          "earliest": {
+            "allOf": [{ "$ref": "#/components/schemas/HalfDay" }],
+            "description": "The earliest start its visible predecessors allow."
+          }
+        },
+        "required": ["item", "pin", "earliest"]
+      },
+      "MyCalendarDto": {
+        "description": "Answer of `GET /me/calendar`.",
+        "type": "object",
+        "properties": {
+          "from": { "type": "string", "description": "First day asked for." },
+          "to": { "type": "string", "description": "Last day asked for." },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CalendarItemDto" },
+            "description": "Dated items assigned to the caller (and personal tasks) that touch the range."
+          },
+          "undated": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CalendarItemDto" },
+            "description": "Open undated items assigned to the caller, for \"Not on the calendar\" (at most 200)."
+          },
+          "projects": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CalendarProjectDto" },
+            "description": "The projects of the listed items."
+          },
+          "holidays": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/CalendarHolidayDto" },
+            "description": "Every active instance holiday and the listed projects' own holidays."
+          }
+        },
+        "required": ["from", "to", "items", "undated", "projects", "holidays"]
+      },
+      "CalendarItemDto": {
+        "description": "A work item placed on the My work calendar (M13).",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Item id." },
+          "number": { "type": "number", "description": "Per-project number." },
+          "key": { "type": "string", "description": "Display key." },
+          "projectId": { "type": "string", "description": "Project id." },
+          "type": {
+            "allOf": [{ "$ref": "#/components/schemas/ItemType" }],
+            "description": "Item type."
+          },
+          "title": { "type": "string", "description": "Title." },
+          "status": {
+            "allOf": [{ "$ref": "#/components/schemas/ItemStatus" }],
+            "description": "Status."
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`, or null."
+          },
+          "startSecondHalf": { "type": "boolean", "description": "Starts in the 2nd half." },
+          "dueDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`, or null."
+          },
+          "dueFirstHalf": { "type": "boolean", "description": "Finishes after the 1st half." },
+          "adHoc": { "type": "boolean", "description": "Ad hoc (M12)." },
+          "assigneeIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Assignee user ids."
+          },
+          "labelIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Label ids of the item's project."
+          },
+          "updatedAt": {
+            "type": "string",
+            "description": "The item's version, for the reschedule check."
+          },
+          "canPlan": { "type": "boolean", "description": "The caller may change its dates." }
+        },
+        "required": [
+          "id",
+          "number",
+          "key",
+          "projectId",
+          "type",
+          "title",
+          "status",
+          "startDate",
+          "startSecondHalf",
+          "dueDate",
+          "dueFirstHalf",
+          "adHoc",
+          "assigneeIds",
+          "labelIds",
+          "updatedAt",
+          "canPlan"
+        ]
+      },
+      "CalendarProjectDto": {
+        "description": "A project (or the personal space) with items on the My work calendar.",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Project id." },
+          "key": {
+            "type": "string",
+            "nullable": true,
+            "description": "Key, or null for the personal space."
+          },
+          "name": { "type": "string", "description": "Name." },
+          "autoMoveDependents": {
+            "type": "boolean",
+            "description": "Dependent items move without asking (M9)."
+          },
+          "useInstanceHolidays": {
+            "type": "boolean",
+            "description": "The project's calendar includes the instance holidays (M9.1)."
+          },
+          "canSwitch": {
+            "type": "boolean",
+            "description": "The caller may switch automatic moving on (PMs)."
+          }
+        },
+        "required": ["id", "key", "name", "autoMoveDependents", "useInstanceHolidays", "canSwitch"]
+      },
+      "CalendarHolidayDto": {
+        "description": "A holiday shaded on the My work calendar.",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The project it belongs to, or null for an instance holiday."
+          },
+          "name": { "type": "string", "description": "Name." },
+          "startDate": { "type": "string", "description": "First day." },
+          "endDate": { "type": "string", "description": "Last day." }
+        },
+        "required": ["projectId", "name", "startDate", "endDate"]
       },
       "NoteDto": {
         "description": "A note on a work item, from `GET …/items/:item/notes`.",
@@ -9442,13 +10170,13 @@
         "type": "string",
         "enum": [
           "description",
+          "type",
           "priority",
           "labelIds",
           "sprintId",
           "startDate",
           "dueDate",
           "title",
-          "type",
           "status",
           "assigneeIds",
           "parentId",
@@ -9468,13 +10196,13 @@
             "type": "object",
             "properties": {
               "description": { "type": "number" },
+              "type": { "type": "number" },
               "priority": { "type": "number" },
               "labelIds": { "type": "number" },
               "sprintId": { "type": "number" },
               "startDate": { "type": "number" },
               "dueDate": { "type": "number" },
               "title": { "type": "number" },
-              "type": { "type": "number" },
               "status": { "type": "number" },
               "assigneeIds": { "type": "number" },
               "parentId": { "type": "number" },
@@ -9590,12 +10318,12 @@
             "type": "string",
             "enum": [
               "description",
+              "type",
               "priority",
               "startDate",
               "dueDate",
               "sprint",
               "title",
-              "type",
               "status",
               "bucket",
               "team",

@@ -21,13 +21,15 @@ import { TrashJobs } from './trash-jobs.js';
 import { TrashService } from './trash.service.js';
 import { WorkController } from './work.controller.js';
 import { WorkService } from './work.service.js';
+import { ReportsService } from '../reports/reports.service.js';
 
 /**
  * Work items with their hierarchy, dependencies, team assignment, checklist
  * and bucket/status rules (SPEC §4, M3), plus a person's work across
  * projects (SPEC §6) and the project trash (M12). Every rule goes through
  * `ProjectAccessService` from `ProjectsModule`. Exports {@link ItemsService}
- * so notes and attachments find items through the same visibility filter.
+ * so notes and attachments find items through the same visibility filter,
+ * and the report calculations (M13), which the Excel export uses too.
  */
 @Module({
   imports: [
@@ -58,7 +60,8 @@ import { WorkService } from './work.service.js';
     TrashService,
     TrashJobs,
     ReferencesService,
+    ReportsService,
   ],
-  exports: [ItemsService, ReferencesService],
+  exports: [ItemsService, ReferencesService, ReportsService],
 })
 export class ItemsModule {}

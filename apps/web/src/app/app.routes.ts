@@ -140,6 +140,17 @@ export const routes: Routes = [
         children: [{ path: 'items/:number', loadComponent: itemDrawer }, ...NO_DRAWER],
       },
       {
+        // Project and personal calendar (SPEC §6.5, M13).
+        path: 'calendar',
+        loadComponent: () => import('./pages/calendar/calendar-page').then((m) => m.CalendarPage),
+        children: [{ path: 'items/:number', loadComponent: itemDrawer }, ...NO_DRAWER],
+      },
+      {
+        // Overview, Sprint, Workload and Plan health dashboards (SPEC §6.5, M13).
+        path: 'reports',
+        loadComponent: () => import('./pages/reports/reports-page').then((m) => m.ReportsPage),
+      },
+      {
         path: 'sprints',
         loadComponent: () => import('./pages/sprints/sprints').then((m) => m.SprintsPage),
       },

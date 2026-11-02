@@ -84,3 +84,26 @@ app-timeline {
     text-decoration: none;
   }
 }
+
+// The Who cell's shares and the Who menu's share buttons (M13). The menu
+// opens in an overlay, so these rules are not scoped under the timeline.
+.who-share {
+  margin: 0 var(--k-space-1) 0 calc(-1 * var(--k-space-1));
+  color: var(--k-muted);
+  font-size: var(--k-small);
+}
+
+.who-row {
+  display: flex;
+  align-items: center;
+  padding-right: var(--k-space-2);
+
+  > .mat-mdc-menu-item {
+    flex: 1;
+  }
+}
+
+// Room for the share buttons and the "Other %" field.
+.who-menu.mat-mdc-menu-panel {
+  max-width: none;
+}

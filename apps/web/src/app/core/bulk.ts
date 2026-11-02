@@ -6,6 +6,7 @@ import {
 } from '@kloister/shared';
 import { errorMessage } from './api';
 import { NONE } from './board-logic';
+import { shareOf, sharesOf, withShareFor } from './shares';
 
 // Backlog and timeline bulk edits (SPEC §6: set sprint, bucket or assignee
 // for many items; §6.4 adds status, priority, labels and adding an
@@ -24,7 +25,8 @@ export type BulkField =
   | 'status'
   | 'priority'
   | 'labelAdd'
-  | 'labelRemove';
+  | 'labelRemove'
+  | 'share';
 
 /** One request of a bulk edit. */
 export type BulkStep =
@@ -63,7 +65,7 @@ export interface BulkResult {
  * @param items Selected items.
  * @param field What to set.
  * @param value Sprint, bucket or user id, or {@link NONE} for "no sprint" /
- *   "unassigned".
+ *   "unassigned"; for `share`, `userId:percent` (M13).
  * @param rights What the caller may do.
  * @returns The requests to send and the items left out.
  */
@@ -118,6 +120,27 @@ export function planBulk(
                 ? item.labelIds.filter((id) => id !== value)
                 : [...item.labelIds, value],
             },
+          });
+        break;
+      }
+      case 'share': {
+        // One person's share on every row, adding them where they are not
+        // assigned yet (M13). Shares are part of the plan (M9.2).
+        const [person = '', percent = ''] = value.split(':');
+        const share = Number(percent);
+        const now = shareOf(item, person);
+        if (now === share) plan.unchanged.push(item);
+        else if (
+          !item.can.edit ||
+          (share !== 100 || now !== null ? !item.can.plan : false) ||
+          (now === null && person !== rights.userId && !rights.canAssignOthers(item.teamId))
+        )
+          plan.skipped.push(item);
+        else
+          plan.steps.push({
+            item,
+            kind: 'update',
+            request: { assignees: withShareFor(sharesOf(item), person, share) },
           });
         break;
       }

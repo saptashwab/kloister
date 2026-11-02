@@ -1,10 +1,12 @@
 import { HolidaysService } from '../holidays/holidays.service.js';
 import { timelineSheet, type TimelineSheetItem } from './snapshot-timeline.js';
+import { reportsSheet } from './snapshot-reports.js';
+import { ReportsService } from '../reports/reports.service.js';
 import { createHash } from 'node:crypto';
 import type { ReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { Injectable } from '@nestjs/common';
-import { inlineImagePath, type WorkItemDto } from '@kloister/shared';
+import { inlineImagePath, withShare, type WorkItemDto } from '@kloister/shared';
 import type { AuthContext } from '../auth/auth-context.js';
 import { invalidField } from '../common/api-exception.js';
 import { rewriteImages } from './snapshot-images.js';
@@ -34,6 +36,7 @@ export class SnapshotsService {
    * @param work My work eligibility reader.
    * @param files Independent authorized file bytes.
    * @param holidays The project's holidays for the Timeline sheet (M9.1).
+   * @param reports The dashboards for the Reports sheet (M13).
    */
   constructor(
     private readonly prisma: PrismaService,
@@ -42,6 +45,7 @@ export class SnapshotsService {
     private readonly work: WorkService,
     private readonly files: FileStoreService,
     private readonly holidays: HolidaysService,
+    private readonly reports: ReportsService,
   ) {}
 
   /**
@@ -275,7 +279,12 @@ export class SnapshotsService {
         item.type,
         item.ancestors.map((a) => `${a.key} ${a.title}`).join(' / '),
         row.assignees
-          .map((a) => `${a.projectMember.user.displayName} <${a.projectMember.user.email}>`)
+          .map((a) =>
+            withShare(
+              `${a.projectMember.user.displayName} <${a.projectMember.user.email}>`,
+              a.share,
+            ),
+          )
           .join('\n'),
         item.status,
         row.bucket?.name ?? '',
@@ -301,7 +310,9 @@ export class SnapshotsService {
           title: item.title,
           type: item.type,
           status: item.status,
-          assignees: row.assignees.map((a) => a.projectMember.user.displayName).join('\n'),
+          assignees: row.assignees
+            .map((a) => withShare(a.projectMember.user.displayName, a.share))
+            .join('\n'),
           sprint: row.sprint?.name ?? '',
           startDate: item.startDate,
           startSecondHalf: item.startSecondHalf,
@@ -418,6 +429,26 @@ export class SnapshotsService {
       tables['Timeline'] = { headers: sheet.headers, rows: sheet.rows, layout: sheet.layout };
       tables['Summary']?.rows.push(['Timeline plan', sheet.rows[0]?.[1] ?? '']);
       if (sheet.note !== null) tables['Summary']?.rows.push(['Timeline sheet', sheet.note]);
+    }
+    // Project workbooks (and personal spaces) get the Reports sheet (M13),
+    // computed like the dashboards from the reader's visible items.
+    if (project !== undefined) {
+      const projectOnly = project.project.ownerId === null;
+      const members = await this.prisma.projectMember.findMany({
+        where: { projectId: project.project.id },
+        select: { userId: true, user: { select: { displayName: true } } },
+      });
+      const names = new Map(members.map((m) => [m.userId, m.user.displayName]));
+      if (project.project.ownerId !== null) names.set(project.project.ownerId, 'Me');
+      tables['Reports'] = reportsSheet(
+        {
+          overview: await this.reports.overview(project),
+          workload: await this.reports.workload(project, {}),
+          sprint: projectOnly ? await this.reports.sprint(project, {}) : null,
+          health: projectOnly ? await this.reports.planHealth(project) : null,
+        },
+        names,
+      );
     }
     const workbook = await snapshotWorkbook(tables);
     if (query.offline !== true) return workbook;

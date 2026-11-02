@@ -361,7 +361,9 @@ the trash (`projectId, deletedAt`) and delete batches (`deleteBatchId`).
 ### `WorkItemAssignee`
 
 An item's assignees. The composite key references `ProjectMember(projectId, userId)`, so only
-project members can be assigned and leaving the project removes the assignment.
+project members can be assigned and leaving the project removes the assignment. `share` (M13) is the
+person's part of the item's work in percent, 100 by default; a database check keeps it between 5
+and 100 in steps of 5. The workload report multiplies an item's working days by it.
 
 ### `WorkItemDependency`
 

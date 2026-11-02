@@ -119,6 +119,48 @@ export const ITEM_DESCRIPTION_MAX = 100_000;
 /** Most assignees one item can have. */
 export const MAX_ASSIGNEES = 20;
 
+/** Smallest assignee share in percent (M13). */
+export const SHARE_MIN = 5;
+
+/** Largest assignee share in percent, and the share of every new assignment (M13). */
+export const SHARE_MAX = 100;
+
+/** Shares go in steps of this many percent (M13). */
+export const SHARE_STEP = 5;
+
+/**
+ * Reports whether a number is an accepted assignee share (M13): 5 to 100 in
+ * steps of 5.
+ *
+ * @param share Percent.
+ * @returns True when valid.
+ */
+export function isValidShare(share: number): boolean {
+  return (
+    Number.isInteger(share) && share >= SHARE_MIN && share <= SHARE_MAX && share % SHARE_STEP === 0
+  );
+}
+
+/**
+ * A person's name with their share when it is not 100%, as exports list
+ * assignees (M13).
+ *
+ * @param name Display name (or name and email).
+ * @param share Percent.
+ * @returns E.g. "Bo (25%)", or the name alone at 100%.
+ */
+export function withShare(name: string, share: number): string {
+  return share === SHARE_MAX ? name : `${name} (${share}%)`;
+}
+
+/** One assignee and their share of the item's work (M13). */
+export interface AssigneeShareDto {
+  /** User id of a project member. */
+  userId: string;
+  /** Percent of the item's work, 5 to 100 in steps of 5. */
+  share: number;
+}
+
 /** Most labels one item can have. */
 export const MAX_ITEM_LABELS = 50;
 
@@ -243,6 +285,8 @@ export interface WorkItemDto {
   createdById: string;
   /** Assignee user ids. */
   assigneeIds: string[];
+  /** Every assignee with their share, in the order of `assigneeIds` (M13). */
+  assigneeShares: AssigneeShareDto[];
   /** Label ids. */
   labelIds: string[];
   /** Checklist progress, e.g. 3 of 7. */
@@ -321,8 +365,10 @@ export interface CreateItemRequest {
   dueFirstHalf?: boolean;
   /** `HH:MM` on the due date; needs a due date. */
   dueTime?: string | null;
-  /** Assignees: project members. */
+  /** Assignees: project members, each with a share of 100%. */
   assigneeIds?: string[];
+  /** Assignees with their shares (M13); instead of `assigneeIds`, not with it. */
+  assignees?: AssigneeShareDto[];
   /** Labels of the project. */
   labelIds?: string[];
 }
@@ -364,8 +410,16 @@ export interface UpdateItemRequest {
   dueFirstHalf?: boolean;
   /** New due time `HH:MM`, or null; needs a due date. */
   dueTime?: string | null;
-  /** The full new assignee list. */
+  /**
+   * The full new assignee list. People who stay keep their share; new ones
+   * get 100%.
+   */
   assigneeIds?: string[];
+  /**
+   * The full new assignee list with shares (M13); instead of `assigneeIds`,
+   * not with it. Changing a share changes the plan (M9.2 plan setting).
+   */
+  assignees?: AssigneeShareDto[];
   /** The full new label list. */
   labelIds?: string[];
 }

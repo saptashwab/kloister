@@ -1,5 +1,70 @@
 # Decisions
 
+## M13 reports, workload with assignee shares, and the calendar (2026-11-03)
+
+- Built as planned in docs/M13-PLAN.md (owner decisions in its section 7). Choices made while building,
+  closest to the plan:
+- Shares on the wire: create and update take `assignees: [{ userId, share }]` as well as `assigneeIds`;
+  sending both is 400. Plain ids keep the shares of people who stay and give new people 100%, so older
+  clients never reset a share. Responses carry `assigneeShares` (every assignee, in `assigneeIds` order).
+  The migration adds the column with a database check (5–100 in steps of 5); the web app rounds typed
+  values to a step of 5. Duplicated items start at 100%.
+- Share rule: changing a share, or adding someone at a share other than 100%, is a plan change
+  (`canPlanItem`, M9.2/M9.3); adding or removing people at 100% stays an assignment change. Share changes
+  are recorded as `assigneeShares: { from, to }` (by user id; `from` is null for someone new) in the
+  ordinary `ITEM_UPDATED` entry, so they are announced live and shown in the activity history.
+- Where shares are set: the drawer's assignee list (inline 100 · 75 · 50 · 25 buttons and a visible "Other %"
+  field for any other share, added at the owner's request so custom shares are discoverable; a typed share
+  shows highlighted in that field, ← → and digits while it is open, and
+  share badges under it that cycle with Undo), the timeline's Who menu and Who text (typing opens the text
+  editor, Enter or a double click the menu) and the selection's More… › Share… (a person, then 100, 75, 50,
+  25 or 10%; it adds the person where they are missing, under the assignment rule). The board has no
+  assignee list of its own (cards open the drawer, `a` jumps to its list), and the bulk "Assign" pickers
+  choose one person, so they gained no share buttons. Cards show "25%" beside the avatar instead of in the
+  avatar's hover card: the avatar is part of the first page, which stays under the unchanged 500 kB budget.
+- Reports are computed in the API (`ReportsService`, provided by `ItemsModule` so the Excel export uses the
+  same code) from `ItemsService.scoped()`, with links only when both ends are visible and history read only
+  for visible items. "Today" is server time, as for the due-date job. Workload counts items with both
+  dates (one-date items are not spread), the current week as a whole week, and lists active non-Viewer
+  members (and anyone else with planned work) before unassigned work; in a personal space all work is the
+  owner's at 100%. Plan health's "without dates" means missing a start or a due date; Bugs are not in that
+  list (the plan names Stories and Tasks).
+- Sprint additions count from the sprint's `SPRINT_STARTED` entry (or its first day at 00:00 UTC) and come
+  from `ITEM_UPDATED` and `SPRINT_FOLLOWED` history. Accepted limits: closing a sprint moves unfinished
+  items without per-item history, so a closed sprint's burndown does not show items moved out at the
+  close; a reopened item counts as remaining from its creation, since only the current completion time is
+  kept.
+- Reports refresh from the project store (items, sprints, links; holiday and other project events reload
+  it) at most once every two seconds. Charts are plain SVG built from `report-charts.ts`; every chart has a
+  table (the burndown's in a "Numbers" disclosure). Tiles open the board with `?due=`, `?sprint=` or
+  `?assignee=` (the board gained the last two as inputs).
+- Calendars: a drag moves the due date by the days between the grabbed and the dropped day, and
+  `moveFinishTo()` moves the start so the working duration stays; a weekend or holiday finish moves back to
+  the previous working day. Project items go through `RescheduleFlow`, which now also takes a target (the
+  My work calendar passes the item's project); ad-hoc items and personal spaces have no timeline, so they
+  save the dates with an item update and Undo. The My work calendar shades instance holidays and the
+  projects' own holidays (named with the project) and has no sprint bands; `GET /me/calendar` covers at most
+  100 days and lists at most 200 undated items. Calendar drawers open under `/p/:key/calendar/items/:n`.
+- The Excel Reports sheet (projects and personal spaces) lists each dashboard's numbers, one per row, for
+  all of the reader's visible items whatever the export's filters. The ADO description footer adds shares
+  to its existing "Local assignees" line; the Assigned To column is unchanged.
+- Independent review (fresh context): two database tests expected the wrong outcome (a Viewer's PATCH is 403
+  at the route guard; the history check needed a share-only change); both fixed. Also fixed: the My work
+  calendar now gets every active holiday of its projects (not only those in the shown range) and each
+  project's `useInstanceHolidays`, so moves keep the right working days; a personal space's calendar
+  shades the instance holidays its workload counts; a keyboard move that redraws the item in another week
+  keeps focus and its preview; the calendar releases its "moving" hold when it closes; Plan health lists a
+  pin only when visible dated predecessors would allow an earlier start; Undo restores shares only for
+  callers who may change them (others get people back at 100%); the drawer's Keep mine/Use theirs check
+  covers share changes; "My items" on the calendar means assigned to me. More permission rows: BUCKETS and
+  TEAMS scopes, archived projects, an administrator's audited visit, personal tasks on the calendar.
+  Left as they are: the "Done in the last 14 days" and "Open ad-hoc items" tiles open the backlog
+  without a filter (the backlog has none for them); the burndown's ideal line before a sprint's first day
+  starts from all items that touched the sprint.
+- Bundle: a `@defer` block added Angular's defer runtime (about 7 kB) to the first page, so the My work
+  calendar is an ordinary import of the lazy My work page. The initial bundle shows 500.00 kB without a
+  warning under the unchanged budget.
+
 ## M12 items in and out of the plan, trash and item references (2026-11-03)
 
 - Built as planned in docs/M12-PLAN.md (owner decisions in its section 8). Choices made while building,

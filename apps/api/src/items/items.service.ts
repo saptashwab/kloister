@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
+  type AssigneeShareDto,
   type AuditEntryDto,
   AuditAction,
   type DeleteItemResult,
@@ -15,6 +16,7 @@ import {
   NotificationType,
   type Page,
   requiresBucket,
+  SHARE_MAX,
   SprintState,
   startsAfterFinish,
   type WorkItemDetailDto,
@@ -313,7 +315,8 @@ export class ItemsService {
   ): Promise<WorkItemDetailDto> {
     const projectId = access.project.id;
     const teamId = dto.teamId ?? null;
-    const assigneeIds = dto.assigneeIds ?? [];
+    const wanted = requestedAssignees(dto, []);
+    const assigneeIds = wanted.map((a) => a.userId);
     if (access.project.ownerId !== null && (assigneeIds.length > 0 || teamId !== null))
       throw invalidField(
         'assigneeIds',
@@ -423,7 +426,7 @@ export class ItemsService {
           completedAt: status === ItemStatus.DONE ? new Date() : null,
         },
       });
-      await setAssignees(tx, projectId, item.id, [], assigneeIds);
+      await setAssignees(tx, projectId, item.id, [], wanted);
       await setLabels(tx, projectId, item.id, [], dto.labelIds ?? []);
       if (description.includes('data-ref')) await this.references.sync(tx, item.id);
       await this.record(tx, auth, access, AuditAction.ITEM_CREATED, item.id, {
@@ -500,10 +503,17 @@ export class ItemsService {
         changes[field] = { from, to };
       };
 
+      const beforeShares = current.assignees.map((a) => ({ userId: a.userId, share: a.share }));
+      const before = beforeShares.map((a) => a.userId);
+      const wanted = requestedAssignees(dto, beforeShares);
+      const after = wanted.map((a) => a.userId);
+      const shares = changedShares(beforeShares, wanted);
+
       // Permission-type rules first, so a forbidden change is a 403 even if
-      // other fields are invalid.
+      // other fields are invalid. A share shapes the workload, so changing one
+      // is a plan change (M13).
       if (
-        plansChange(current, dto, options) &&
+        (plansChange(current, dto, options) || shares !== null) &&
         !this.access.canPlanItem(access, itemFacts(current))
       )
         throw forbidden(PLAN_LEADS_ONLY);
@@ -511,8 +521,6 @@ export class ItemsService {
       if (!this.access.canSetTeam(access, current.teamId, teamId, false)) {
         throw forbidden('You cannot move items into or out of this team');
       }
-      const before = current.assignees.map((a) => a.userId);
-      const after = dto.assigneeIds ?? before;
       if (access.project.ownerId !== null && (after.length > 0 || teamId !== null))
         throw invalidField('assigneeIds', 'Personal tasks cannot have assignments or teams');
       const touched = [
@@ -693,14 +701,15 @@ export class ItemsService {
           }
         }
       }
-      if (touched.length > 0) {
+      if (touched.length > 0 || shares !== null) {
         await assertMembers(
           tx,
           projectId,
           after.filter((id) => !before.includes(id)),
         );
-        await setAssignees(tx, projectId, current.id, before, after);
-        note('assigneeIds', before, after);
+        await setAssignees(tx, projectId, current.id, beforeShares, wanted);
+        if (touched.length > 0) note('assigneeIds', before, after);
+        if (shares !== null) note('assigneeShares', shares.from, shares.to);
       }
       if (dto.labelIds !== undefined) {
         const labelsBefore = current.labels.map((l) => l.labelId);
@@ -1600,33 +1609,89 @@ export function assertHalfOrder(
 }
 
 /**
- * Replaces an item's assignees.
+ * The assignee list a create or update asks for (M13): `assignees` with
+ * shares, or `assigneeIds`, where people who stay keep their share and new
+ * ones get 100%. Neither keeps the current list.
+ *
+ * @param dto The request.
+ * @param current The item's assignees now (none for a new item).
+ * @returns The wanted assignees, in request order.
+ */
+function requestedAssignees(
+  dto: Pick<CreateItemDto, 'assigneeIds' | 'assignees'>,
+  current: readonly AssigneeShareDto[],
+): AssigneeShareDto[] {
+  if (dto.assignees !== undefined && dto.assigneeIds !== undefined)
+    throw invalidField('assignees', 'Send assignees or assigneeIds, not both');
+  if (dto.assignees !== undefined)
+    return dto.assignees.map((a) => ({ userId: a.userId, share: a.share }));
+  if (dto.assigneeIds === undefined) return [...current];
+  return dto.assigneeIds.map((userId) => ({
+    userId,
+    share: current.find((a) => a.userId === userId)?.share ?? SHARE_MAX,
+  }));
+}
+
+/**
+ * The share changes between two assignee lists (M13): people who stay with a
+ * new share, and new people with a share other than 100%. Adding someone at
+ * 100% or removing them is an assignment change, not a share change.
+ *
+ * @param before Current assignees.
+ * @param after Wanted assignees.
+ * @returns The changed shares by user id, or null when none changed.
+ */
+function changedShares(
+  before: readonly AssigneeShareDto[],
+  after: readonly AssigneeShareDto[],
+): { from: Record<string, number | null>; to: Record<string, number> } | null {
+  const from: Record<string, number | null> = {};
+  const to: Record<string, number> = {};
+  for (const wanted of after) {
+    const now = before.find((a) => a.userId === wanted.userId)?.share;
+    if (now === wanted.share || (now === undefined && wanted.share === SHARE_MAX)) continue;
+    from[wanted.userId] = now ?? null;
+    to[wanted.userId] = wanted.share;
+  }
+  return Object.keys(to).length === 0 ? null : { from, to };
+}
+
+/**
+ * Replaces an item's assignees and their shares.
  *
  * @param db Transaction client.
  * @param projectId Project id.
  * @param itemId Item id.
- * @param before Current assignee ids.
- * @param after New assignee ids.
+ * @param before Current assignees.
+ * @param after New assignees.
  * @returns Resolves once written.
  */
 async function setAssignees(
   db: DbClient,
   projectId: string,
   itemId: string,
-  before: readonly string[],
-  after: readonly string[],
+  before: readonly AssigneeShareDto[],
+  after: readonly AssigneeShareDto[],
 ): Promise<void> {
-  const removed = before.filter((id) => !after.includes(id));
-  const added = after.filter((id) => !before.includes(id));
+  const removed = before.filter((a) => !after.some((b) => b.userId === a.userId));
+  const added = after.filter((a) => !before.some((b) => b.userId === a.userId));
   if (removed.length > 0) {
     await db.workItemAssignee.deleteMany({
-      where: { workItemId: itemId, userId: { in: removed } },
+      where: { workItemId: itemId, userId: { in: removed.map((a) => a.userId) } },
     });
   }
   if (added.length > 0) {
     await db.workItemAssignee.createMany({
-      data: added.map((userId) => ({ workItemId: itemId, projectId, userId })),
+      data: added.map((a) => ({ workItemId: itemId, projectId, userId: a.userId, share: a.share })),
     });
+  }
+  for (const wanted of after) {
+    const now = before.find((a) => a.userId === wanted.userId);
+    if (now !== undefined && now.share !== wanted.share)
+      await db.workItemAssignee.updateMany({
+        where: { workItemId: itemId, userId: wanted.userId },
+        data: { share: wanted.share },
+      });
   }
 }
 

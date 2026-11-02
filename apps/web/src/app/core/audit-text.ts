@@ -43,6 +43,7 @@ const FIELD_LABELS: Record<string, string> = {
   sprintId: 'Sprint',
   teamId: 'Team',
   assigneeIds: 'Assignees',
+  assigneeShares: 'Shares',
   labelIds: 'Labels',
   isActive: 'Active',
   systemRole: 'System role',

@@ -20,7 +20,7 @@ import type { ItemFacts } from '../projects/project-access.service.js';
 export function itemInclude(scope: Prisma.WorkItemWhereInput) {
   return {
     assignees: {
-      select: { userId: true },
+      select: { userId: true, share: true },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     },
     labels: { select: { labelId: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
@@ -132,6 +132,7 @@ export function toItemDto(
     position: row.position,
     createdById: row.createdById,
     assigneeIds: row.assignees.map((a) => a.userId),
+    assigneeShares: row.assignees.map((a) => ({ userId: a.userId, share: a.share })),
     labelIds: row.labels.map((l) => l.labelId),
     checklist: {
       done: row.checklist.filter((c) => c.done).length,

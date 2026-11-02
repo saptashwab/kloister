@@ -89,11 +89,12 @@ kloister/
 | Action | PM | Lead | Member | Viewer |
 |---|---|---|---|---|
 | View items (within visibility scope) | ✔ | ✔ | ✔ | ✔ |
+| Reports and calendars of visible items (M13) | ✔ | ✔ | ✔ | ✔ |
 | Create items | ✔ | ✔ | ✔ | ✘ |
 | Duplicate fully visible items within the same space | ✔ | ✔ | ✔ | ✘ |
 | Edit any item | ✔ | ✔ | ✘ | ✘ |
 | Edit items assigned to or created by self | ✔ | ✔ | ✔ | ✘ |
-| Change the plan of existing items: title, type, parent, sprint, dates, half days, pin, dependencies | ✔ | ✔ | Own unscheduled items; own/assigned when the project setting allows (default off) | ✘ |
+| Change the plan of existing items: title, type, parent, sprint, dates, half days, pin, dependencies, assignee shares (M13) | ✔ | ✔ | Own unscheduled items; own/assigned when the project setting allows (default off) | ✘ |
 | Assign items to others | ✔ | ✔ | Project setting (default off) | ✘ |
 | Move cards between buckets | ✔ | ✔ | Own/assigned only | ✘ |
 | Delete items (to the project's trash, M12) | ✔ | ✔ | Own created, no children; once scheduled only when the project setting allows (default off) | ✘ |
@@ -123,7 +124,8 @@ A Member who may not change an item's plan can suggest a change: it is posted as
 mentions the project's PMs and Leads, who are notified as for any mention.
 
 Sprints and ad-hoc items (M12): changing a sprint or making an item ad hoc (or planning it again) is a plan
-change under the plan setting. Anyone who may create items may create ad-hoc items. Team Leads restore their
+change under the plan setting. Assignee shares (M13) are too: changing a share, or adding someone at a share
+other than 100%, needs the plan rule; adding yourself at 100% still follows the assignment rule. Anyone who may create items may create ad-hoc items. Team Leads restore their
 team's single items as they delete them. The trash lists only items the reader could see.
 
 Duplication requires the ordinary create permission, full visibility of the source and the normal creation,
@@ -274,7 +276,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   From M8.5 each row shows open items, overdue items and last activity counted within the caller's visibility; rows an
   admin sees only through All projects show no counts and are not read.
 - **My work** (sidebar): everything assigned to the signed-in user across their unarchived projects, limited by their
-  access in each, plus all open items of their personal space.
+  access in each, plus all open items of their personal space. A Calendar view (M13, 6.5) shows the same items on
+  their dates.
   - List view (default) grouped by due date: Overdue, Today, This week, Later, No date.
   - Board view with the four statuses as columns (Not started, In progress, Blocked, Done). Buckets are per project and
     are never merged or mapped across projects; each card shows its project (or "Personal") and its bucket as a tag.
@@ -289,7 +292,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - columns are buckets, with a Group-by switch: Bucket (default), Status, Assignee, Sprint
   - drag-drop between and within columns
   - filters: assignee, label, sprint, type, due (overdue / this week), text search
-  - cards show type icon, key-number, title, labels, assignee avatars (initials), due date and optional due time (red if overdue), checklist progress
+  - cards show type icon, key-number, title, labels, assignee avatars (initials, with the share beside those below
+    100%, M13), due date and optional due time (red if overdue), checklist progress
   - an item with a due time is overdue once that time has passed; one without a time, from the day after its due date.
     Within one due day, timed items sort first, earliest first, then untimed items, then by priority (M8.5)
   - labels use the project's label style (solid by default; tinted or cover bar), with text contrast chosen automatically
@@ -314,6 +318,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Sprints**: create and edit, set active, sprint board (the board filtered to one sprint), close sprint with an option to move unfinished items
   (an unfinished Story moves with its unfinished children of that sprint, M12)
 - **Timeline** (projects only, M9): plan grid and bars over the same items (6.4)
+- **Calendar** and **Reports** (M13): project tabs over the same items (6.5)
 - **Project settings** (PM), one tab each from M8.5 (General, Members, Teams, Buckets, Labels): general, members (role and visibility per member), teams (optional), buckets (with rules),
   labels, label style, statusToBucket map, ADO export settings, automatic moving of dependent items (6.4, M9),
   who changes the plan (3.2, M9.2), "New items start in" (M12), and a Trash tab for anyone who may delete (M12)
@@ -486,6 +491,34 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   arrow keys, and is remembered per browser. A narrowed table gets its own horizontal scrollbar while the bars
   keep theirs; vertical scrolling stays shared so rows line up, and moving the cell focus scrolls the table to
   the focused column. Double-click or Home fits every column again.
+
+### 6.5 Assignee shares, reports and calendars (M13)
+
+Detail and file plan: [docs/M13-PLAN.md](docs/M13-PLAN.md).
+
+- Shares: each assignment has a share of the item's work, 100% by default, 5–100% in steps of 5. It shows only
+  when not 100% ("Bo 25%"). It is set without dialogs: inline 100 · 75 · 50 · 25 buttons and an "Other %" field on each ticked person in
+  the drawer's and the timeline's assignee lists (← and → step, digits type any value), typed text in the
+  timeline Who cell (`Ann, Bo 25`), a click on a share badge in the drawer (25 → 50 → 100, with Undo), and the
+  timeline selection's "Share…". Shares follow the plan setting (3.2). The API takes `assignees` with shares
+  besides plain `assigneeIds` (which keep existing shares and give new people 100%); item responses carry
+  `assigneeShares`; Excel and ADO exports list shares where they list assignees ("Bo (25%)").
+- Reports (project tab, every member including Viewers): Overview (items by status, overdue, due this week,
+  done in the last 14 days, open items per bucket, open ad-hoc items), Sprint (progress, a burndown of
+  remaining working days, items added and removed after the start from item history, items due after the
+  sprint ends), Workload (people × 8 weeks: each dated, unfinished, planned item's working days in a week
+  × the person's share, against the week's working days; amber from 80%, red above 100%; a cell lists its
+  items; unassigned work has its own row) and Plan health (past due, starting before predecessors finish,
+  Stories and Tasks without dates in the active sprint, pins holding items later than needed). All numbers
+  come from the caller's visible items, computed in the API; charts are SVG with their numbers in tables;
+  an open report refreshes on live changes at most every 2 seconds; project Excel snapshots add a Reports
+  sheet. Personal spaces have Overview and Workload only.
+- Calendars: a project Calendar tab and a My work Calendar view, by month or week. Items show from start to
+  due (half days as half cells), Done dimmed, ad-hoc tagged, undated items listed beside it; holidays are
+  shaded and named and sprints shown as bands. Dragging an item to another day, or moving it with the arrow
+  keys (Enter saves, Escape cancels), moves its due date and its start so the working duration stays the
+  same, through the timeline's reschedule flow (plan setting, dependent moves, Undo). Filters: assignee,
+  type, label, sprint and "My items". At phone width it is an agenda by day. Both follow live updates.
 
 ## 7. ADO CSV transfers (M8; simplified in M8.1)
 

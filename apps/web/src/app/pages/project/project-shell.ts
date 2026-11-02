@@ -22,8 +22,8 @@ import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
 
 /**
  * Frame of one project (`/p/:key/…`, DESIGN §7): breadcrumb, project name,
- * "New item", tabs for the board, backlog, timeline (projects only), sprints
- * and settings, and the page itself. The header also shows who else is on
+ * "New item", tabs for the board, backlog, timeline (projects only),
+ * calendar, sprints, reports (M13) and settings, and the page itself. The header also shows who else is on
  * the project's pages and the live updates connection chip (M10); a member
  * removed while looking sees "project not found".
  *
@@ -165,7 +165,9 @@ export class ProjectShellPage {
     { path: '', label: 'Board', icon: 'board' },
     { path: 'backlog', label: 'Backlog', icon: 'backlog' },
     { path: 'timeline', label: 'Timeline', icon: 'timeline', projectOnly: true },
+    { path: 'calendar', label: 'Calendar', icon: 'calendar' },
     { path: 'sprints', label: 'Sprints', icon: 'sprints' },
+    { path: 'reports', label: 'Reports', icon: 'chart' },
     { path: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
@@ -253,7 +255,7 @@ export class ProjectShellPage {
       this.toast.show(`${item.key} created`);
       const tab = this.activeTab();
       await this.router.navigate(
-        tab === 'backlog' || tab === 'timeline'
+        tab === 'backlog' || tab === 'timeline' || tab === 'calendar'
           ? ['/p', project.key ?? 'personal', tab, 'items', item.number]
           : ['/p', project.key ?? 'personal', 'items', item.number],
       );

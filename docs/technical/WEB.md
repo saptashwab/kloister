@@ -29,11 +29,13 @@ Types and rules shared with the API (DTOs, permissions, the scheduling planner) 
 | `/login`, `/change-password`                           | Sign-in and the required password change                                |
 | `/p/:key`                                              | Board; `/p/:key/items/:number` opens the item drawer over it            |
 | `/p/:key/backlog`, `/p/:key/timeline`                  | Backlog tree and timeline, each with the same drawer route              |
+| `/p/:key/calendar`                                     | Calendar (M13), with the same drawer route                              |
 | `/p/:key/sprints`                                      | Sprints                                                                 |
+| `/p/:key/reports`                                      | Reports (M13): Overview, Sprint, Workload, Plan health (`?view=`)       |
 | `/p/:key/settings/:section`                            | Project settings tabs (general, members, teams, buckets, labels, trash) |
 | `/p/:key/ado`                                          | ADO transfer                                                            |
 | `/personal`                                            | The caller's personal space (`/p/personal`)                             |
-| `/work`, `/people/:userId`                             | My work, and another person's work in shared projects                   |
+| `/work`, `/people/:userId`                             | My work (list, board, calendar), and another person's work              |
 | `/notifications`                                       | Notifications                                                           |
 | `/settings`                                            | Account settings (name, password, theme)                                |
 | `/help`                                                | Help and FAQ                                                            |
@@ -109,7 +111,10 @@ styles warn above 4 kB and fail above 8 kB (`angular.json`). To stay inside:
 - dialogs used rarely (reschedule, conflict, keyboard help, command palette) are imported when
   first opened;
 - large page styles live in global stylesheets that load with their page (for example
-  `_timeline-*.scss`);
+  `_timeline-*.scss`, `_reports.scss`, `_calendar.scss`);
+- report and calendar API calls live in `core/reports-api.service.ts`, used only by those pages;
+- `@defer` blocks are avoided: their runtime would join the initial bundle, and every page is lazy
+  already;
 - `ThemeService` uses `HttpClient` directly instead of a larger client.
 
 ## Adding a screen

@@ -110,7 +110,7 @@ export const CONFLICT_FIELDS = {
   description: ['description'],
   status: ['status'],
   bucket: ['bucketId'],
-  assignees: ['assigneeIds'],
+  assignees: ['assigneeIds', 'assigneeShares'],
   labels: ['labelIds'],
   sprint: ['sprintId'],
   priority: ['priority'],

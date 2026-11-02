@@ -35,6 +35,7 @@ const FIELD_LABELS: Record<string, string> = {
   teamId: 'team',
   bucketId: 'bucket',
   assigneeIds: 'assignees',
+  assigneeShares: 'shares',
   labelIds: 'labels',
 };
 
@@ -95,6 +96,15 @@ function formatValue(field: string, value: unknown, names: ActivityNames): strin
       return isRecord(value)
         ? `${scalar(value['date'])}${value['second'] === true ? ', afternoon' : ''}`
         : 'none';
+    case 'assigneeShares':
+      // `{ userId: share }`, with null for someone not assigned before (M13).
+      if (!isRecord(value) || Object.keys(value).length === 0) return 'none';
+      return Object.entries(value)
+        .map(
+          ([id, share]) =>
+            `${name(id, names.member.bind(names), 'someone')} ${typeof share === 'number' ? `${share}%` : 'not assigned'}`,
+        )
+        .join(', ');
     case 'assigneeIds':
     case 'labelIds': {
       if (!Array.isArray(value) || value.length === 0) return 'none';

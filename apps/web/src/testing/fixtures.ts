@@ -102,6 +102,10 @@ export function makeItem(
     blockedBy: [],
     blocks: [],
     ...overrides,
+    // Assignees default to a share of 100% (M13).
+    assigneeShares:
+      overrides.assigneeShares ??
+      (overrides.assigneeIds ?? []).map((userId) => ({ userId, share: 100 })),
   };
 }
 

@@ -1,0 +1,170 @@
+// Calendars (M13): month and week grids of item spans, holidays, sprint
+// bands, the phone agenda and the "Not on the calendar" list. Loaded with
+// the calendar pages; scoped under the view.
+
+app-calendar-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-3);
+
+  .c-tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--k-space-2);
+    h2 {
+      margin: 0;
+      font-size: var(--k-title);
+    }
+  }
+
+  .c-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--k-space-4);
+    align-items: flex-start;
+  }
+
+  .c-grid {
+    flex: 999 1 var(--k-size-640px);
+    min-width: 0;
+    border: var(--k-line) solid var(--k-border);
+    border-radius: var(--k-radius-md);
+    overflow: hidden;
+  }
+  .c-dow,
+  .c-week {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+  .c-dow span {
+    padding: var(--k-space-1) var(--k-space-2);
+    color: var(--k-text-2);
+    font-size: var(--k-small);
+    font-weight: 600;
+  }
+  .c-week {
+    grid-template-rows: var(--k-size-22px) var(--k-size-18px) repeat(var(--lanes), auto) var(
+        --k-space-2
+      );
+    min-height: var(--k-size-96px);
+    border-top: var(--k-line) solid var(--k-border);
+  }
+  .week .c-week {
+    min-height: var(--k-size-320px);
+  }
+  .c-day {
+    grid-row: 1 / -1;
+    padding: var(--k-space-1) var(--k-space-2);
+    border-left: var(--k-line) solid var(--k-border);
+    font-size: var(--k-small);
+    &:first-child {
+      border-left: 0;
+    }
+    &.weekend,
+    &.out {
+      background: var(--k-sunken);
+    }
+    &.holiday {
+      background: repeating-linear-gradient(
+        135deg,
+        var(--k-sunken),
+        var(--k-sunken) var(--k-size-6px),
+        transparent var(--k-size-6px),
+        transparent var(--k-size-10px)
+      );
+    }
+    &.today .num {
+      padding: 0 var(--k-space-1);
+      border-radius: var(--k-radius-full);
+      background: var(--k-primary);
+      color: var(--k-on-primary);
+    }
+    &.drop {
+      outline: var(--k-focus-width) dashed var(--k-primary);
+      outline-offset: calc(-1 * var(--k-focus-width));
+    }
+  }
+  .c-hol {
+    display: inline-block;
+    max-width: calc(100% - var(--k-size-22px));
+    margin-left: var(--k-space-1);
+    vertical-align: top;
+    overflow: hidden;
+    color: var(--k-text-2);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .c-band {
+    grid-row: 2;
+    z-index: 1;
+    margin: var(--k-size-3px) var(--k-space-1) 0;
+    overflow: hidden;
+    border-radius: var(--k-radius-sm);
+    background: var(--k-primary-soft);
+    color: var(--k-primary-ink);
+    font-size: var(--k-small);
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 var(--k-space-1);
+  }
+
+  .c-item {
+    z-index: 2;
+    display: block;
+    min-width: 0;
+    margin: var(--k-size-3px) var(--k-space-1) 0;
+    padding: 0 var(--k-space-1);
+    overflow: hidden;
+    border: var(--k-line) solid var(--k-border-strong);
+    border-radius: var(--k-radius-sm);
+    background: var(--k-surface);
+    color: var(--k-text);
+    font: inherit;
+    font-size: var(--k-small);
+    line-height: 1.6;
+    text-align: left;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+    &.movable {
+      cursor: grab;
+      touch-action: none;
+    }
+    &.before {
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+      border-left-style: dashed;
+    }
+    &.after {
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+      border-right-style: dashed;
+    }
+    &.done {
+      opacity: 0.55;
+      text-decoration: line-through;
+    }
+    &.moving {
+      border-color: var(--k-primary);
+      box-shadow: var(--k-lift);
+    }
+  }
+  .c-tag {
+    margin-left: var(--k-space-1);
+    padding: 0 var(--k-space-1);
+    border-radius: var(--k-radius-sm);
+    background: var(--k-sunken);
+    color: var(--k-text-2);
+  }
+  .c-presence {
+    display: inline-block;
+    width: var(--k-size-7px);
+    height: var(--k-size-7px);
+    margin-right: var(--k-space-1);
+    border-radius: var(--k-radius-full);
+    background: var(--k-success);
+  }
+}

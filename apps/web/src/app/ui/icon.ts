@@ -39,6 +39,7 @@ export const ICONS = {
   chevronRight: 'M9 6l6 6-6 6',
   check: 'M5 12l5 5 9-10',
   calendar: 'M4 6h16v14H4zM4 10h16M9 3v4M15 3v4',
+  chart: 'M4 20h16M7 16v-5M12 16V6M17 16v-8',
   checklist: 'M4 4h16v16H4zM8 12l3 3 5-6',
   filter: 'M4 5h16l-6 8v6l-4-2v-4z',
   key: 'M14 10a4 4 0 1 0-4-4M10 6 3 13v4h4v-2h2v-2h2l1.5-1.5',

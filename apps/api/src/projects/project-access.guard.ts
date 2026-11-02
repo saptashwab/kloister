@@ -132,7 +132,7 @@ export class ProjectAccessGuard implements CanActivate {
     const access = await this.access.resolve(request.auth, ref, via);
     if (
       access.project.ownerId !== null &&
-      /\/(?:members|member-candidates|teams|export|ado|timeline|holidays|archive|unarchive)(?:\/|$)/.test(
+      /\/(?:members|member-candidates|teams|export|ado|timeline|holidays|archive|unarchive|reports\/sprint|reports\/plan-health)(?:\/|$)/.test(
         request.routeOptions.url ?? request.url,
       )
     ) {

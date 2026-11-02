@@ -1,5 +1,6 @@
 import {
   type AddDependencyRequest,
+  type AssigneeShareDto,
   CHECKLIST_TEXT_MAX,
   type CreateChecklistItemRequest,
   type CreateItemRequest,
@@ -13,10 +14,13 @@ import {
   type MoveItemRequest,
   PRIORITY_MAX,
   PRIORITY_MIN,
+  isValidShare,
+  SHARE_MAX,
+  SHARE_MIN,
   type UpdateChecklistItemRequest,
   type UpdateItemRequest,
 } from '@kloister/shared';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayUnique,
@@ -33,6 +37,7 @@ import {
   MaxLength,
   Min,
   ValidateBy,
+  ValidateNested,
 } from 'class-validator';
 import { IsCalendarDate, IsDueTime } from '../common/dates.js';
 import { Nullable, OmittableNotNull, queryBoolean, trim } from '../common/dto-helpers.js';
@@ -55,6 +60,27 @@ const IsUuidOrNone = (): PropertyDecorator =>
       defaultMessage: () => '$property must be a uuid or "none"',
     },
   });
+
+/** One assignee with their share of the item's work (M13). */
+export class AssigneeShareRequestDto implements AssigneeShareDto {
+  /** User id of a project member. */
+  @LowercaseUuid()
+  @IsUUID()
+  userId: string;
+
+  /** Percent of the item's work: 5 to 100 in steps of 5. */
+  @IsInt()
+  @Min(SHARE_MIN)
+  @Max(SHARE_MAX)
+  @ValidateBy({
+    name: 'isShare',
+    validator: {
+      validate: (value: unknown) => typeof value === 'number' && isValidShare(value),
+      defaultMessage: () => '$property must be 5 to 100 in steps of 5',
+    },
+  })
+  share: number;
+}
 
 /** Query string of `GET /projects/:id/items`. Every filter narrows the caller's scope further. */
 export class ListItemsQueryDto extends PageQueryDto {
@@ -226,7 +252,7 @@ export class CreateItemDto implements CreateItemRequest {
   @IsDueTime()
   dueTime?: string | null;
 
-  /** Assignees. */
+  /** Assignees, each with a share of 100%. */
   @OmittableNotNull()
   @IsArray()
   @ArrayMaxSize(MAX_ASSIGNEES)
@@ -234,6 +260,15 @@ export class CreateItemDto implements CreateItemRequest {
   @LowercaseUuid()
   @IsUUID('all', { each: true })
   assigneeIds?: string[];
+
+  /** Assignees with their shares (M13); instead of `assigneeIds`, not with it. */
+  @OmittableNotNull()
+  @IsArray()
+  @ArrayMaxSize(MAX_ASSIGNEES)
+  @ArrayUnique((a: AssigneeShareRequestDto) => a?.userId)
+  @ValidateNested({ each: true })
+  @Type(() => AssigneeShareRequestDto)
+  assignees?: AssigneeShareRequestDto[];
 
   /** Labels. */
   @OmittableNotNull()
@@ -325,7 +360,7 @@ export class UpdateItemDto implements UpdateItemRequest {
   @IsDueTime()
   dueTime?: string | null;
 
-  /** Full assignee list. */
+  /** Full assignee list; people who stay keep their share, new ones get 100%. */
   @OmittableNotNull()
   @IsArray()
   @ArrayMaxSize(MAX_ASSIGNEES)
@@ -333,6 +368,15 @@ export class UpdateItemDto implements UpdateItemRequest {
   @LowercaseUuid()
   @IsUUID('all', { each: true })
   assigneeIds?: string[];
+
+  /** Assignees with their shares (M13); instead of `assigneeIds`, not with it; changing a share is a plan change (M9.2). */
+  @OmittableNotNull()
+  @IsArray()
+  @ArrayMaxSize(MAX_ASSIGNEES)
+  @ArrayUnique((a: AssigneeShareRequestDto) => a?.userId)
+  @ValidateNested({ each: true })
+  @Type(() => AssigneeShareRequestDto)
+  assignees?: AssigneeShareRequestDto[];
 
   /** Full label list. */
   @OmittableNotNull()

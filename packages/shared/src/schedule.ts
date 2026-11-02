@@ -746,3 +746,99 @@ export function scheduleSpan(
     work,
   };
 }
+
+/**
+ * Adds calendar days to a date.
+ *
+ * @param date `YYYY-MM-DD`.
+ * @param days Days to add; negative moves back.
+ * @returns `YYYY-MM-DD`.
+ */
+export function addDays(date: string, days: number): string {
+  return dateOf(dayNumber(date) + days);
+}
+
+/**
+ * The Monday of a date's week.
+ *
+ * @param date `YYYY-MM-DD`.
+ * @returns `YYYY-MM-DD` of that week's Monday.
+ */
+export function mondayOf(date: string): string {
+  const day = dayNumber(date);
+  return dateOf(day - weekday(day));
+}
+
+/**
+ * Working days in a date range, holidays excluded.
+ *
+ * @param from First day, `YYYY-MM-DD`.
+ * @param to Last day, `YYYY-MM-DD`.
+ * @param cal Holidays; none by default.
+ * @returns Working days, e.g. 4.
+ */
+export function workingDaysIn(from: string, to: string, cal: WorkCalendar = NO_HOLIDAYS): number {
+  return Math.max(0, endSlot(to, false, cal) - startSlot(from, false, cal) + 1) / 2;
+}
+
+/**
+ * The working days of an item that fall within a date range (workload, M13),
+ * counting its halves. Items without both dates have none.
+ *
+ * @param dates The item's dates.
+ * @param from First day of the range.
+ * @param to Last day of the range.
+ * @param cal Holidays; none by default.
+ * @returns Working days, in steps of half a day.
+ */
+export function workingDaysWithin(
+  dates: ScheduleDates,
+  from: string,
+  to: string,
+  cal: WorkCalendar = NO_HOLIDAYS,
+): number {
+  if (dates.startDate === null || dates.dueDate === null) return 0;
+  const first = Math.max(
+    startSlot(dates.startDate, dates.startSecondHalf, cal),
+    startSlot(from, false, cal),
+  );
+  const last = Math.min(endSlot(dates.dueDate, dates.dueFirstHalf, cal), endSlot(to, false, cal));
+  return Math.max(0, last - first + 1) / 2;
+}
+
+/**
+ * Moves an item so it finishes on another day and keeps its working duration
+ * (calendar drag, M13). For an item with both dates, a finish on a weekend or
+ * holiday moves back to the previous working day. An item with one date moves
+ * that date to the day as it is; an undated item stays as it is.
+ *
+ * @param dates The item's dates.
+ * @param due The new finish day.
+ * @param cal Holidays; none by default.
+ * @returns The new dates.
+ */
+export function moveFinishTo(
+  dates: ScheduleDates,
+  due: string,
+  cal: WorkCalendar = NO_HOLIDAYS,
+): ScheduleDates {
+  if (dates.dueDate === null) {
+    return dates.startDate === null ? dates : { ...dates, startDate: due };
+  }
+  if (dates.startDate === null) return { ...dates, dueDate: due };
+  const halves = Math.max(
+    1,
+    endSlot(dates.dueDate, dates.dueFirstHalf, cal) -
+      startSlot(dates.startDate, dates.startSecondHalf, cal) +
+      1,
+  );
+  const end = endSlot(due, dates.dueFirstHalf, cal);
+  const finish = slotHalfDay(end, cal);
+  const start = slotHalfDay(end - halves + 1, cal);
+  return {
+    startDate: start.date,
+    startSecondHalf: start.second,
+    dueDate: finish.date,
+    dueFirstHalf: !finish.second,
+  };
+}

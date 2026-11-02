@@ -40,7 +40,9 @@ Every route of the Kloister API, generated from the code. The machine-readable d
 - [Admin holidays](#admin-holidays)
 - [Backups](#backups)
 - [Audit log](#audit-log)
+- [Calendar](#calendar)
 - [References](#references)
+- [Reports](#reports)
 - [Trash](#trash)
 - [Live update events](#live-update-events)
 - [Schemas](#schemas)
@@ -1215,6 +1217,12 @@ Lists visible items. Permissions: any member and admin, within scope.
         "position": 1024,
         "createdById": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
         "assigneeIds": ["6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f"],
+        "assigneeShares": [
+          {
+            "userId": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
+            "share": 100
+          }
+        ],
         "labelIds": [],
         "checklist": {
           "done": 0,
@@ -1307,6 +1315,12 @@ Example:
     "position": 1024,
     "createdById": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
     "assigneeIds": ["6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f"],
+    "assigneeShares": [
+      {
+        "userId": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
+        "share": 100
+      }
+    ],
     "labelIds": [],
     "checklist": {
       "done": 0,
@@ -1371,7 +1385,13 @@ Example:
 {
   "status": "IN_PROGRESS",
   "dueDate": "2026-11-12",
-  "dueTime": "15:00"
+  "dueTime": "15:00",
+  "assignees": [
+    {
+      "userId": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
+      "share": 50
+    }
+  ]
 }
 ```
 
@@ -3114,6 +3134,29 @@ Lists audit entries newest first, with optional filters.
 
 - Errors: 400, 401, 403 ([ApiError](#apierror))
 
+## Calendar
+
+The signed-in user's calendar under `/api/v1/me/calendar` (SPEC §6.5, M13).
+
+### GET /api/v1/me/calendar
+
+Lists the caller's items and holidays in a date range of at most 100 days. Permissions: any signed-in user; own visible items only.
+
+**Permission:** Any signed-in user.
+
+| Parameter | In    | Type   | Required | Description                                             |
+| --------- | ----- | ------ | -------- | ------------------------------------------------------- |
+| `from`    | query | string | yes      | First day (`YYYY-MM-DD`).                               |
+| `to`      | query | string | yes      | Last day (`YYYY-MM-DD`), at most 100 days after `from`. |
+
+**Responses**
+
+- **200** Success.
+
+  Type: [MyCalendarDto](#mycalendardto)
+
+- Errors: 400, 401, 403 ([ApiError](#apierror))
+
 ## References
 
 Item references in rich text (M12): previews for hover cards and the "Referenced in" list of an item.
@@ -3153,6 +3196,75 @@ Lists the visible items whose description or notes name this item. Permissions: 
   Type: [ItemReferrerDto](#itemreferrerdto)[]
 
 - Errors: 400, 401, 403, 404 ([ApiError](#apierror))
+
+## Reports
+
+Project reports under `/api/v1/projects/:id/reports` (SPEC §6.5, M13).
+
+### GET /api/v1/projects/{id}/reports/overview
+
+Counts the visible items by status, due date and bucket. Permissions: any member and admin (`VIEW_ITEMS`), visible items only.
+
+**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.
+
+**Responses**
+
+- **200** Success.
+
+  Type: [OverviewReportDto](#overviewreportdto)
+
+- Errors: 401, 403, 404 ([ApiError](#apierror))
+
+### GET /api/v1/projects/{id}/reports/sprint
+
+Reports on the active (or a chosen) sprint from visible items and their history. Permissions: any member and admin (`VIEW_ITEMS`), visible items only; personal spaces 404.
+
+**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.
+
+| Parameter | In    | Type          | Required | Description                                          |
+| --------- | ----- | ------------- | -------- | ---------------------------------------------------- |
+| `sprint`  | query | string (uuid) | no       | Sprint to report on; the active sprint when omitted. |
+
+**Responses**
+
+- **200** Success.
+
+  Type: [SprintReportDto](#sprintreportdto)
+
+- Errors: 400, 401, 403, 404 ([ApiError](#apierror))
+
+### GET /api/v1/projects/{id}/reports/workload
+
+Spreads visible planned work over people and weeks, by assignee share. Permissions: any member and admin (`VIEW_ITEMS`), visible items only.
+
+**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.
+
+| Parameter | In    | Type   | Required | Description                                                     |
+| --------- | ----- | ------ | -------- | --------------------------------------------------------------- |
+| `from`    | query | string | no       | A day in the first week (`YYYY-MM-DD`); this week when omitted. |
+| `weeks`   | query | number | no       | Number of weeks, 1 to 26; default 8.                            |
+
+**Responses**
+
+- **200** Success.
+
+  Type: [WorkloadReportDto](#workloadreportdto)
+
+- Errors: 400, 401, 403, 404 ([ApiError](#apierror))
+
+### GET /api/v1/projects/{id}/reports/plan-health
+
+Lists past-due items, timeline conflicts, undated sprint work and late pins. Permissions: any member and admin (`VIEW_ITEMS`), visible items and links only; personal spaces 404.
+
+**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.
+
+**Responses**
+
+- **200** Success.
+
+  Type: [PlanHealthReportDto](#planhealthreportdto)
+
+- Errors: 401, 403, 404 ([ApiError](#apierror))
 
 ## Trash
 
@@ -3395,6 +3507,13 @@ Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.m
 | ------------------ | --------------------- | -------- | ------------------------------------------------------------------------------ |
 | `moveUnfinishedTo` | string (uuid) or null | no       | Open sprint for unfinished items, null for the backlog, omitted to leave them. |
 
+### AssigneeShareRequestDto
+
+| Field    | Type          | Required | Description                                         |
+| -------- | ------------- | -------- | --------------------------------------------------- |
+| `userId` | string (uuid) | yes      | User id of a project member.                        |
+| `share`  | number        | yes      | Percent of the item's work: 5 to 100 in steps of 5. |
+
 ### CreateItemDto
 
 | Field             | Type                                                    | Required | Description                                                                                                                                       |
@@ -3414,29 +3533,31 @@ Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.m
 | `dueDate`         | string or null                                          | no       | Due date.                                                                                                                                         |
 | `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9).                                                                                                 |
 | `dueTime`         | string or null                                          | no       | Due time `HH:MM` on the due date.                                                                                                                 |
-| `assigneeIds`     | string (uuid)[]                                         | no       | Assignees.                                                                                                                                        |
+| `assigneeIds`     | string (uuid)[]                                         | no       | Assignees, each with a share of 100%.                                                                                                             |
+| `assignees`       | [AssigneeShareRequestDto](#assigneesharerequestdto)[]   | no       | Assignees with their shares (M13); instead of `assigneeIds`, not with it.                                                                         |
 | `labelIds`        | string (uuid)[]                                         | no       | Labels.                                                                                                                                           |
 
 ### UpdateItemDto
 
-| Field             | Type                                                    | Required | Description                                                                                |
-| ----------------- | ------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `type`            | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`     | no       | New type.                                                                                  |
-| `title`           | string                                                  | no       | New title.                                                                                 |
-| `description`     | string                                                  | no       | New description.                                                                           |
-| `parentId`        | string (uuid) or null                                   | no       | New parent, or null.                                                                       |
-| `status`          | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"` | no       | New status.                                                                                |
-| `priority`        | number                                                  | no       | New priority.                                                                              |
-| `sprintId`        | string (uuid) or null                                   | no       | New sprint, or null; never on Epics and Features. The Story's Tasks and Bugs follow (M12). |
-| `adHoc`           | boolean                                                 | no       | Make the item ad hoc, or plan it again (M12).                                              |
-| `teamId`          | string (uuid) or null                                   | no       | New team, or null.                                                                         |
-| `startDate`       | string or null                                          | no       | New start date, or null.                                                                   |
-| `startSecondHalf` | boolean                                                 | no       | Starts in the 2nd half of the start date (M9).                                             |
-| `dueDate`         | string or null                                          | no       | New due date, or null.                                                                     |
-| `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9).                                          |
-| `dueTime`         | string or null                                          | no       | New due time `HH:MM`, or null; needs a due date.                                           |
-| `assigneeIds`     | string (uuid)[]                                         | no       | Full assignee list.                                                                        |
-| `labelIds`        | string (uuid)[]                                         | no       | Full label list.                                                                           |
+| Field             | Type                                                    | Required | Description                                                                                                         |
+| ----------------- | ------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `type`            | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`     | no       | New type.                                                                                                           |
+| `title`           | string                                                  | no       | New title.                                                                                                          |
+| `description`     | string                                                  | no       | New description.                                                                                                    |
+| `parentId`        | string (uuid) or null                                   | no       | New parent, or null.                                                                                                |
+| `status`          | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"` | no       | New status.                                                                                                         |
+| `priority`        | number                                                  | no       | New priority.                                                                                                       |
+| `sprintId`        | string (uuid) or null                                   | no       | New sprint, or null; never on Epics and Features. The Story's Tasks and Bugs follow (M12).                          |
+| `adHoc`           | boolean                                                 | no       | Make the item ad hoc, or plan it again (M12).                                                                       |
+| `teamId`          | string (uuid) or null                                   | no       | New team, or null.                                                                                                  |
+| `startDate`       | string or null                                          | no       | New start date, or null.                                                                                            |
+| `startSecondHalf` | boolean                                                 | no       | Starts in the 2nd half of the start date (M9).                                                                      |
+| `dueDate`         | string or null                                          | no       | New due date, or null.                                                                                              |
+| `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9).                                                                   |
+| `dueTime`         | string or null                                          | no       | New due time `HH:MM`, or null; needs a due date.                                                                    |
+| `assigneeIds`     | string (uuid)[]                                         | no       | Full assignee list; people who stay keep their share, new ones get 100%.                                            |
+| `assignees`       | [AssigneeShareRequestDto](#assigneesharerequestdto)[]   | no       | Assignees with their shares (M13); instead of `assigneeIds`, not with it; changing a share is a plan change (M9.2). |
+| `labelIds`        | string (uuid)[]                                         | no       | Full label list.                                                                                                    |
 
 ### MoveItemDto
 
@@ -3990,6 +4111,7 @@ A work item as returned by list endpoints.
 | `position`                  | number                                      | yes      | Order within the bucket, ascending.                                                        |
 | `createdById`               | string                                      | yes      | Creator's user id.                                                                         |
 | `assigneeIds`               | string[]                                    | yes      | Assignee user ids.                                                                         |
+| `assigneeShares`            | [AssigneeShareDto](#assigneesharedto)[]     | yes      | Every assignee with their share, in the order of `assigneeIds` (M13).                      |
 | `labelIds`                  | string[]                                    | yes      | Label ids.                                                                                 |
 | `checklist`                 | object                                      | yes      | Checklist progress, e.g. 3 of 7.                                                           |
 | `checklist.done`            | number                                      | yes      |                                                                                            |
@@ -4024,6 +4146,15 @@ A reference to an item: enough to show it as a read-only title. Ancestors outsid
 Work item status; independent of the bucket (SPEC §4.2).
 
 One of `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`.
+
+### AssigneeShareDto
+
+One assignee and their share of the item's work (M13).
+
+| Field    | Type   | Required | Description                                         |
+| -------- | ------ | -------- | --------------------------------------------------- |
+| `userId` | string | yes      | User id of a project member.                        |
+| `share`  | number | yes      | Percent of the item's work, 5 to 100 in steps of 5. |
 
 ### ItemCapabilitiesDto
 
@@ -4071,6 +4202,7 @@ A work item with its checklist and dependencies, from `GET …/items/:item`.
 | `position`                  | number                                      | yes      | Order within the bucket, ascending.                                                        |
 | `createdById`               | string                                      | yes      | Creator's user id.                                                                         |
 | `assigneeIds`               | string[]                                    | yes      | Assignee user ids.                                                                         |
+| `assigneeShares`            | [AssigneeShareDto](#assigneesharedto)[]     | yes      | Every assignee with their share, in the order of `assigneeIds` (M13).                      |
 | `labelIds`                  | string[]                                    | yes      | Label ids.                                                                                 |
 | `checklist`                 | object                                      | yes      | Checklist progress, e.g. 3 of 7.                                                           |
 | `checklist.done`            | number                                      | yes      |                                                                                            |
@@ -4357,6 +4489,240 @@ A visible dependent item that stays where it is.
 Why a reached item was left where it is.
 
 One of `"NOT_EDITABLE"`, `"STARTED"`, `"PINNED"`.
+
+### OverviewReportDto
+
+Answer of `GET /projects/:id/reports/overview`.
+
+| Field                  | Type                                            | Required | Description                                                      |
+| ---------------------- | ----------------------------------------------- | -------- | ---------------------------------------------------------------- |
+| `today`                | string                                          | yes      | The day the report was computed for, server time (`YYYY-MM-DD`). |
+| `weekStart`            | string                                          | yes      | Monday of this week.                                             |
+| `weekEnd`              | string                                          | yes      | Sunday of this week.                                             |
+| `total`                | number                                          | yes      | Visible items.                                                   |
+| `byStatus`             | object                                          | yes      | Visible items per status.                                        |
+| `byStatus.NOT_STARTED` | number                                          | yes      |                                                                  |
+| `byStatus.IN_PROGRESS` | number                                          | yes      |                                                                  |
+| `byStatus.BLOCKED`     | number                                          | yes      |                                                                  |
+| `byStatus.DONE`        | number                                          | yes      |                                                                  |
+| `overdue`              | number                                          | yes      | Unfinished items past their due date (and time).                 |
+| `dueThisWeek`          | number                                          | yes      | Unfinished items due from today to Sunday, not yet overdue.      |
+| `doneRecently`         | number                                          | yes      | Items finished in the last 14 days.                              |
+| `openByBucket`         | [ReportBucketCountDto](#reportbucketcountdto)[] | yes      | Open items per bucket, in board order.                           |
+| `adHocOpen`            | number                                          | yes      | Open ad-hoc items.                                               |
+
+### ReportBucketCountDto
+
+Open items in one bucket.
+
+| Field      | Type           | Required | Description                                              |
+| ---------- | -------------- | -------- | -------------------------------------------------------- |
+| `bucketId` | string or null | yes      | Bucket id, or null for Epics and Features off the board. |
+| `name`     | string         | yes      | Bucket name, or "Off the board".                         |
+| `count`    | number         | yes      | Open (not Done) visible items in it.                     |
+
+### SprintReportDto
+
+Answer of `GET /projects/:id/reports/sprint`.
+
+| Field                | Type                                    | Required | Description                                                                     |
+| -------------------- | --------------------------------------- | -------- | ------------------------------------------------------------------------------- |
+| `sprint`             | [SprintDto](#sprintdto) or null         | yes      | The sprint shown: the chosen one, else the active one; null when there is none. |
+| `startedAt`          | string or null                          | yes      | When additions start counting: the sprint's start, or its first day.            |
+| `items`              | object                                  | yes      | Visible items in the sprint now, by done and not done.                          |
+| `items.done`         | number                                  | yes      |                                                                                 |
+| `items.remaining`    | number                                  | yes      |                                                                                 |
+| `days`               | object                                  | yes      | Working days of those items, by done and not done.                              |
+| `days.done`          | number                                  | yes      |                                                                                 |
+| `days.remaining`     | number                                  | yes      |                                                                                 |
+| `sprintDays`         | object                                  | yes      | Working days of the sprint, and how many of them have passed.                   |
+| `sprintDays.total`   | number                                  | yes      |                                                                                 |
+| `sprintDays.elapsed` | number                                  | yes      |                                                                                 |
+| `burndown`           | [BurndownPointDto](#burndownpointdto)[] | yes      | Remaining working days per working day of the sprint.                           |
+| `added`              | [SprintChangeDto](#sprintchangedto)[]   | yes      | Items that joined after the start, from item history.                           |
+| `removed`            | [SprintChangeDto](#sprintchangedto)[]   | yes      | Items that left after the start, from item history.                             |
+| `atRisk`             | [ReportItemDto](#reportitemdto)[]       | yes      | Unfinished items due after the sprint ends.                                     |
+
+### BurndownPointDto
+
+One day of a sprint burndown.
+
+| Field       | Type           | Required | Description                                                                                   |
+| ----------- | -------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `date`      | string         | yes      | `YYYY-MM-DD`, a working day of the sprint.                                                    |
+| `remaining` | number or null | yes      | Working days of unfinished items in the sprint at the end of that day; null for days to come. |
+| `ideal`     | number         | yes      | The straight line from the first day's total to zero.                                         |
+
+### SprintChangeDto
+
+An item that joined or left a sprint after it started.
+
+| Field  | Type                            | Required | Description                  |
+| ------ | ------------------------------- | -------- | ---------------------------- |
+| `item` | [ReportItemDto](#reportitemdto) | yes      | The item.                    |
+| `at`   | string                          | yes      | ISO timestamp of the change. |
+
+### ReportItemDto
+
+A visible item listed in a report.
+
+| Field         | Type                      | Required | Description                 |
+| ------------- | ------------------------- | -------- | --------------------------- |
+| `status`      | [ItemStatus](#itemstatus) | yes      | Status.                     |
+| `startDate`   | string or null            | yes      | `YYYY-MM-DD`, or null.      |
+| `dueDate`     | string or null            | yes      | `YYYY-MM-DD`, or null.      |
+| `assigneeIds` | string[]                  | yes      | Assignee user ids.          |
+| `id`          | string                    | yes      | Item id (uuid).             |
+| `number`      | number                    | yes      | Per-project number.         |
+| `key`         | string                    | yes      | Display key, e.g. `KLO-42`. |
+| `type`        | [ItemType](#itemtype)     | yes      | Item type.                  |
+| `title`       | string                    | yes      | Title.                      |
+
+### WorkloadReportDto
+
+Answer of `GET /projects/:id/reports/workload`.
+
+| Field   | Type                                  | Required | Description                                                               |
+| ------- | ------------------------------------- | -------- | ------------------------------------------------------------------------- |
+| `weeks` | [WorkloadWeekDto](#workloadweekdto)[] | yes      | The weeks, from the week of `from`.                                       |
+| `rows`  | [WorkloadRowDto](#workloadrowdto)[]   | yes      | Active members (and anyone else with planned work), then unassigned work. |
+
+### WorkloadWeekDto
+
+One week of a workload report.
+
+| Field       | Type   | Required | Description                                 |
+| ----------- | ------ | -------- | ------------------------------------------- |
+| `start`     | string | yes      | Monday, `YYYY-MM-DD`.                       |
+| `end`       | string | yes      | Sunday, `YYYY-MM-DD`.                       |
+| `available` | number | yes      | Working days that week (holidays excluded). |
+
+### WorkloadRowDto
+
+One row of a workload report.
+
+| Field    | Type                                  | Required | Description                                                 |
+| -------- | ------------------------------------- | -------- | ----------------------------------------------------------- |
+| `userId` | string or null                        | yes      | The person, or null for planned work nobody is assigned to. |
+| `cells`  | [WorkloadCellDto](#workloadcelldto)[] | yes      | One cell per week, in the order of `weeks`.                 |
+
+### WorkloadCellDto
+
+A person's (or the unassigned work's) week.
+
+| Field     | Type                                    | Required | Description                                                       |
+| --------- | --------------------------------------- | -------- | ----------------------------------------------------------------- |
+| `planned` | number                                  | yes      | Planned working days: each item's days that week times the share. |
+| `load`    | number or null                          | yes      | Planned ÷ available, or null when nothing is available that week. |
+| `level`   | [WorkloadLevel](#workloadlevel)         | yes      | How loaded.                                                       |
+| `entries` | [WorkloadEntryDto](#workloadentrydto)[] | yes      | The items behind the number.                                      |
+
+### WorkloadLevel
+
+How loaded a person is in a week.
+
+One of `"none"`, `"ok"`, `"high"`, `"over"`.
+
+### WorkloadEntryDto
+
+One item's part of a workload cell.
+
+| Field   | Type                            | Required | Description                                                 |
+| ------- | ------------------------------- | -------- | ----------------------------------------------------------- |
+| `item`  | [ReportItemDto](#reportitemdto) | yes      | The item.                                                   |
+| `days`  | number                          | yes      | The item's working days in that week (half days count 0.5). |
+| `share` | number                          | yes      | The person's share in percent (100 for unassigned work).    |
+
+### PlanHealthReportDto
+
+Answer of `GET /projects/:id/reports/plan-health`.
+
+| Field             | Type                                  | Required | Description                                                    |
+| ----------------- | ------------------------------------- | -------- | -------------------------------------------------------------- |
+| `pastDue`         | [ReportItemDto](#reportitemdto)[]     | yes      | Unfinished items past their due date.                          |
+| `conflicts`       | [PlanConflictDto](#planconflictdto)[] | yes      | Items starting before their predecessors finish.               |
+| `sprint`          | [SprintDto](#sprintdto) or null       | yes      | The active sprint, or null.                                    |
+| `undatedInSprint` | [ReportItemDto](#reportitemdto)[]     | yes      | Stories and Tasks without dates in the active sprint.          |
+| `pinnedLate`      | [PinnedLateDto](#pinnedlatedto)[]     | yes      | Items held later by their pin than their predecessors require. |
+
+### PlanConflictDto
+
+An item that starts before its predecessors finish.
+
+| Field          | Type                              | Required | Description                                    |
+| -------------- | --------------------------------- | -------- | ---------------------------------------------- |
+| `item`         | [ReportItemDto](#reportitemdto)   | yes      | The item.                                      |
+| `predecessors` | [ReportItemDto](#reportitemdto)[] | yes      | Its visible predecessors that finish too late. |
+
+### PinnedLateDto
+
+An item whose pin holds it later than its predecessors require.
+
+| Field      | Type                            | Required | Description                                        |
+| ---------- | ------------------------------- | -------- | -------------------------------------------------- |
+| `item`     | [ReportItemDto](#reportitemdto) | yes      | The item.                                          |
+| `pin`      | [HalfDay](#halfday)             | yes      | The pin ("start no earlier than").                 |
+| `earliest` | [HalfDay](#halfday)             | yes      | The earliest start its visible predecessors allow. |
+
+### MyCalendarDto
+
+Answer of `GET /me/calendar`.
+
+| Field      | Type                                        | Required | Description                                                                         |
+| ---------- | ------------------------------------------- | -------- | ----------------------------------------------------------------------------------- |
+| `from`     | string                                      | yes      | First day asked for.                                                                |
+| `to`       | string                                      | yes      | Last day asked for.                                                                 |
+| `items`    | [CalendarItemDto](#calendaritemdto)[]       | yes      | Dated items assigned to the caller (and personal tasks) that touch the range.       |
+| `undated`  | [CalendarItemDto](#calendaritemdto)[]       | yes      | Open undated items assigned to the caller, for "Not on the calendar" (at most 200). |
+| `projects` | [CalendarProjectDto](#calendarprojectdto)[] | yes      | The projects of the listed items.                                                   |
+| `holidays` | [CalendarHolidayDto](#calendarholidaydto)[] | yes      | Every active instance holiday and the listed projects' own holidays.                |
+
+### CalendarItemDto
+
+A work item placed on the My work calendar (M13).
+
+| Field             | Type                      | Required | Description                                   |
+| ----------------- | ------------------------- | -------- | --------------------------------------------- |
+| `id`              | string                    | yes      | Item id.                                      |
+| `number`          | number                    | yes      | Per-project number.                           |
+| `key`             | string                    | yes      | Display key.                                  |
+| `projectId`       | string                    | yes      | Project id.                                   |
+| `type`            | [ItemType](#itemtype)     | yes      | Item type.                                    |
+| `title`           | string                    | yes      | Title.                                        |
+| `status`          | [ItemStatus](#itemstatus) | yes      | Status.                                       |
+| `startDate`       | string or null            | yes      | `YYYY-MM-DD`, or null.                        |
+| `startSecondHalf` | boolean                   | yes      | Starts in the 2nd half.                       |
+| `dueDate`         | string or null            | yes      | `YYYY-MM-DD`, or null.                        |
+| `dueFirstHalf`    | boolean                   | yes      | Finishes after the 1st half.                  |
+| `adHoc`           | boolean                   | yes      | Ad hoc (M12).                                 |
+| `assigneeIds`     | string[]                  | yes      | Assignee user ids.                            |
+| `labelIds`        | string[]                  | yes      | Label ids of the item's project.              |
+| `updatedAt`       | string                    | yes      | The item's version, for the reschedule check. |
+| `canPlan`         | boolean                   | yes      | The caller may change its dates.              |
+
+### CalendarProjectDto
+
+A project (or the personal space) with items on the My work calendar.
+
+| Field                 | Type           | Required | Description                                                   |
+| --------------------- | -------------- | -------- | ------------------------------------------------------------- |
+| `id`                  | string         | yes      | Project id.                                                   |
+| `key`                 | string or null | yes      | Key, or null for the personal space.                          |
+| `name`                | string         | yes      | Name.                                                         |
+| `autoMoveDependents`  | boolean        | yes      | Dependent items move without asking (M9).                     |
+| `useInstanceHolidays` | boolean        | yes      | The project's calendar includes the instance holidays (M9.1). |
+| `canSwitch`           | boolean        | yes      | The caller may switch automatic moving on (PMs).              |
+
+### CalendarHolidayDto
+
+A holiday shaded on the My work calendar.
+
+| Field       | Type           | Required | Description                                                 |
+| ----------- | -------------- | -------- | ----------------------------------------------------------- |
+| `projectId` | string or null | yes      | The project it belongs to, or null for an instance holiday. |
+| `name`      | string         | yes      | Name.                                                       |
+| `startDate` | string         | yes      | First day.                                                  |
+| `endDate`   | string         | yes      | Last day.                                                   |
 
 ### NoteDto
 
@@ -4736,7 +5102,7 @@ Visible three-way field comparison; rendered as text, never trusted HTML.
 
 Transferable scalar fields. Missing columns preserve local values.
 
-One of `"description"`, `"priority"`, `"labelIds"`, `"sprintId"`, `"startDate"`, `"dueDate"`, `"title"`, `"type"`, `"status"`, `"assigneeIds"`, `"parentId"`, `"bucketId"`.
+One of `"description"`, `"type"`, `"priority"`, `"labelIds"`, `"sprintId"`, `"startDate"`, `"dueDate"`, `"title"`, `"status"`, `"assigneeIds"`, `"parentId"`, `"bucketId"`.
 
 ### AdoSummary
 
@@ -4747,13 +5113,13 @@ One-glance totals for Quick review.
 | `kinds`              | map of number | yes      | Rows per kind (create, update, link, unchanged, ...).  |
 | `fields`             | object        | yes      | Fields that will change, with how many rows each.      |
 | `fields.description` | number        | no       |                                                        |
+| `fields.type`        | number        | no       |                                                        |
 | `fields.priority`    | number        | no       |                                                        |
 | `fields.labelIds`    | number        | no       |                                                        |
 | `fields.sprintId`    | number        | no       |                                                        |
 | `fields.startDate`   | number        | no       |                                                        |
 | `fields.dueDate`     | number        | no       |                                                        |
 | `fields.title`       | number        | no       |                                                        |
-| `fields.type`        | number        | no       |                                                        |
 | `fields.status`      | number        | no       |                                                        |
 | `fields.assigneeIds` | number        | no       |                                                        |
 | `fields.parentId`    | number        | no       |                                                        |
@@ -4830,4 +5196,4 @@ One person on the subscribed project.
 | `userId` | string                                                                                                                                                                                                                                  | yes      | The person (a project member).                                     |
 | `itemId` | string or null                                                                                                                                                                                                                          | yes      | The item they have open, or null when only on the project's pages. |
 | `action` | `"viewing"`, `"editing"`, `"moving"`, `"noting"` or null                                                                                                                                                                                | yes      | What they are doing on that item; null without an item.            |
-| `field`  | `"description"`, `"priority"`, `"startDate"`, `"dueDate"`, `"sprint"`, `"title"`, `"type"`, `"status"`, `"bucket"`, `"team"`, `"parent"`, `"assignees"`, `"labels"`, `"dueTime"`, `"duration"`, `"checklist"`, `"dependencies"` or null | yes      | The field they are editing, with `editing` only.                   |
+| `field`  | `"description"`, `"type"`, `"priority"`, `"startDate"`, `"dueDate"`, `"sprint"`, `"title"`, `"status"`, `"bucket"`, `"team"`, `"parent"`, `"assignees"`, `"labels"`, `"dueTime"`, `"duration"`, `"checklist"`, `"dependencies"` or null | yes      | The field they are editing, with `editing` only.                   |

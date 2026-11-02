@@ -132,6 +132,25 @@ scheduled once it has a start or due date, a sprint, or a link or child the crea
 change that schedules it is the creator's last. Members still set all of these when creating an
 item. See [SECURITY.md](SECURITY.md#project-roles-and-permissions).
 
+## Shares, workload and calendar moves (M13)
+
+Each assignment has a share (5–100%, default 100). The workload report
+(`apps/api/src/reports/report-logic.ts`) takes every visible, dated (start and due), unfinished,
+non-ad-hoc item, counts its working days in each week with `workingDaysWithin()` (half days and the
+project's holidays included) and multiplies them by each assignee's share; unassigned work gets its
+own row. A week's available days are its working days (`workingDaysIn()`). Planned ÷ available is
+amber from 80% and red above 100%. Items with only one date are not counted.
+
+The calendars move an item with `moveFinishTo()`: the due date moves to the chosen day (back to
+the previous working day if it is a weekend or holiday) and the start follows so the working
+duration stays the same. The change then goes through the ordinary reschedule flow, so the plan
+setting, dependent moves and Undo apply as on the timeline. Ad-hoc items and personal spaces, which
+have no timeline, save the new dates with an item update.
+
+The sprint report's burndown sums the working days of the items that were in the sprint at the end
+of each working day and not yet finished; sprint membership is worked back from the items' history
+(`ITEM_UPDATED` and `SPRINT_FOLLOWED` entries), so additions count from when an item joined.
+
 ## Parent spans and plan totals
 
 Parents on the timeline show a summary bar from the earliest start to the latest finish of their

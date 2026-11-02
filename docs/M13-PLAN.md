@@ -1,7 +1,8 @@
 # M13: reports, workload with assignee shares, and the calendar
 
 Planning baseline: 2026-11-02. Status: approved in outline by the owner (2026-11-02), including the assignee
-share (one additive column). Owner decisions in section 7. Starts after M12 is committed.
+share (one additive column). Owner decisions in section 7. Implemented on 2026-11-03; choices made while
+building are in docs/DECISIONS.md (M13).
 
 ## 1. Goals
 

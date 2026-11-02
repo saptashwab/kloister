@@ -40,6 +40,7 @@ import { LabelPill } from '../../ui/label-pill';
 import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
 import { MatMenuModule } from '@angular/material/menu';
+import { WorkCalendar } from '../calendar/work-calendar';
 
 /** My work and all their work share readable list/status-board views (SPEC §6). */
 @Component({
@@ -61,6 +62,7 @@ import { MatMenuModule } from '@angular/material/menu';
     LabelPill,
     TypeIcon,
     StatusPill,
+    WorkCalendar,
   ],
   styleUrl: './work.scss',
   template: `
@@ -102,6 +104,9 @@ import { MatMenuModule } from '@angular/material/menu';
         >
           <mat-button-toggle value="list">List</mat-button-toggle
           ><mat-button-toggle value="board">Board</mat-button-toggle>
+          @if (isMe()) {
+            <mat-button-toggle value="calendar">Calendar</mat-button-toggle>
+          }
         </mat-button-toggle-group>
         @if (isMe()) {
           <mat-form-field
@@ -162,7 +167,9 @@ import { MatMenuModule } from '@angular/material/menu';
         >
         <button mat-button type="button" (click)="clear()">Clear filters</button>
       </div>
-      @if (error()) {
+      @if (view() === 'calendar' && isMe()) {
+        <app-work-calendar [filter]="filter()" [includeDone]="includeDone()" />
+      } @else if (error()) {
         <p class="k-alert" role="alert">{{ error() }}</p>
       } @else if (loading()) {
         <app-skeleton label="Loading work" />
@@ -323,8 +330,8 @@ export class WorkPage {
   private readonly toast = inject(ToastService);
   /** Optional person route parameter; /work uses the session identity. */
   readonly userId = input('');
-  /** Default list, with an optional status board. */
-  protected readonly view = signal<'list' | 'board'>('list');
+  /** Default list, with an optional status board and, for your own work, a calendar (M13). */
+  protected readonly view = signal<'list' | 'board' | 'calendar'>('list');
   /** Include finished tasks on request. */
   protected readonly includeDone = signal(false);
   /** Add tasks created by the selected person. */

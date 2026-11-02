@@ -43,6 +43,7 @@ const TASK = {
   position: 1024,
   createdById: PERSON,
   assigneeIds: [PERSON],
+  assigneeShares: [{ userId: PERSON, share: 100 }],
   labelIds: [],
   checklist: { done: 0, total: 0 },
   childCount: 0,
@@ -71,7 +72,12 @@ export const OPERATION_EXAMPLES: Record<string, OperationExample> = {
     response: { ...TASK, checklistItems: [], blockedBy: [], blocks: [] },
   },
   ItemsController_update: {
-    request: { status: 'IN_PROGRESS', dueDate: '2026-11-12', dueTime: '15:00' },
+    request: {
+      status: 'IN_PROGRESS',
+      dueDate: '2026-11-12',
+      dueTime: '15:00',
+      assignees: [{ userId: PERSON, share: 50 }],
+    },
   },
   TimelineController_reschedule: {
     request: {

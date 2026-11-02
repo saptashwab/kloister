@@ -162,6 +162,12 @@ Events (data types are in `packages/shared/src/live.ts` and the [API reference](
   card, the later drop wins and the earlier mover's toast offers **Put back**.
 - The notification count changes at once on `notification` events and its 60-second poll pauses
   while the stream is up. My work refetches quietly when the caller's items change.
+- Reports and calendars (M13) need no new events. Share changes are ordinary `ITEM_UPDATED` entries.
+  The project calendar draws from the project store, so it follows like the board; a drag holds its
+  item and shows "moving" presence. An open report reloads when the store's items, sprints or links
+  change (holiday and other project events reload the store), at most once every two seconds, and
+  says "Updated just now" when its numbers changed. The My work calendar reloads on the caller's
+  item events like the My work list.
 - An administrator on a cross-project visit gets no live updates for that project; the page shows
   changes after a reload.
 

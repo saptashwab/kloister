@@ -57,6 +57,8 @@ import { PageActions } from '../../core/page-actions';
 import { changedFields, CONFLICT_FIELDS, personName, personWithRole } from '../../core/live-logic';
 import { type ItemHold, ProjectContext, type RemoteChange } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
+import { parseWho, shareOf, sharesOf, whoText, withShareFor } from '../../core/shares';
+import { type ShareChoice, ShareButtons, ShareKeys } from '../../ui/share-buttons';
 import { SessionStore } from '../../core/session.store';
 import {
   barBox,
@@ -255,6 +257,7 @@ interface BarDraft {
     PresenceAvatars,
     Skeleton,
     StaticAvatar,
+    ShareButtons,
     StatusPill,
     TypeIcon,
     TimelineGridStyles,
@@ -421,6 +424,7 @@ interface BarDraft {
             }
             @if (ctx.project()?.ownerId === null) {
               <button mat-menu-item type="button" [matMenuTriggerFor]="addWho">Add assignee</button>
+              <button mat-menu-item type="button" [matMenuTriggerFor]="sharePerson">Share…</button>
             }
             <button mat-menu-item type="button" [matMenuTriggerFor]="prio">Set priority</button>
             <button mat-menu-item type="button" [matMenuTriggerFor]="labelAdd">Add label</button>
@@ -433,6 +437,27 @@ interface BarDraft {
             <button mat-menu-item type="button" (click)="unlink()">Unlink</button>
             <button mat-menu-item type="button" (click)="shiftDates()">Shift dates…</button>
             <button mat-menu-item type="button" (click)="deleteSelected()">Delete…</button>
+          </mat-menu>
+          <mat-menu #sharePerson="matMenu">
+            @for (m of ctx.members(); track m.userId) {
+              <button
+                mat-menu-item
+                type="button"
+                [matMenuTriggerFor]="shareValue"
+                [matMenuTriggerData]="{ userId: m.userId }"
+              >
+                {{ m.displayName }}
+              </button>
+            }
+          </mat-menu>
+          <mat-menu #shareValue="matMenu">
+            <ng-template matMenuContent let-userId="userId">
+              @for (s of bulkShares; track s) {
+                <button mat-menu-item type="button" (click)="bulk('share', userId + ':' + s)">
+                  {{ s }}%
+                </button>
+              }
+            </ng-template>
           </mat-menu>
           <mat-menu #addWho="matMenu">
             @for (m of ctx.members(); track m.userId) {
@@ -969,8 +994,11 @@ interface BarDraft {
         }
         @case ('who') {
           @if (r.node.item; as it) {
-            @for (id of it.assigneeIds.slice(0, 2); track id) {
-              <app-avatar-static [userId]="id" [name]="memberName(id)" [size]="22" />
+            @for (a of sharesOf(it).slice(0, 2); track a.userId) {
+              <app-avatar-static [userId]="a.userId" [name]="memberName(a.userId)" [size]="22" />
+              @if (a.share !== 100) {
+                <span class="who-share">{{ a.share }}%</span>
+              }
             }
             @if (it.assigneeIds.length > 2) {
               <span class="muted">+{{ it.assigneeIds.length - 2 }}</span>
@@ -1070,20 +1098,30 @@ interface BarDraft {
         }
       </ng-template>
     </mat-menu>
-    <mat-menu #whoMenu="matMenu">
+    <mat-menu #whoMenu="matMenu" class="who-menu">
       <ng-template matMenuContent let-it>
         @for (m of ctx.members(); track m.userId) {
-          <button
-            mat-menu-item
-            type="button"
-            role="menuitemcheckbox"
-            [attr.aria-checked]="it.assigneeIds.includes(m.userId)"
-            (click)="toggleAssignee(it, m.userId)"
-          >
-            <app-icon [name]="it.assigneeIds.includes(m.userId) ? 'check' : 'plus'" />{{
-              m.displayName
-            }}
-          </button>
+          <div class="who-row">
+            <button
+              mat-menu-item
+              type="button"
+              role="menuitemcheckbox"
+              [attr.aria-checked]="it.assigneeIds.includes(m.userId)"
+              (click)="toggleAssignee(it, m.userId)"
+              (keydown)="whoKey($event, it, m.userId)"
+            >
+              <app-icon [name]="it.assigneeIds.includes(m.userId) ? 'check' : 'plus'" />{{
+                m.displayName
+              }}
+            </button>
+            @if (it.can.plan && shareOf(it, m.userId); as share) {
+              <app-share-buttons
+                [name]="m.displayName"
+                [share]="share"
+                (shareChange)="setShare(it, { userId: m.userId, share: $event })"
+              />
+            }
+          </div>
         }
       </ng-template>
     </mat-menu>
@@ -1161,6 +1199,12 @@ export class TimelinePage implements OnInit {
   protected readonly types = Object.values(ItemType);
   protected readonly typeLabels = TYPE_LABELS;
   protected readonly statuses = Object.values(ItemStatus);
+  /** Shares offered by the selection's "Share…" (M13). */
+  protected readonly bulkShares = [100, 75, 50, 25, 10];
+  /** An item's assignees with shares, for the Who cell. */
+  protected readonly sharesOf = sharesOf;
+  /** A person's share on an item, or null. */
+  protected readonly shareOf = shareOf;
   protected readonly statusLabels = STATUS_LABELS;
   protected readonly optional = OPTIONAL;
   protected readonly manageBoard = ProjectPermission.MANAGE_BOARD;
@@ -1962,7 +2006,7 @@ export class TimelinePage implements OnInit {
       !event.ctrlKey &&
       !event.metaKey &&
       !event.altKey &&
-      c?.edit === 'text'
+      (c?.edit === 'text' || c?.id === 'who')
     ) {
       event.preventDefault();
       this.startEdit(row, col, event.key);
@@ -1982,7 +2026,8 @@ export class TimelinePage implements OnInit {
     if (r === undefined || c === undefined || !this.editable(r, c)) return;
     const item = r.node.item!;
     this.focus.set({ row, col });
-    if (c.edit === 'menu') {
+    // Typing in the Who cell edits it as text ("Ann, Bo 25"); Enter opens the menu.
+    if (c.edit === 'menu' && !(c.id === 'who' && typed !== null)) {
       this.openMenu(c.id, item, row, col);
       return;
     }
@@ -2254,6 +2299,21 @@ export class TimelinePage implements OnInit {
         case 'pred':
           await this.savePredecessors(item, value);
           return;
+        case 'who': {
+          if (value === this.whoText(item)) return;
+          const parsed = parseWho(
+            value,
+            this.ctx.members().filter((m) => m.isActive || item.assigneeIds.includes(m.userId)),
+          );
+          if (parsed.unknown.length > 0) {
+            this.toast.show(`No member matches ${parsed.unknown.join(', ')}`);
+            return;
+          }
+          this.ctx.upsert(
+            await this.api.update(project.id, item.id, { assignees: parsed.assignees }),
+          );
+          return;
+        }
       }
     } catch (error) {
       this.toast.error(error);
@@ -2591,6 +2651,57 @@ export class TimelinePage implements OnInit {
       this.toast.error(error);
     }
   }
+
+  /**
+   * The Who cell's text: names, with the share after those below 100%.
+   *
+   * @param item The item.
+   * @returns E.g. "Ann, Bo 25".
+   */
+  protected whoText(item: WorkItemDto): string {
+    return whoText(sharesOf(item), (id) => this.memberName(id));
+  }
+
+  /**
+   * Sets one person's share on an item from the Who menu (M13).
+   *
+   * @param item The item.
+   * @param choice The person and the new percent.
+   * @returns Resolves once saved.
+   */
+  protected async setShare(item: WorkItemDto, choice: ShareChoice): Promise<void> {
+    const current = this.ctx.itemsById().get(item.id) ?? item;
+    if (shareOf(current, choice.userId) === choice.share) return;
+    try {
+      const updated = await this.api.update(this.ctx.project()!.id, item.id, {
+        assignees: withShareFor(sharesOf(current), choice.userId, choice.share),
+      });
+      this.ctx.upsert(updated);
+      this.menuItem.set(updated);
+    } catch (error) {
+      this.toast.error(error);
+    }
+  }
+
+  /**
+   * Share keys on a ticked person in the Who menu: ← / → and digits.
+   *
+   * @param event The key event.
+   * @param item The item.
+   * @param userId The person.
+   */
+  protected whoKey(event: KeyboardEvent, item: WorkItemDto, userId: string): void {
+    const current = this.ctx.itemsById().get(item.id) ?? item;
+    const share = shareOf(current, userId);
+    if (share === null || !current.can.plan) return;
+    this.whoShareKeys.handle(event, userId, share);
+  }
+
+  /** Share keys of the Who menu, applied to the item the menu is open for. */
+  private readonly whoShareKeys = new ShareKeys((choice) => {
+    const item = this.menuItem();
+    if (item !== null) void this.setShare(item, choice);
+  });
 
   /**
    * Adds or removes one assignee from the menu.

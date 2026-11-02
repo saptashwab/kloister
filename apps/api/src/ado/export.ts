@@ -6,6 +6,7 @@ import {
   type AdoReview,
   type ItemStatus,
   type ItemType,
+  withShare,
 } from '@kloister/shared';
 import { invalidField } from '../common/api-exception.js';
 import { sanitizeRichText } from '../common/sanitize-html.js';
@@ -701,7 +702,7 @@ function footer(item: TransferItem, reference: string, notes: boolean): string {
       : []),
     ...(item.assignees.length > 1
       ? [
-          `<p>Local assignees (text only): ${item.assignees.map((a) => escape(a.projectMember.user.displayName)).join(', ')}</p>`,
+          `<p>Local assignees (text only): ${item.assignees.map((a) => escape(withShare(a.projectMember.user.displayName, a.share))).join(', ')}</p>`,
         ]
       : []),
     ...(notes && item.notes.length

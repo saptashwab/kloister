@@ -521,6 +521,8 @@ model WorkItemAssignee {
   workItemId String   @db.Uuid
   projectId  String   @db.Uuid
   userId     String   @db.Uuid
+  /// Share of the item's work in percent (M13): 5 to 100 in steps of 5 (database check).
+  share      Int      @default(100)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

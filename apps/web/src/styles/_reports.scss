@@ -1,0 +1,201 @@
+// Project reports (M13): tiles, tables with SVG bars, the burndown and the
+// workload grid. Loaded with the reports route; scoped under the page.
+
+app-reports-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-4);
+  padding: var(--k-space-4) var(--k-gutter);
+
+  .r-head,
+  .r-weeks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--k-space-2);
+  }
+  .r-note,
+  .muted {
+    color: var(--k-muted);
+    font-size: var(--k-body-sm);
+  }
+
+  h2 {
+    margin: 0 0 var(--k-space-2);
+    font-size: var(--k-body-sm);
+    font-weight: 700;
+  }
+
+  .r-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--k-size-170px), 1fr));
+    gap: var(--k-space-3);
+  }
+  .r-tile {
+    display: flex;
+    flex-direction: column;
+    gap: var(--k-space-1);
+    padding: var(--k-space-3) var(--k-space-4);
+    border: var(--k-line) solid var(--k-border);
+    border-radius: var(--k-radius-md);
+    background: var(--k-surface);
+    color: inherit;
+    text-decoration: none;
+    b {
+      font-size: var(--k-h1);
+    }
+    span {
+      color: var(--k-text-2);
+      font-size: var(--k-body-sm);
+    }
+  }
+  a.r-tile:hover {
+    border-color: var(--k-primary-line);
+  }
+
+  .r-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(var(--k-size-280px), 1fr));
+    gap: var(--k-space-4);
+  }
+
+  .r-table {
+    border-collapse: collapse;
+    font-size: var(--k-body-sm);
+    th,
+    td {
+      padding: var(--k-space-1) var(--k-space-2);
+      border-bottom: var(--k-line) solid var(--k-border);
+      text-align: left;
+      vertical-align: middle;
+    }
+    .num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .bar {
+      width: 60%;
+      svg {
+        display: block;
+        width: 100%;
+        height: var(--k-size-10px);
+      }
+    }
+  }
+  rect.not_started {
+    fill: var(--k-idle-ink);
+  }
+  rect.in_progress {
+    fill: var(--k-progress-ink);
+  }
+  rect.blocked {
+    fill: var(--k-danger);
+  }
+  rect.done {
+    fill: var(--k-success);
+  }
+
+  .r-chart {
+    width: 100%;
+    max-width: var(--k-size-640px);
+    overflow: visible;
+    .axis {
+      stroke: var(--k-border-strong);
+    }
+    polyline {
+      fill: none;
+      stroke-width: 2;
+    }
+    .ideal {
+      stroke: var(--k-muted);
+      stroke-dasharray: 4 4;
+    }
+    .actual {
+      stroke: var(--k-primary);
+      fill: var(--k-primary);
+    }
+    polyline.actual {
+      fill: none;
+    }
+    text {
+      fill: var(--k-text-2);
+      font-size: var(--k-small);
+    }
+  }
+  .r-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--k-space-4);
+    color: var(--k-text-2);
+    font-size: var(--k-body-sm);
+    span::before {
+      content: '';
+      display: inline-block;
+      width: var(--k-size-14px);
+      height: var(--k-size-3px);
+      margin-right: var(--k-space-1);
+      vertical-align: middle;
+      background: currentColor;
+    }
+    .actual::before {
+      background: var(--k-primary);
+    }
+    .ideal::before {
+      border-top: var(--k-size-3px) dashed var(--k-muted);
+      background: none;
+    }
+    .high::before {
+      background: var(--k-warn-ink);
+    }
+    .over::before {
+      background: var(--k-danger);
+    }
+  }
+
+  .r-scroll {
+    overflow-x: auto;
+  }
+  .r-load th small,
+  .r-cell small {
+    display: block;
+    color: var(--k-muted);
+    font-weight: 400;
+  }
+  .r-cell {
+    min-width: var(--k-size-56px);
+    padding: var(--k-space-1);
+    border: var(--k-line) solid transparent;
+    border-radius: var(--k-radius-sm);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    &.high {
+      background: var(--k-warn-soft);
+      color: var(--k-warn-ink);
+    }
+    &.over {
+      background: var(--k-danger-soft);
+      color: var(--k-danger-ink);
+      font-weight: 700;
+    }
+    &[aria-pressed='true'] {
+      border-color: var(--k-primary);
+    }
+  }
+
+  .r-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--k-space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--k-body-sm);
+  }
+  .r-detail {
+    padding: var(--k-space-3);
+    border: var(--k-line) solid var(--k-border);
+    border-radius: var(--k-radius-md);
+  }
+}

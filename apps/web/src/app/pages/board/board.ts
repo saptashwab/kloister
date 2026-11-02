@@ -663,6 +663,10 @@ export class BoardPage implements OnInit, PersonFilter {
 
   /** `?sprint=<id>`: show the sprint board (the board filtered to one sprint). */
   readonly sprint = input<string>();
+  /** `?due=overdue|week`: start with the due filter set, e.g. from a report tile (M13). */
+  readonly due = input<string>();
+  /** `?assignee=<user id>`: start filtered to one person, e.g. from the workload (M13). */
+  readonly assignee = input<string>();
 
   /** "None" column/filter value for the template. */
   protected readonly none = NONE;
@@ -832,6 +836,18 @@ export class BoardPage implements OnInit, PersonFilter {
       // Leaving the sprint board (no `?sprint=`) clears the sprint filter too.
       const sprint = this.sprint() ?? '';
       untracked(() => this.filter.update((f) => ({ ...f, sprintId: sprint })));
+    });
+    effect(() => {
+      // Report tiles open the board with a filter (M13); the chips change it later.
+      const due = this.due();
+      const assignee = this.assignee();
+      untracked(() =>
+        this.filter.update((f) => ({
+          ...f,
+          ...(due === 'overdue' || due === 'week' ? { due } : {}),
+          ...(assignee !== undefined && assignee !== '' ? { assigneeId: assignee } : {}),
+        })),
+      );
     });
   }
 

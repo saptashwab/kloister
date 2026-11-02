@@ -56,6 +56,7 @@ import { PRIORITY_LABELS, SPRINT_STATE_LABELS, TYPE_LABELS } from '../../core/la
 import { changedFields, personName, personWithRole } from '../../core/live-logic';
 import { ProjectContext, type RemoteChange } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
+import { nextShare, shareLabel, shareOf, sharesOf, withShareFor } from '../../core/shares';
 import { forDisplay, type Mentionable, type Referable, referencePath } from '../../core/rich-text';
 import { SessionStore } from '../../core/session.store';
 import { Shortcuts } from '../../core/shortcuts';
@@ -71,6 +72,7 @@ import { PresenceAvatars } from '../../ui/live-ui';
 import { PriorityIcon, StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
 import { ItemCopyAction } from '../../ui/item-copy-action';
+import { ShareButtons, ShareKeysDirective } from '../../ui/share-buttons';
 import { ItemActivity } from './item-activity';
 import { ItemAttachments } from './item-attachments';
 import { ItemChecklist } from './item-checklist';
@@ -91,6 +93,7 @@ const FIELD_NAMES: Record<string, string> = {
   dueDate: 'Due date',
   dueTime: 'Due time',
   assigneeIds: 'Assignees',
+  assignees: 'Shares',
   labelIds: 'Labels',
 };
 
@@ -120,6 +123,8 @@ const FIELD_NAMES: Record<string, string> = {
   encapsulation: ViewEncapsulation.None,
   imports: [
     ItemCopyAction,
+    ShareButtons,
+    ShareKeysDirective,
     NgTemplateOutlet,
     PresenceAvatars,
     CdkTrapFocus,
@@ -368,8 +373,10 @@ const FIELD_NAMES: Record<string, string> = {
                     class="k-inline"
                     aria-label="Assignees"
                     multiple
-                    panelWidth="260"
+                    panelWidth="420"
                     [value]="d.assigneeIds"
+                    [appShareKeys]="shareKeyFor"
+                    (shareKey)="setShare($event.userId, $event.share)"
                     (selectionChange)="save({ assigneeIds: $event.value })"
                     placeholder="Nobody"
                   >
@@ -377,23 +384,49 @@ const FIELD_NAMES: Record<string, string> = {
                       <span class="trigger">
                         @for (p of assignees(); track p.id) {
                           <span class="trigger"
-                            ><app-avatar-static [userId]="p.id" [name]="p.name" />{{ p.name }}</span
+                            ><app-avatar-static [userId]="p.id" [name]="p.name" />{{
+                              shareText(p.name, p.share)
+                            }}</span
                           >
                         }
                       </span>
                     </mat-select-trigger>
                     @for (m of assignable(); track m.userId) {
-                      <mat-option [value]="m.userId" [disabled]="!canAssign(m.userId)">{{
-                        m.displayName
-                      }}</mat-option>
+                      <mat-option [value]="m.userId" [disabled]="!canAssign(m.userId)"
+                        ><span class="share-option"
+                          >{{ m.displayName }}
+                          @if (shareKeyFor(m.userId); as share) {
+                            <app-share-buttons
+                              [name]="m.displayName"
+                              [share]="share"
+                              (shareChange)="setShare(m.userId, $event)"
+                            />
+                          }</span
+                      ></mat-option>
                     }
                   </mat-select>
+                  @if (d.can.plan && (assignees().length > 1 || sharesSet())) {
+                    <div class="row share-badges" role="group" aria-label="Shares">
+                      @for (p of assignees(); track p.id) {
+                        <button
+                          type="button"
+                          class="k-chip share-badge"
+                          [attr.aria-label]="
+                            p.name + ' has ' + p.share + '% of the work. Change the share'
+                          "
+                          (click)="cycleShare(p.id, p.share)"
+                        >
+                          {{ p.name }} <b>{{ p.share }}%</b>
+                        </button>
+                      }
+                    </div>
+                  }
                 } @else {
                   <div class="plain">
                     @for (p of assignees(); track p.id) {
                       <span class="trigger"
                         ><app-avatar [userId]="p.id" [name]="p.name" [email]="p.email" />{{
-                          p.name
+                          shareText(p.name, p.share)
                         }}</span
                       >
                     } @empty {
@@ -1125,14 +1158,65 @@ export class ItemDrawer {
     return d !== null && requiresBucket(d.type);
   });
 
-  /** Assignees with names and emails. */
+  /** Assignees with names, emails and shares (M13). */
   protected readonly assignees = computed(() => {
     const byId = this.ctx.membersById();
-    return (this.detail()?.assigneeIds ?? []).map((id) => {
+    const d = this.detail();
+    return (d === null ? [] : sharesOf(d)).map(({ userId: id, share }) => {
       const m = byId.get(id);
-      return { id, name: m?.displayName ?? 'Former member', email: m?.email ?? '' };
+      return { id, name: m?.displayName ?? 'Former member', email: m?.email ?? '', share };
     });
   });
+
+  /** Some assignee has a share other than 100%. */
+  protected readonly sharesSet = computed(() => this.assignees().some((a) => a.share !== 100));
+
+  /**
+   * A ticked person's share when the caller may change shares, for the
+   * inline buttons and the list's share keys; null otherwise.
+   *
+   * @param userId The person.
+   * @returns Percent, or null.
+   */
+  protected readonly shareKeyFor = (userId: string): number | null => {
+    const d = this.detail();
+    return d === null || !d.can.plan ? null : shareOf(d, userId);
+  };
+
+  /**
+   * A name with its share when that is not 100%.
+   *
+   * @param name The name.
+   * @param share Percent.
+   * @returns E.g. "Bo 25%".
+   */
+  protected shareText(name: string, share: number): string {
+    return shareLabel(name, share);
+  }
+
+  /**
+   * Sets one person's share and saves it at once, with Undo.
+   *
+   * @param userId The person.
+   * @param share The new percent.
+   * @returns Resolves once saved.
+   */
+  protected async setShare(userId: string, share: number): Promise<void> {
+    const d = this.detail();
+    if (d === null || shareOf(d, userId) === share) return;
+    await this.save({ assignees: withShareFor(sharesOf(d), userId, share) });
+  }
+
+  /**
+   * Moves a share badge on: 25 → 50 → 100 → 25.
+   *
+   * @param userId The person.
+   * @param share Their current percent.
+   * @returns Resolves once saved.
+   */
+  protected cycleShare(userId: string, share: number): Promise<void> {
+    return this.setShare(userId, nextShare(share));
+  }
 
   /** The item's labels that still exist. */
   protected readonly itemLabels = computed(() => {
@@ -1573,7 +1657,11 @@ export class ItemDrawer {
    * @returns Resolves once saved.
    */
   protected async save(change: UpdateItemRequest): Promise<void> {
-    if (!(await this.resolveConflict(Object.keys(change) as (keyof WorkItemDto)[]))) return;
+    // `assignees` (with shares, M13) writes both assignee fields of the item.
+    const fields = Object.keys(change).flatMap((k) =>
+      k === 'assignees' ? ['assigneeIds', 'assigneeShares'] : [k],
+    ) as (keyof WorkItemDto)[];
+    if (!(await this.resolveConflict(fields))) return;
     const d = this.detail();
     if (d === null) return;
     const names = Object.keys(change).map((k) => FIELD_NAMES[k] ?? k);
