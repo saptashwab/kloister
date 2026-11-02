@@ -384,8 +384,16 @@ describe('notifications (db)', () => {
       expect(await inbox('member')).toEqual([]);
     });
 
-    it('deletes notifications with their item', async () => {
-      expect((await as('pm', 'DELETE', item(pmItem.number))).statusCode).toBe(204);
+    it('hides notifications of trashed items and deletes them with the purge (M12)', async () => {
+      await as('pm', 'PATCH', item(pmItem.number), { assigneeIds: [ids.member] });
+      expect((await inbox('member')).some((n) => n.item.id === pmItem.id)).toBe(true);
+      const trashed = await as('pm', 'DELETE', item(pmItem.number));
+      expect(trashed.statusCode).toBe(200);
+      expect((await inbox('member')).some((n) => n.item.id === pmItem.id)).toBe(false);
+      const { batchId } = trashed.json() as { batchId: string };
+      expect(
+        (await as('pm', 'DELETE', `/api/v1/projects/${projectId}/trash/${batchId}`)).statusCode,
+      ).toBe(204);
       expect(await prisma.notification.count({ where: { workItemId: pmItem.id } })).toBe(0);
     });
 

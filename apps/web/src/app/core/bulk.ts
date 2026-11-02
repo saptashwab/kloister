@@ -1,4 +1,9 @@
-import type { MoveItemRequest, UpdateItemRequest, WorkItemDto } from '@kloister/shared';
+import {
+  hasOwnSprint,
+  type MoveItemRequest,
+  type UpdateItemRequest,
+  type WorkItemDto,
+} from '@kloister/shared';
 import { errorMessage } from './api';
 import { NONE } from './board-logic';
 
@@ -73,9 +78,10 @@ export function planBulk(
   for (const item of items) {
     switch (field) {
       case 'sprint':
-        // Sprints shape the plan (M9.2), so they need `can.plan`.
+        // Sprints shape the plan (M9.2), so they need `can.plan`; Epics and
+        // Features have none of their own (M12) and are skipped.
         if (item.sprintId === target) plan.unchanged.push(item);
-        else if (!item.can.plan) plan.skipped.push(item);
+        else if (!item.can.plan || !hasOwnSprint(item.type)) plan.skipped.push(item);
         else plan.steps.push({ item, kind: 'update', request: { sprintId: target } });
         break;
       case 'bucket':

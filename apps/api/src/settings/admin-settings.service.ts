@@ -76,14 +76,18 @@ export class AdminSettingsService {
   }
 
   /**
-   * Saves the attachment limits. They apply to the next upload; files
-   * already stored are kept even when a project is now over its quota.
+   * Saves the attachment limits and the trash retention. Limits apply to the
+   * next upload; files already stored are kept even when a project is now
+   * over its quota. The retention applies at the next nightly purge (M12).
    *
    * @param auth The admin.
    * @param value The new limits.
    * @returns The saved limits.
    */
-  async saveStorage(auth: AuthContext, value: StorageSettingsDto): Promise<StorageSettingsDto> {
+  async saveStorage(
+    auth: AuthContext,
+    value: Omit<StorageSettingsDto, 'trashRetentionDays'> & { trashRetentionDays?: number },
+  ): Promise<StorageSettingsDto> {
     if (value.personalQuotaMb < value.maxFileSizeMb)
       throw invalidField('personalQuotaMb', 'The personal quota must be at least the largest file');
     if (value.projectQuotaMb < value.maxFileSizeMb) {
@@ -96,6 +100,9 @@ export class AdminSettingsService {
       maxFileSizeMb: value.maxFileSizeMb,
       projectQuotaMb: value.projectQuotaMb,
       personalQuotaMb: value.personalQuotaMb,
+      // Callers from before M12 do not send the retention; it stays as stored.
+      trashRetentionDays:
+        value.trashRetentionDays ?? (await this.settings.getStorage()).trashRetentionDays,
     };
     await this.store(auth, STORAGE_SETTINGS_KEY, { ...saved });
     return saved;

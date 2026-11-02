@@ -9,6 +9,7 @@ import { ProjectContext } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { SessionStore } from '../../core/session.store';
+import { TrashApiService } from '../../core/trash-api.service';
 import { Dialogs } from '../../ui/dialogs';
 import { ImageViewer } from '../../ui/image-viewer';
 import { ToastService } from '../../ui/toast.service';
@@ -79,9 +80,13 @@ describe('ItemDrawer', () => {
       activity: vi.fn().mockResolvedValue({ items: [activity], nextCursor: null }),
       update: vi.fn(),
       move: vi.fn(),
-      remove: vi.fn().mockResolvedValue(undefined),
+      remove: vi.fn().mockResolvedValue({ batchId: 'b1', count: 1 }),
     };
     const dialogs = { confirm: vi.fn().mockResolvedValue(true), prompt: vi.fn() };
+    const trashApi = {
+      referencedIn: vi.fn().mockResolvedValue([]),
+      restore: vi.fn().mockResolvedValue({ restored: 2, parentDropped: false }),
+    };
     const annotationsApi = {
       notes: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
       attachments: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
@@ -97,6 +102,7 @@ describe('ItemDrawer', () => {
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
         { provide: AnnotationsApiService, useValue: annotationsApi },
+        { provide: TrashApiService, useValue: trashApi },
         { provide: Dialogs, useValue: dialogs },
       ],
     }).compileComponents();
@@ -130,6 +136,7 @@ describe('ItemDrawer', () => {
       showError,
       dialogs,
       annotationsApi,
+      trashApi,
     };
   }
 
@@ -325,6 +332,18 @@ describe('ItemDrawer', () => {
     );
     expect(itemsApi.remove).toHaveBeenCalledWith('p1', 'i4', true);
     expect(ctx.items()).toEqual([]);
+  });
+
+  it('moves a deleted item to the trash and restores its batch on Undo (M12)', async () => {
+    const { drawer, show, trashApi, dialogs } = await render(makeItem(4));
+    await drawer.remove();
+    expect(dialogs.confirm).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('trash') as string }),
+    );
+    const [message, undo] = show.mock.calls.at(-1) as [string, () => Promise<void>];
+    expect(message).toBe('KLO-4 moved to the trash');
+    await undo();
+    expect(trashApi.restore).toHaveBeenCalledWith('p1', 'b1');
   });
 
   it('deletes nothing when the confirmation is cancelled', async () => {

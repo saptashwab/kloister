@@ -64,6 +64,7 @@ describe('ProjectSettingsPage', () => {
         useInstanceHolidays: true,
         holidaysReviewedAt: null,
         planLeadsOnly: true,
+        newItemBucketId: null,
       },
       myRole: null,
       myVisibility: 'ALL',

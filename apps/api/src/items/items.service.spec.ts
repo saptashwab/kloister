@@ -5,14 +5,14 @@ import {
   type ProjectRole,
   Visibility,
 } from '@kloister/shared';
-import { fakeAudit, makeConfig, makeProject, makeUser } from '../../test/support/fakes.js';
+import { fakeAudit, makeProject, makeUser } from '../../test/support/fakes.js';
 import type { ApiException } from '../common/api-exception.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import { type ProjectAccess, ProjectAccessService } from '../projects/project-access.service.js';
-import { FileStoreService } from '../storage/file-store.service.js';
 import type { ListItemsQueryDto } from './items.dto.js';
 import { ItemsService } from './items.service.js';
+import { ReferencesService } from './references.service.js';
 
 // Database-free checks that every item query carries the caller's visibility
 // filter (SPEC §3.3, §3.4) and that permission refusals happen before any
@@ -46,8 +46,11 @@ function setup() {
   const audit = fakeAudit();
   const access = new ProjectAccessService(prisma, audit.service);
   const notifications = new NotificationsService(prisma, access);
-  const files = new FileStoreService(makeConfig());
-  return { service: new ItemsService(prisma, audit.service, access, notifications, files), fake };
+  const references = new ReferencesService(prisma, access);
+  return {
+    service: new ItemsService(prisma, audit.service, access, notifications, references),
+    fake,
+  };
 }
 
 /**
@@ -111,7 +114,9 @@ describe('ItemsService', () => {
     const access = accessFor('MEMBER', Visibility.OWN);
     expect(await rejection(service.get(access, '7'))).toEqual({ status: 404, code: 'NOT_FOUND' });
     expect(fake.workItem.findFirst.mock.calls[0]?.[0]).toMatchObject({
-      where: { AND: [{ projectId: PROJECT_ID }, OWN_FILTER, { number: 7 }] },
+      where: {
+        AND: [{ projectId: PROJECT_ID }, { AND: [{ deletedAt: null }, OWN_FILTER] }, { number: 7 }],
+      },
     });
   });
 
@@ -123,7 +128,9 @@ describe('ItemsService', () => {
     const where = (fake.workItem.findMany.mock.calls[0]?.[0] as { where: { AND: unknown[] } })
       .where;
     expect(where.AND[0]).toEqual({ projectId: PROJECT_ID });
-    expect(where.AND[1]).toEqual({ OR: [OWN_FILTER, { teamId: { in: [TEAM] } }] });
+    expect(where.AND[1]).toEqual({
+      AND: [{ deletedAt: null }, { OR: [OWN_FILTER, { teamId: { in: [TEAM] } }] }],
+    });
     expect(where.AND[2]).toMatchObject({ sprintId: null, type: 'TASK' });
   });
 
@@ -133,7 +140,13 @@ describe('ItemsService', () => {
       await rejection(service.children(accessFor('VIEWER', Visibility.TEAMS), '3', {})),
     ).toEqual({ status: 404, code: 'NOT_FOUND' });
     expect(fake.workItem.findFirst.mock.calls[0]?.[0]).toMatchObject({
-      where: { AND: [{ projectId: PROJECT_ID }, { teamId: { in: [] } }, { number: 3 }] },
+      where: {
+        AND: [
+          { projectId: PROJECT_ID },
+          { AND: [{ deletedAt: null }, { teamId: { in: [] } }] },
+          { number: 3 },
+        ],
+      },
     });
   });
 
@@ -149,6 +162,30 @@ describe('ItemsService', () => {
     );
     expect(res).toEqual({ status: 403, code: 'FORBIDDEN' });
     expect(fake.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('refuses sprints on Epics and ad-hoc items with a parent before writing (M12)', async () => {
+    const { service, fake } = setup();
+    const auth = { user: makeUser({ id: ME }), sessionId: 's' };
+    const sprint = '44444444-4444-4444-8444-444444444444';
+    const epic = await rejection(
+      service.create(auth, accessFor('PM'), { type: 'EPIC', title: 'x', sprintId: sprint }),
+    );
+    expect(epic).toEqual({ status: 400, code: 'VALIDATION_FAILED' });
+    const story = await rejection(
+      service.create(auth, accessFor('PM'), { type: 'STORY', title: 'x', adHoc: true }),
+    );
+    expect(story).toEqual({ status: 400, code: 'VALIDATION_FAILED' });
+    const child = await rejection(
+      service.create(auth, accessFor('PM'), {
+        type: 'TASK',
+        title: 'x',
+        adHoc: true,
+        parentId: OTHER,
+      }),
+    );
+    expect(child).toEqual({ status: 400, code: 'VALIDATION_FAILED' });
+    expect(fake.workItem.create).not.toHaveBeenCalled();
   });
 
   it('refuses putting an item into a team the caller does not belong to', async () => {

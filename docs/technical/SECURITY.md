@@ -125,7 +125,15 @@ The route permission is only the first check. `ProjectAccessService`
 - **Delete**: `DELETE_ANY_ITEM` (with or without cascade); team Leads their team's items without
   cascade; Members only items they created that have no children and, while `planLeadsOnly` is on,
   are not yet scheduled. Deleting an item with children without `?cascade=true` answers 409
-  `HAS_CHILDREN`.
+  `HAS_CHILDREN`. A delete moves the item (and its subtree) to the project's trash (M12).
+- **Trash** (M12): listing and restoring need `DELETE_ANY_ITEM` or `DELETE_OWN_ITEMS`; the list
+  holds only items the caller could see if they were active, and a batch whose deleted item is
+  hidden is 404. PMs and Leads restore any batch; others a single item they deleted or whose team
+  they lead (`canRestoreBatch`). Permanent deletion needs `MANAGE_PROJECT` (PMs). Personal spaces
+  have their own trash, reachable only by their owner like the rest of the space.
+- **Ad hoc and sprints** (M12): making an item ad hoc or planning it again, and changing a sprint,
+  are plan changes. Ad-hoc items take no parent and no dependency links; only links the caller can
+  see block the change, so nothing hidden is hinted at.
 - **Annotate** (notes, attachments): view plus `ANNOTATE_ITEMS`. Authors edit their own notes;
   authors, PMs, Leads and the item's team Leads may delete notes and attachments.
 - **Assign**: assigning only yourself needs nothing extra; assigning others needs `ASSIGN_OTHERS`
@@ -153,13 +161,18 @@ seeing the content.
 
 ### Scoped queries
 
-`ProjectAccessService.itemScopeFilter()` turns the caller's scope into a Prisma `where` condition,
-and `ItemsService.scoped()` adds it to every query that returns items: lists, children, the item
-itself, the timeline, snapshots, My work and the live-update refetch. An item outside the scope is
-therefore never loaded, counted or used as a constraint. The only deliberately unscoped queries
-return no item content: ancestor titles, card positions when reordering, child types for the
-hierarchy rules, cycle checks for dependencies, and the descendants of a cascade delete (allowed
-to PMs and Leads only). The list of exceptions is kept in `docs/DECISIONS.md` (M3).
+`ProjectAccessService.itemScopeFilter()` turns the caller's scope into a Prisma `where` condition
+and adds `deletedAt: null`, so trashed items count as invisible to everyone (M12).
+`ItemsService.scoped()` adds it to every query that returns items: lists, children, the item
+itself, the timeline, snapshots, My work, notifications, references and the live-update refetch.
+An item outside the scope is therefore never loaded, counted or used as a constraint. Only the
+trash uses `itemVisibilityFilter()`, the scope without the trash condition. The only deliberately
+unscoped queries return no item content: ancestor titles, card positions when reordering, child
+types for the hierarchy rules, cycle checks for dependencies (trashed items' links included, so a
+restore can never close a cycle), the descendants of a cascade delete (allowed to PMs and Leads
+only), the children that follow their Story's sprint (M12) and a restored item's parent state.
+Each of the others also ignores trashed rows where it counts them. The list of exceptions is kept
+in `docs/DECISIONS.md` (M3, M12).
 
 Further non-disclosure rules:
 
@@ -198,6 +211,11 @@ backup access can still read the data, which docs/ADMIN.md states.
   image stored for that item. Nothing is loaded from another host.
 - A mention (`<span data-mention="<userId>">`) survives only for active members of the project,
   and its text is rewritten to `@<display name>`, so a mention always shows whom it notifies.
+- An item reference (`<span data-ref="KLO-12">`, M12) is marked on save only when the writer can
+  see the item (in another project only as a member there), and its text is the canonical key.
+  On every read the API turns marks of items the reader cannot see back into the plain text, so
+  a reference never hints that a hidden item exists. `GET /references` previews only visible items
+  of projects the caller is a member of; "Referenced in" lists only visible referring items.
 - Uploads are raw request bodies (`application/octet-stream` with an `x-file-name` header). The
   guards run before the body is read; the file is streamed to a temporary name and checked against
   the size limit and the quota, then renamed into place once its database row is written.

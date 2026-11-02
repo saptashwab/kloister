@@ -181,11 +181,16 @@ export class CreateItemDto implements CreateItemRequest {
   @IsUUID()
   bucketId?: string | null;
 
-  /** Sprint. */
+  /** Sprint; never on Epics and Features. A Story's child starts in its sprint when omitted (M12). */
   @Nullable()
   @LowercaseUuid()
   @IsUUID()
   sprintId?: string | null;
+
+  /** Ad hoc: not part of the plan; Tasks and Bugs without parent only (M12). */
+  @OmittableNotNull()
+  @IsBoolean()
+  adHoc?: boolean;
 
   /** Team. */
   @Nullable()
@@ -275,11 +280,16 @@ export class UpdateItemDto implements UpdateItemRequest {
   @Max(PRIORITY_MAX)
   priority?: number;
 
-  /** New sprint, or null. */
+  /** New sprint, or null; never on Epics and Features. The Story's Tasks and Bugs follow (M12). */
   @Nullable()
   @LowercaseUuid()
   @IsUUID()
   sprintId?: string | null;
+
+  /** Make the item ad hoc, or plan it again (M12). */
+  @OmittableNotNull()
+  @IsBoolean()
+  adHoc?: boolean;
 
   /** New team, or null. */
   @Nullable()

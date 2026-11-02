@@ -237,6 +237,7 @@ export class ProjectShellPage {
             .filter((i) => i.type !== ItemType.TASK && i.type !== ItemType.BUG)
             .map((i) => ({ id: i.id, key: i.key, title: i.title, type: i.type })),
           sprints: this.ctx.sprints().filter((s) => s.state !== SprintState.CLOSED),
+          defaultBucketId: project.settings.newItemBucketId,
         },
         width: 'var(--k-size-460px)',
         maxWidth: 'calc(100vw - var(--k-space-8))',

@@ -15,7 +15,8 @@ import type { Prisma } from '../generated/prisma/client.js';
  * reads as false), a malformed `statusToBucket` entry is dropped, an
  * unknown `labelStyle` reads as the default, a missing
  * `autoMoveDependents` reads as off (projects from before M9) and a missing
- * `planLeadsOnly` reads as on (M9.2: the safer reading).
+ * `planLeadsOnly` reads as on (M9.2: the safer reading) and a missing or
+ * malformed `newItemBucketId` reads as the first bucket (M12).
  *
  * @param raw The stored JSON value.
  * @returns Validated settings.
@@ -48,6 +49,10 @@ export function parseProjectSettings(raw: Prisma.JsonValue): ProjectSettings {
       typeof value['planLeadsOnly'] === 'boolean'
         ? value['planLeadsOnly']
         : DEFAULT_PROJECT_SETTINGS.planLeadsOnly,
+    newItemBucketId:
+      typeof value['newItemBucketId'] === 'string' && isUUID(value['newItemBucketId'])
+        ? value['newItemBucketId'].toLowerCase()
+        : DEFAULT_PROJECT_SETTINGS.newItemBucketId,
   };
 }
 
@@ -88,8 +93,9 @@ export function mergeProjectSettings(
 }
 
 /**
- * Removes a deleted bucket from the status → bucket map, keeping every other
- * stored key as it is.
+ * Removes a deleted bucket from the status → bucket map and resets "New
+ * items start in" to the first bucket when it named it (M12), keeping every
+ * other stored key as it is.
  *
  * @param raw The stored JSON value.
  * @param bucketId The deleted bucket.
@@ -99,10 +105,13 @@ export function withoutBucket(
   raw: Prisma.JsonValue,
   bucketId: string,
 ): Prisma.InputJsonObject | null {
-  const map = parseProjectSettings(raw).statusToBucket;
+  const settings = parseProjectSettings(raw);
+  const map = settings.statusToBucket;
   const kept = Object.fromEntries(Object.entries(map).filter(([, id]) => id !== bucketId));
-  if (Object.keys(kept).length === Object.keys(map).length) return null;
-  return mergeProjectSettings(raw, { statusToBucket: kept });
+  const change: Partial<ProjectSettings> = {};
+  if (Object.keys(kept).length !== Object.keys(map).length) change.statusToBucket = kept;
+  if (settings.newItemBucketId === bucketId) change.newItemBucketId = null;
+  return Object.keys(change).length === 0 ? null : mergeProjectSettings(raw, change);
 }
 
 /**

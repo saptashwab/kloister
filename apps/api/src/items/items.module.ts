@@ -14,13 +14,18 @@ import { ChecklistService } from './checklist.service.js';
 import { DependenciesService } from './dependencies.service.js';
 import { ItemsController } from './items.controller.js';
 import { ItemsService } from './items.service.js';
+import { ReferencesController } from './references.controller.js';
+import { ReferencesService } from './references.service.js';
+import { TrashController } from './trash.controller.js';
+import { TrashJobs } from './trash-jobs.js';
+import { TrashService } from './trash.service.js';
 import { WorkController } from './work.controller.js';
 import { WorkService } from './work.service.js';
 
 /**
  * Work items with their hierarchy, dependencies, team assignment, checklist
  * and bucket/status rules (SPEC §4, M3), plus a person's work across
- * projects (SPEC §6). Every rule goes through
+ * projects (SPEC §6) and the project trash (M12). Every rule goes through
  * `ProjectAccessService` from `ProjectsModule`. Exports {@link ItemsService}
  * so notes and attachments find items through the same visibility filter.
  */
@@ -40,6 +45,8 @@ import { WorkService } from './work.service.js';
     DuplicationController,
     ProjectSnapshotsController,
     WorkSnapshotsController,
+    TrashController,
+    ReferencesController,
   ],
   providers: [
     ItemsService,
@@ -48,7 +55,10 @@ import { WorkService } from './work.service.js';
     WorkService,
     DuplicationService,
     SnapshotsService,
+    TrashService,
+    TrashJobs,
+    ReferencesService,
   ],
-  exports: [ItemsService],
+  exports: [ItemsService, ReferencesService],
 })
 export class ItemsModule {}

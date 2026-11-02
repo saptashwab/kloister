@@ -31,7 +31,7 @@ function db(
       findMany: ({ where }: { where: { id: { in: string[] } } }) =>
         Promise.resolve(
           where.id.in.flatMap((id) =>
-            rows[id] ? [{ id, ...rows[id], assignees: [{ userId: USER }] }] : [],
+            rows[id] ? [{ id, ...rows[id], deletedAt: null, assignees: [{ userId: USER }] }] : [],
           ),
         ),
     },

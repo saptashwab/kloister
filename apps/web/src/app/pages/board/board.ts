@@ -26,6 +26,8 @@ import {
   PresenceAction,
   ProjectPermission,
   requiresBucket,
+  hasOwnSprint,
+  mayBeAdHoc,
   SprintState,
   Visibility,
   type WorkItemDto,
@@ -448,7 +450,8 @@ const QUICK_PEOPLE = 6;
           [matMenuTriggerFor]="quickTypeMenu"
           aria-label="Type of new cards"
         >
-          New cards: {{ typeLabels[quickType()] }}<app-icon name="chevronDown" [size]="13" />
+          New cards: {{ typeLabels[quickType()] }}{{ quickIsAdHoc() ? ', ad hoc' : ''
+          }}<app-icon name="chevronDown" [size]="13" />
         </button>
         <mat-menu #quickTypeMenu="matMenu">
           @for (t of types; track t) {
@@ -462,6 +465,16 @@ const QUICK_PEOPLE = 6;
               >{{ typeLabels[t] }}
             </button>
           }
+          <button
+            mat-menu-item
+            role="menuitemcheckbox"
+            [attr.aria-checked]="quickAdHoc()"
+            [disabled]="!adHocType()"
+            (click)="quickAdHoc.set(!quickAdHoc())"
+          >
+            <span class="check" aria-hidden="true">{{ mark(quickAdHoc()) }}</span
+            >Ad hoc (not part of the plan)
+          </button>
         </mat-menu>
       }
       <mat-button-toggle-group
@@ -696,6 +709,12 @@ export class BoardPage implements OnInit, PersonFilter {
   protected readonly filter = signal<BoardFilter>(EMPTY_FILTER);
   /** Type of cards created by quick-add. */
   protected readonly quickType = signal<ItemType>(ItemType.TASK);
+  /** Quick-add makes ad-hoc items (M12): Tasks and Bugs that are not part of the plan. */
+  protected readonly quickAdHoc = signal(false);
+  /** The quick-add type may be ad hoc. */
+  protected readonly adHocType = computed(() => mayBeAdHoc(this.quickType()));
+  /** Quick-add currently makes ad-hoc items. */
+  protected readonly quickIsAdHoc = computed(() => this.quickAdHoc() && this.adHocType());
 
   /** The person the board is filtered to ({@link PersonFilter}). */
   readonly active = computed(() => {
@@ -1133,8 +1152,15 @@ export class BoardPage implements OnInit, PersonFilter {
     const title = input.value.trim();
     if (project === null || title === '') return;
     const type = this.quickType();
-    const request: CreateItemRequest = { type, title };
-    const firstBucket = this.ctx.buckets()[0]?.id ?? null;
+    const request: CreateItemRequest = {
+      type,
+      title,
+      ...(this.quickIsAdHoc() ? { adHoc: true } : {}),
+    };
+    // The project's "New items start in" bucket, else the first (M12).
+    const buckets = this.ctx.buckets();
+    const preferred = project.settings.newItemBucketId;
+    const firstBucket = buckets.find((b) => b.id === preferred)?.id ?? buckets[0]?.id ?? null;
     const filterSprint = this.filter().sprintId;
     if (filterSprint && filterSprint !== NONE) request.sprintId = filterSprint;
     switch (this.groupBy()) {
@@ -1155,6 +1181,8 @@ export class BoardPage implements OnInit, PersonFilter {
     // Tasks and Bugs; Epics and Features would otherwise stay off the board).
     if (request.bucketId === undefined) request.bucketId = firstBucket;
     if (request.bucketId === null && requiresBucket(type)) return;
+    // Epics and Features have no sprint of their own (M12).
+    if (!hasOwnSprint(type)) delete request.sprintId;
     try {
       this.ctx.upsert(await this.api.create(project.id, request));
       input.value = '';

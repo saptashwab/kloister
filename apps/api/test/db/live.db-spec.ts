@@ -281,6 +281,39 @@ describe('live updates (db)', () => {
     expect(scoped.events.filter((e) => e.event.startsWith('item'))).toEqual([]);
   });
 
+  it('announces trash as a removal and restore as a change, to viewers only (M12)', async () => {
+    const item = await seedItem(prisma, projectId, { createdById: ids.pm, bucketId: todo });
+    const member = await open('member');
+    const scoped = await open('scoped');
+    await follow('member', member);
+    await follow('scoped', scoped);
+    const send = (method: 'DELETE' | 'POST', url: string) =>
+      app.inject({
+        method,
+        url,
+        headers: { [CSRF_HEADER]: CSRF_HEADER_VALUE, [CLIENT_ID_HEADER]: 'tab-pm-0000' },
+        cookies: { sid: sids.pm },
+      });
+    const trashed = await send('DELETE', `/api/v1/projects/${projectId}/items/${item.id}`);
+    expect(trashed.statusCode).toBe(200);
+    await until(() => events(member, 'item-removed').length > 0);
+    expect(events(member, 'item-removed')[0].data).toMatchObject({
+      projectId,
+      items: [{ id: item.id }],
+    });
+    const { batchId } = trashed.json<{ batchId: string }>();
+    const restored = await send('POST', `/api/v1/projects/${projectId}/trash/${batchId}/restore`);
+    expect(restored.statusCode).toBe(200);
+    await until(() => events(member, 'item-changed').length > 0);
+    expect(events(member, 'item-changed')[0].data).toMatchObject({
+      projectId,
+      items: [{ id: item.id, actorId: ids.pm }],
+    });
+    await quiet();
+    // The OWN-scoped Member hears of neither.
+    expect(scoped.events.filter((e) => e.event.startsWith('item'))).toEqual([]);
+  });
+
   it('never announces refused or rolled-back changes', async () => {
     const item = await seedItem(prisma, projectId, { createdById: ids.pm, bucketId: todo });
     const member = await open('member');

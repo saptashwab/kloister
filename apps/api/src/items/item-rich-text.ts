@@ -4,15 +4,16 @@ import { imageIdsIn, type RichTextRules, sanitizeWithMentions } from '../common/
 
 /**
  * Sanitizes an item's description or note (SPEC §5), keeping only images
- * that are inline images of that same item, served by its own endpoint, and
- * mentions of the given users.
+ * that are inline images of that same item, served by its own endpoint,
+ * mentions of the given users and references the writer may see (M12).
  *
  * @param db Database or transaction client.
  * @param projectId The item's project.
  * @param itemId The item.
  * @param html Untrusted HTML from the request.
  * @param mentions Users who may be mentioned, with their names (notes only).
- * @returns Safe HTML and the users its mentions name.
+ * @param references References to mark, as written → canonical key.
+ * @returns Safe HTML, the users its mentions name and the items it references.
  */
 export async function sanitizeItemText(
   db: DbClient,
@@ -20,7 +21,8 @@ export async function sanitizeItemText(
   itemId: string,
   html: string,
   mentions?: ReadonlyMap<string, string>,
-): Promise<{ html: string; mentioned: string[] }> {
+  references?: ReadonlyMap<string, string>,
+): Promise<{ html: string; mentioned: string[]; references: string[] }> {
   const candidates = imageIdsIn(html);
   const images =
     candidates.length === 0
@@ -35,6 +37,7 @@ export async function sanitizeItemText(
       ids: new Set(images.map((i) => i.id)),
     },
     ...(mentions === undefined ? {} : { mentions }),
+    ...(references === undefined ? {} : { references }),
   };
   return sanitizeWithMentions(html, rules);
 }

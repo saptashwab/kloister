@@ -475,33 +475,33 @@ describe('work items (db)', () => {
         name: 'delete any item',
         method: 'DELETE',
         url: () => item(N.theirs),
-        expect: { pm: 204, lead: 204, member: 403, viewer: 403, ...refusedOutside },
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
       },
       {
         name: 'delete own unscheduled item without children (default, M9.3)',
         method: 'DELETE',
         url: () => item(N.mine),
-        expect: { pm: 204, lead: 204, member: 204, viewer: 403, ...refusedOutside },
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
       },
       {
         name: 'delete own scheduled item without children (default)',
         method: 'DELETE',
         url: () => item(N.mine),
         setup: scheduleMine,
-        expect: { pm: 204, lead: 204, member: 403, viewer: 403, ...refusedOutside },
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
       },
       {
         name: 'delete own created item without children (plan open to Members)',
         method: 'DELETE',
         url: () => item(N.mine),
         settings: { planLeadsOnly: false },
-        expect: { pm: 204, lead: 204, member: 204, viewer: 403, ...refusedOutside },
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
       },
       {
         name: 'delete an assigned (not created) item',
         method: 'DELETE',
         url: () => item(N.assigned),
-        expect: { pm: 204, lead: 204, member: 403, viewer: 403, ...refusedOutside },
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
       },
       {
         name: 'delete own created item with children',
@@ -514,7 +514,7 @@ describe('work items (db)', () => {
         name: 'delete with cascade',
         method: 'DELETE',
         url: () => `${item(N.memberParent)}?cascade=true`,
-        expect: { pm: 204, lead: 204, member: 403, viewer: 403, ...refusedOutside },
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
       },
     ];
 
@@ -900,7 +900,7 @@ describe('work items (db)', () => {
         bucketId: buckets.doing,
       });
       expect(move.statusCode).toBe(200);
-      expect((await as('teamLead', 'DELETE', item(N.teamItem))).statusCode).toBe(204);
+      expect((await as('teamLead', 'DELETE', item(N.teamItem))).statusCode).toBe(200);
     });
 
     it('team Lead rights stop at the team', async () => {
@@ -1077,7 +1077,7 @@ describe('work items (db)', () => {
       expect(first.statusCode).toBe(201);
       const created = first.json() as WorkItemDetailDto;
       expect(created).toMatchObject({ number: 10, key: 'KLO-10', type: 'BUG', priority: 2 });
-      expect((await as('pm', 'DELETE', item(10))).statusCode).toBe(204);
+      expect((await as('pm', 'DELETE', item(10))).statusCode).toBe(200);
       const next = await as('pm', 'POST', items(), {
         type: 'TASK',
         title: 'Next',
@@ -1158,10 +1158,15 @@ describe('work items (db)', () => {
       const plain = await as('pm', 'DELETE', item(N.epic));
       expect(plain.statusCode).toBe(409);
       expect(codeOf(plain)).toBe(ErrorCode.HAS_CHILDREN);
-      expect((await as('pm', 'DELETE', `${item(N.epic)}?cascade=true`)).statusCode).toBe(204);
-      expect(await prisma.workItem.count({ where: { number: { in: [1, 2, 3, 4] } } })).toBe(0);
+      const cascade = await as('pm', 'DELETE', `${item(N.epic)}?cascade=true`);
+      expect(cascade.statusCode).toBe(200);
+      // The subtree goes to the trash as one batch (M12).
+      expect(cascade.json()).toMatchObject({ count: 4 });
+      expect(
+        await prisma.workItem.count({ where: { number: { in: [1, 2, 3, 4] }, deletedAt: null } }),
+      ).toBe(0);
       const audit = await prisma.auditLog.findFirstOrThrow({
-        where: { action: AuditAction.ITEM_DELETED },
+        where: { action: AuditAction.ITEM_TRASHED },
       });
       expect(audit.meta).toMatchObject({ number: 1, cascade: true, descendants: 3 });
       expect((await as('pm', 'DELETE', `${item(N.mine)}?cascade=maybe`)).statusCode).toBe(400);

@@ -117,7 +117,14 @@ Starts after M11 is committed.
   query over the HTML (decided during implementation, recorded in DECISIONS).
 - One additive migration generated offline as usual.
 
-## 10. Verification
+## 10. Implementation notes (2026-11-03)
+
+Built as planned; the choices made while building are in docs/DECISIONS.md (M12). In short: the trash
+condition lives in the shared scope filter, delete answers the batch for Undo, trash retention is part of the
+admin storage settings, references store the canonical key and are redacted per reader, and "Referenced in"
+uses the `ItemReference` table.
+
+## 11. Verification
 
 - Unit: sprint-follow rules, ad-hoc validation, reference parsing and rendering, restore with missing parents.
 - Database tests (CI): permission matrix for trash, restore and purge per role and scope; every item route

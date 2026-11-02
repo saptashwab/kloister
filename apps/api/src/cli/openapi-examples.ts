@@ -46,6 +46,7 @@ const TASK = {
   labelIds: [],
   checklist: { done: 0, total: 0 },
   childCount: 0,
+  adHoc: false,
   completedAt: null,
   createdAt: '2026-11-02T09:15:00.000Z',
   updatedAt: '2026-11-02T09:15:00.000Z',

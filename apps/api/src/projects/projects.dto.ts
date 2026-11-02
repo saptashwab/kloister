@@ -155,6 +155,14 @@ export class ProjectSettingsChangeDto implements Partial<ProjectSettings> {
   @OmittableNotNull()
   @IsBoolean()
   planLeadsOnly?: boolean;
+
+  /** "New items start in" (M12): a bucket of the project, or null for the first. */
+  @IsOptional()
+  @IsUUID()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.toLowerCase() : value,
+  )
+  newItemBucketId?: string | null;
 }
 
 /** Body of `PATCH /projects/:id`. */

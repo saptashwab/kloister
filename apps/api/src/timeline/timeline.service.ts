@@ -14,7 +14,7 @@ import {
   type WorkItemDto,
 } from '@kloister/shared';
 import type { AuthContext } from '../auth/auth-context.js';
-import { conflict, forbidden } from '../common/api-exception.js';
+import { conflict, forbidden, invalidField } from '../common/api-exception.js';
 import { fromDbDate } from '../common/dates.js';
 import { serializable } from '../common/transactions.js';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -100,10 +100,12 @@ export class TimelineService {
       }
       for (const row of requested) {
         if (!this.access.canPlanItem(access, itemFacts(row))) throw forbidden(PLAN_LEADS_ONLY);
+        if (row.adHoc) throw invalidField('changes', 'Ad-hoc items are not on the timeline');
       }
 
+      // Ad-hoc items are not part of the plan (M12): they never move or block.
       const rows = await tx.workItem.findMany({
-        where: this.items.scoped(access, {}),
+        where: this.items.scoped(access, { adHoc: false }),
         include: this.items.include(access),
       });
       const rowsById = new Map(rows.map((r) => [r.id, r]));
@@ -241,8 +243,8 @@ export class TimelineService {
     return db.workItemDependency.findMany({
       where: {
         projectId: access.project.id,
-        blockedItem: this.items.scoped(access, {}),
-        blockingItem: this.items.scoped(access, {}),
+        blockedItem: this.items.scoped(access, { adHoc: false }),
+        blockingItem: this.items.scoped(access, { adHoc: false }),
       },
       select: { blockingItemId: true, blockedItemId: true },
       orderBy: [{ blockingItemId: 'asc' }, { blockedItemId: 'asc' }],

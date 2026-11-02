@@ -14,6 +14,7 @@ import {
 } from '@nestjs/common';
 import {
   type AuditEntryDto,
+  type DeleteItemResult,
   type Page,
   ProjectPermission as P,
   type WorkItemDetailDto,
@@ -136,7 +137,8 @@ export class ItemsController {
   }
 
   /**
-   * Deletes an item (`?cascade=true` for its subtree). Permissions:
+   * Moves an item to the project's trash (`?cascade=true` with its subtree,
+   * M12); restoring the returned batch is the Undo. Permissions:
    * `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items while
    * the project lets Members change the plan (M9.2), or leading the item's
    * team (no cascade).
@@ -145,17 +147,17 @@ export class ItemsController {
    * @param access The caller's access.
    * @param item Item uuid or number.
    * @param query Cascade flag.
-   * @returns Resolves once deleted (204).
+   * @returns The trash batch.
    */
   @Delete(':item')
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   @RequireProjectPermission([P.DELETE_ANY_ITEM, P.DELETE_OWN_ITEMS])
   remove(
     @CurrentAuth() auth: AuthContext,
     @CurrentProject() access: ProjectAccess,
     @Param('item') item: string,
     @Query() query: DeleteItemQueryDto,
-  ): Promise<void> {
+  ): Promise<DeleteItemResult> {
     return this.items.remove(auth, access, item, query.cascade ?? false);
   }
 

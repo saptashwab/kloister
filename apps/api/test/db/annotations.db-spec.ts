@@ -671,10 +671,16 @@ describe('notes, attachments and inline images (db)', () => {
       }
     });
 
-    it('removes stored files when their item is deleted', async () => {
+    it('keeps files of a trashed item and removes them when the batch is purged (M12)', async () => {
       const rows = await prisma.attachment.findMany({ where: { workItemId: items.theirs.id } });
       expect(rows).toHaveLength(2);
-      expect((await as('pm', 'DELETE', base(items.theirs.number))).statusCode).toBe(204);
+      const trashed = await as('pm', 'DELETE', base(items.theirs.number));
+      expect(trashed.statusCode).toBe(200);
+      const { batchId } = trashed.json() as { batchId: string };
+      expect(await prisma.attachment.count({ where: { workItemId: items.theirs.id } })).toBe(2);
+      for (const row of rows) expect(await storedFileExists(projectId, row.storedName)).toBe(true);
+      const purge = await as('pm', 'DELETE', `/api/v1/projects/${projectId}/trash/${batchId}`);
+      expect(purge.statusCode).toBe(204);
       expect(await prisma.attachment.count({ where: { workItemId: items.theirs.id } })).toBe(0);
       for (const row of rows) expect(await storedFileExists(projectId, row.storedName)).toBe(false);
     });

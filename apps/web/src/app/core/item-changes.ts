@@ -116,6 +116,7 @@ const UNDOABLE = [
   'dueTime',
   'assigneeIds',
   'labelIds',
+  'adHoc',
 ] as const satisfies readonly (keyof UpdateItemRequest & keyof WorkItemDto)[];
 
 /**

@@ -297,7 +297,7 @@ export class LiveHub implements OnModuleDestroy {
     if (access === null) throw notFound('Item');
     if (body.itemId !== null) {
       const row = await this.prisma.workItem.findFirst({
-        where: { id: body.itemId, projectId: access.project.id },
+        where: { id: body.itemId, projectId: access.project.id, deletedAt: null },
         select: {
           createdById: true,
           bucketId: true,
@@ -716,7 +716,7 @@ export class LiveHub implements OnModuleDestroy {
   private async withFacts(message: PresenceMessage): Promise<PresenceMessage> {
     if (message.i === null) return message;
     const row = await this.prisma.workItem.findFirst({
-      where: { id: message.i, projectId: message.p ?? undefined },
+      where: { id: message.i, projectId: message.p ?? undefined, deletedAt: null },
       select: {
         createdById: true,
         bucketId: true,

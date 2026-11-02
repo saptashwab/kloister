@@ -15,6 +15,7 @@ import type {
   CreateItemRequest,
   CreateLabelRequest,
   CreateSprintRequest,
+  DeleteItemResult,
   LabelDto,
   MoveItemRequest,
   Page,
@@ -168,16 +169,19 @@ export class ItemsApiService {
   }
 
   /**
-   * Deletes an item (needs `can.delete`, or `can.deleteCascade` with children).
+   * Moves an item to the project's trash (needs `can.delete`, or
+   * `can.deleteCascade` with children); restoring the batch undoes it (M12).
    *
    * @param projectId Project id.
    * @param item Item id or number.
    * @param cascade Delete its descendants too.
-   * @returns Resolves once deleted.
+   * @returns The trash batch.
    */
-  remove(projectId: string, item: string | number, cascade = false): Promise<void> {
+  remove(projectId: string, item: string | number, cascade = false): Promise<DeleteItemResult> {
     const params = cascade ? new HttpParams().set('cascade', 'true') : new HttpParams();
-    return firstValueFrom(this.http.delete<void>(this.itemUrl(projectId, item), { params }));
+    return firstValueFrom(
+      this.http.delete<DeleteItemResult>(this.itemUrl(projectId, item), { params }),
+    );
   }
 
   /**

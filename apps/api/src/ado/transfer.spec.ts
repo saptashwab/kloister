@@ -67,6 +67,10 @@ function item(id: string, type: ItemType = 'TASK', parentId: string | null = nul
     createdById: 'pm',
     position: 1,
     completedAt: null,
+    adHoc: false,
+    deletedAt: null,
+    deletedById: null,
+    deleteBatchId: null,
     createdAt: new Date(0),
     updatedAt: new Date(0),
   };

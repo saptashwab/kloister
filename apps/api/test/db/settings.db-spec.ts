@@ -216,7 +216,13 @@ describe('admin settings, branding, themes and backups (db)', () => {
       sid: adminSid,
       body: { maxFileSizeMb: 1, projectQuotaMb: 3, personalQuotaMb: 1024 },
     });
-    expect(res.json()).toEqual({ maxFileSizeMb: 1, projectQuotaMb: 3, personalQuotaMb: 1024 });
+    // Without a retention the stored one (default 30) is kept (M12).
+    expect(res.json()).toEqual({
+      maxFileSizeMb: 1,
+      projectQuotaMb: 3,
+      personalQuotaMb: 1024,
+      trashRetentionDays: 30,
+    });
 
     await writeFile(join(BACKUP_DIR, 'kloister-test-20260101-020000.dump'), Buffer.alloc(300));
     const usage = (

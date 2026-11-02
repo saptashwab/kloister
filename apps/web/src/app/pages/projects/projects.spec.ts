@@ -22,6 +22,7 @@ const project: ProjectDto = {
     useInstanceHolidays: true,
     holidaysReviewedAt: null,
     planLeadsOnly: true,
+    newItemBucketId: null,
   },
   myRole: 'LEAD',
   myVisibility: 'ALL',

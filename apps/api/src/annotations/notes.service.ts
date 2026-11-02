@@ -16,6 +16,7 @@ import type { Note } from '../generated/prisma/client.js';
 import { type ItemRow, itemFacts } from '../items/item.mapper.js';
 import { sanitizeItemText } from '../items/item-rich-text.js';
 import { ItemsService } from '../items/items.service.js';
+import { ReferencesService } from '../items/references.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { type ProjectAccess, ProjectAccessService } from '../projects/project-access.service.js';
@@ -47,12 +48,14 @@ export class NotesService {
    * @param items Item lookup through the visibility filter, and audit.
    * @param access Permission rules.
    * @param notifications Mention notifications.
+   * @param references Item references in note text (M12).
    */
   constructor(
     private readonly prisma: PrismaService,
     private readonly items: ItemsService,
     private readonly access: ProjectAccessService,
     private readonly notifications: NotificationsService,
+    private readonly references: ReferencesService,
   ) {}
 
   /**
@@ -83,7 +86,8 @@ export class NotesService {
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       ...pageArgs(page),
     });
-    return toPage(rows, page, (row) => this.toDto(auth, access, item, row));
+    const result = toPage(rows, page, (row) => this.toDto(auth, access, item, row));
+    return { ...result, items: await this.redacted(this.prisma, access, result.items) };
   }
 
   /**
@@ -113,7 +117,8 @@ export class NotesService {
         noteId: note.id,
       });
       await this.notifyMentions(tx, auth, access, item, mentioned);
-      return this.toDto(auth, access, item, note);
+      if (body.includes('data-ref')) await this.references.sync(tx, item.id);
+      return (await this.redacted(tx, access, [this.toDto(auth, access, item, note)]))[0];
     });
   }
 
@@ -140,8 +145,9 @@ export class NotesService {
       const item = await this.annotatable(tx, access, ref);
       const note = await findNote(tx, item.id, noteId);
       if (note.authorId !== auth.user.id) throw forbidden('Only the author can change a note');
-      const { html: body, mentioned } = await this.sanitize(tx, access, item, dto.body);
-      if (body === note.body) return this.toDto(auth, access, item, note);
+      const { html: body, mentioned } = await this.sanitize(tx, access, item, dto.body, note.body);
+      if (body === note.body)
+        return (await this.redacted(tx, access, [this.toDto(auth, access, item, note)]))[0];
       const updated = await tx.note.update({
         where: { id: note.id },
         data: { body, editedAt: new Date() },
@@ -159,7 +165,8 @@ export class NotesService {
         item,
         mentioned.filter((id) => !before.has(id)),
       );
-      return this.toDto(auth, access, item, updated);
+      await this.references.sync(tx, item.id);
+      return (await this.redacted(tx, access, [this.toDto(auth, access, item, updated)]))[0];
     });
   }
 
@@ -186,6 +193,7 @@ export class NotesService {
       const note = await findNote(tx, item.id, noteId);
       if (!this.capabilities(auth, access, item, note).delete) throw forbidden();
       await tx.note.delete({ where: { id: note.id } });
+      if (note.body.includes('data-ref')) await this.references.sync(tx, item.id);
       await this.items.record(tx, auth, access, AuditAction.NOTE_DELETED, item.id, {
         number: item.number,
         noteId: note.id,
@@ -215,6 +223,7 @@ export class NotesService {
    * @param access The caller's access.
    * @param item The item.
    * @param html Untrusted HTML.
+   * @param previous The stored body being replaced, whose references stay marked.
    * @returns Safe HTML and the users its mentions name.
    */
   private async sanitize(
@@ -222,6 +231,7 @@ export class NotesService {
     access: ProjectAccess,
     item: ItemRow,
     html: string,
+    previous = '',
   ): Promise<{ html: string; mentioned: string[] }> {
     const members =
       access.project.ownerId !== null
@@ -236,6 +246,7 @@ export class NotesService {
       item.id,
       html,
       new Map(members.map((m) => [m.userId, m.user.displayName])),
+      await this.references.markable(db, access, html, previous),
     );
     const body = result.html;
     if (body.replace(/<[^>]*>|&nbsp;|\s/g, '') === '' && !body.includes('<img')) {
@@ -289,6 +300,28 @@ export class NotesService {
     const facts = itemFacts(item);
     const own = note.authorId === auth.user.id && this.access.canAnnotateItem(access, facts);
     return { edit: own, delete: own || this.access.canModerateAnnotations(access, facts) };
+  }
+
+  /**
+   * Returns notes as this reader may see them: references to items they
+   * cannot see become plain text (M12).
+   *
+   * @param db Database or transaction client.
+   * @param access The reader's access.
+   * @param notes The notes.
+   * @returns The notes for this reader.
+   */
+  private async redacted(
+    db: DbClient,
+    access: ProjectAccess,
+    notes: NoteDto[],
+  ): Promise<NoteDto[]> {
+    const bodies = await this.references.redact(
+      db,
+      access,
+      notes.map((n) => n.body),
+    );
+    return notes.map((n, i) => ({ ...n, body: bodies[i] ?? n.body }));
   }
 
   /**

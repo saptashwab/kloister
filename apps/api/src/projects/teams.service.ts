@@ -151,7 +151,7 @@ export class TeamsService {
     await this.change(async (tx) => {
       await assertStillPm(tx, projectId, auth.user.id);
       const team = await findTeam(tx, projectId, teamId);
-      const items = await tx.workItem.count({ where: { teamId } });
+      const items = await tx.workItem.count({ where: { teamId, deletedAt: null } });
       await tx.team.delete({ where: { id: teamId } });
       await this.record(tx, auth, projectId, AuditAction.TEAM_DELETED, teamId, {
         name: team.name,

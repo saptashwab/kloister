@@ -122,6 +122,15 @@ and configuration copies. An upgrade's pre-backup is also database-only. Excel
 workbooks/offline archives are readable snapshots of a caller's scope, not a database
 restore format; they omit hidden data, accounts and server configuration.
 
+## Trash retention
+
+Deleted items go to their project's trash (M12), where project members who may delete can restore
+them. A job at 03:45 server time removes batches older than the retention for good, with their
+notes and files; set the number of days (1–365, default 30) under Admin settings › Storage. PMs can
+also delete a batch permanently from Project › Settings › Trash. Each removal is recorded in the
+audit log as "Item deleted permanently". Trashed items still count toward storage quotas until
+they are removed.
+
 ## Manual database validation and restore
 
 ADO transfer records are part of PostgreSQL backups. Completed batch content has

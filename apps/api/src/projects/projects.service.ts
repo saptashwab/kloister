@@ -351,6 +351,22 @@ export class ProjectsService {
               to: settingsChange.planLeadsOnly,
             };
           }
+          if (
+            settingsChange.newItemBucketId !== undefined &&
+            settingsChange.newItemBucketId !== settings.newItemBucketId
+          ) {
+            const bucketId = settingsChange.newItemBucketId;
+            if (
+              bucketId !== null &&
+              (await tx.bucket.count({ where: { projectId: id, id: bucketId } })) === 0
+            )
+              throw invalidField('settings.newItemBucketId', 'Choose a bucket of this project');
+            changedSettings.newItemBucketId = bucketId;
+            changes['settings.newItemBucketId'] = {
+              from: settings.newItemBucketId,
+              to: bucketId,
+            };
+          }
           if (Object.keys(changedSettings).length > 0) {
             data.settings = mergeProjectSettings(current.settings, changedSettings);
           }
@@ -465,7 +481,11 @@ export class ProjectsService {
               ],
             },
           }),
-          this.lastActivity(access.project.id, Object.keys(scope).length === 0 ? null : visible),
+          this.lastActivity(
+            access.project.id,
+            // With full visibility every item entry counts, trash entries included.
+            Object.keys(this.access.itemVisibilityFilter(access)).length === 0 ? null : visible,
+          ),
         ]);
         result.set(access.project.id, { open: openCount, overdue, lastActivityAt });
       }),

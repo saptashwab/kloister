@@ -1,12 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
   type AuditEntryDto,
   AuditAction,
+  type DeleteItemResult,
   ErrorCode,
+  hasOwnSprint,
   type ItemCapabilitiesDto,
   type ItemRefDto,
+  type ItemReferrerDto,
   ItemStatus,
-  type ItemType,
+  ItemType,
+  mayBeAdHoc,
   NotificationType,
   type Page,
   requiresBucket,
@@ -23,7 +28,7 @@ import { fromDbDate, fromDbTime, toDbDate, toDbTime } from '../common/dates.js';
 import { type PageQueryDto, pageArgs, toPage } from '../common/pagination.js';
 import { placeAfter, POSITION_STEP } from '../common/positions.js';
 import { isForeignKeyViolation } from '../common/prisma-errors.js';
-import { sanitizeRichText } from '../common/sanitize-html.js';
+import { sanitizeWithMentions } from '../common/sanitize-html.js';
 import { serializable } from '../common/transactions.js';
 import type { Bucket, Prisma } from '../generated/prisma/client.js';
 import { publishAudit } from '../live/live-events.js';
@@ -34,7 +39,6 @@ import {
   type ProjectAccess,
   ProjectAccessService,
 } from '../projects/project-access.service.js';
-import { FileStoreService } from '../storage/file-store.service.js';
 import {
   assertChildrenFit,
   assertParentType,
@@ -54,6 +58,7 @@ import {
   toItemRef,
 } from './item.mapper.js';
 import { sanitizeItemText } from './item-rich-text.js';
+import { ReferencesService } from './references.service.js';
 import {
   type CreateItemDto,
   type ListItemsQueryDto,
@@ -78,7 +83,8 @@ export const PLAN_LEADS_ONLY = 'Only PMs and Leads can change the plan in this p
 
 /**
  * Whether an update changes an item's plan (M9.2): its title, type, parent,
- * sprint, dates, half days or pin, which shape the timeline. Fields sent
+ * sprint, dates, half days, pin or ad-hoc flag (M12), which shape the
+ * timeline. Fields sent
  * unchanged do not count, so a form that sends every field still works for
  * Members.
  *
@@ -102,6 +108,7 @@ function plansChange(current: ItemRow, dto: UpdateItemDto, options: UpdateItemOp
     differs(dto.dueDate, fromDbDate(current.dueDate)) ||
     differs(dto.startSecondHalf, current.startSecondHalf) ||
     differs(dto.dueFirstHalf, current.dueFirstHalf) ||
+    differs(dto.adHoc, current.adHoc) ||
     differs(
       options.pin === undefined
         ? undefined
@@ -139,14 +146,14 @@ export class ItemsService {
    * @param audit Audit log; item entries form the activity history.
    * @param access Item permission rules and the visibility filter.
    * @param notifications Notifications for assignees and creators.
-   * @param files Attachment files, removed with deleted items.
+   * @param references Item references in descriptions (M12).
    */
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly access: ProjectAccessService,
     private readonly notifications: NotificationsService,
-    private readonly files: FileStoreService,
+    private readonly references: ReferencesService,
   ) {}
 
   /**
@@ -215,6 +222,34 @@ export class ItemsService {
   }
 
   /**
+   * Returns rich text as this reader may see it: references to items they
+   * cannot see lose their mark (M12).
+   *
+   * @param access The reader's access.
+   * @param htmls Stored descriptions or notes of this project.
+   * @returns The texts for this reader, in the same order.
+   */
+  redactText(access: ProjectAccess, htmls: readonly string[]): Promise<string[]> {
+    return this.references.redact(this.prisma, access, htmls);
+  }
+
+  /**
+   * Lists the items whose description or notes name this one ("Referenced
+   * in", M12).
+   *
+   * Permissions: 404 unless the item is visible; referring items the caller
+   * cannot see are left out.
+   *
+   * @param access The caller's access.
+   * @param ref Item uuid or number.
+   * @returns The visible referring items.
+   */
+  async referencedIn(access: ProjectAccess, ref: string): Promise<ItemReferrerDto[]> {
+    const item = await this.findVisible(this.prisma, access, ref);
+    return this.references.referencedIn(access, item.id);
+  }
+
+  /**
    * Returns an item's activity history: the audit entries about the item,
    * newest first (SPEC §6 item detail).
    *
@@ -252,6 +287,11 @@ export class ItemsService {
   /**
    * Creates an item at the top of its bucket. Without an explicit status,
    * the bucket's entry rule decides it, as for a card moved in (SPEC §4.2).
+   * A Story, Task or Bug without a bucket starts in the project's "New items
+   * start in" bucket, or the first bucket the caller can see it in (M12).
+   * Epics and Features take no sprint; a child of a Story starts in the
+   * Story's open sprint unless one is given. Ad-hoc items are Tasks or Bugs
+   * without a parent (M12).
    *
    * Permissions: `CREATE_ITEMS` (guard). Assigning anyone but yourself needs
    * `ASSIGN_OTHERS` or leading the item's team; putting it in a team follows
@@ -285,8 +325,6 @@ export class ItemsService {
     if (!this.access.canAssign(access, assigneeIds, { teamId })) {
       throw forbidden('Your project role does not allow assigning items to others');
     }
-    // A new item has no inline images yet, so any image is dropped.
-    const description = sanitizeRichText(dto.description ?? '');
     const startDate = dto.startDate ?? null;
     const dueDate = dto.dueDate ?? null;
     assertDateOrder(startDate, dueDate);
@@ -300,14 +338,34 @@ export class ItemsService {
     // Read committed: taking the next number locks the project row, which
     // serializes creates without making concurrent creates fail. References
     // deleted meanwhile surface as a foreign-key violation, mapped to 409.
+    const adHoc = dto.adHoc ?? false;
     const createRow = async (tx: Prisma.TransactionClient) => {
+      // A new item has no inline images yet, so any image is dropped.
+      const description = sanitizeWithMentions(dto.description ?? '', {
+        references: await this.references.markable(tx, access, dto.description ?? ''),
+      }).html;
       const parentId = dto.parentId ?? null;
+      if (adHoc) assertAdHocFits(dto.type, parentId);
+      if (!hasOwnSprint(dto.type) && (dto.sprintId ?? null) !== null) throw noOwnSprint();
+      let sprintId = dto.sprintId ?? null;
       if (parentId !== null) {
         const parent = await this.findVisibleRef(tx, access, parentId, 'parentId', 'Parent');
         assertParentType(dto.type, parent.type);
+        if (dto.sprintId === undefined && parent.type === ItemType.STORY)
+          sprintId = await openSprintOf(tx, parent.id);
       }
-      const bucket = await findBucketFor(tx, projectId, dto.type, dto.bucketId ?? null);
-      await assertOpenSprint(tx, projectId, dto.sprintId ?? null);
+      const bucketId =
+        dto.bucketId ??
+        (requiresBucket(dto.type)
+          ? await this.defaultBucketId(tx, access, {
+              createdById: auth.user.id,
+              assigneeIds,
+              teamId,
+              hasChildren: false,
+            })
+          : null);
+      const bucket = await findBucketFor(tx, projectId, dto.type, bucketId);
+      await assertOpenSprint(tx, projectId, sprintId);
       await assertTeam(tx, projectId, teamId);
       await assertMembers(tx, projectId, assigneeIds);
       await assertLabels(tx, projectId, dto.labelIds ?? []);
@@ -352,7 +410,8 @@ export class ItemsService {
           status,
           priority: dto.priority ?? undefined,
           bucketId: bucket?.id ?? null,
-          sprintId: dto.sprintId ?? null,
+          sprintId,
+          adHoc,
           teamId,
           startDate: startDate === null ? null : toDbDate(startDate),
           startSecondHalf,
@@ -366,6 +425,7 @@ export class ItemsService {
       });
       await setAssignees(tx, projectId, item.id, [], assigneeIds);
       await setLabels(tx, projectId, item.id, [], dto.labelIds ?? []);
+      if (description.includes('data-ref')) await this.references.sync(tx, item.id);
       await this.record(tx, auth, access, AuditAction.ITEM_CREATED, item.id, {
         number,
         type: item.type,
@@ -399,12 +459,18 @@ export class ItemsService {
    *
    * Permissions: 404 unless visible; 403 unless the caller may edit it
    * (`EDIT_ANY_ITEM`, own items with `EDIT_OWN_ITEMS`, or leading its
-   * team). Changing the title, type, parent, sprint, dates, half days or pin
-   * needs
+   * team). Changing the title, type, parent, sprint, dates, half days, pin
+   * or ad-hoc flag needs
    * {@link ProjectAccessService.canPlanItem} (M9.2). Changing assignees
    * other than yourself needs `ASSIGN_OTHERS` or
    * leading the item's team; changing the team follows
    * {@link ProjectAccessService.canSetTeam}; a new parent must be visible.
+   *
+   * Sprints follow the hierarchy (M12): Epics and Features have none (a type
+   * change to one clears it), and when a Story's sprint changes, its Tasks
+   * and Bugs that were in the old sprint (or none) follow in the same
+   * transaction, each with a `SPRINT_FOLLOWED` entry. Ad-hoc items have no
+   * parent and no visible dependencies.
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -460,7 +526,7 @@ export class ItemsService {
       const type = dto.type ?? current.type;
       if (type !== current.type) {
         const children = await tx.workItem.findMany({
-          where: { parentId: current.id },
+          where: { parentId: current.id, deletedAt: null },
           select: { type: true },
           distinct: ['type'],
         });
@@ -495,6 +561,22 @@ export class ItemsService {
         assertParentType(type, parent.type);
       }
 
+      const adHoc = dto.adHoc ?? current.adHoc;
+      if (adHoc) {
+        assertAdHocFits(type, parentId);
+        // Only links the caller can see count, so nothing hidden is hinted at;
+        // hidden links stay, unused while the item is out of the plan.
+        if (!current.adHoc && current._count.blockedBy + current._count.blocks > 0)
+          throw invalidField(
+            'adHoc',
+            'Remove its dependencies first: ad-hoc items are not planned',
+          );
+      }
+      if (adHoc !== current.adHoc) {
+        note('adHoc', current.adHoc, adHoc);
+        data.adHoc = adHoc;
+      }
+
       if (dto.title !== undefined && dto.title !== current.title) {
         note('title', current.title, dto.title);
         data.title = dto.title;
@@ -505,6 +587,8 @@ export class ItemsService {
           projectId,
           current.id,
           dto.description,
+          undefined,
+          await this.references.markable(tx, access, dto.description, current.description),
         );
         if (description !== current.description) {
           // The text itself stays out of the audit log; it can be long.
@@ -572,7 +656,11 @@ export class ItemsService {
         note('dueTime', fromDbTime(current.dueTime), dueTime);
         data.dueTime = toDbTime(dueTime);
       }
-      const sprintId = dto.sprintId === undefined ? current.sprintId : dto.sprintId;
+      let sprintId = dto.sprintId === undefined ? current.sprintId : dto.sprintId;
+      if (!hasOwnSprint(type)) {
+        if ((dto.sprintId ?? null) !== null) throw noOwnSprint();
+        sprintId = null;
+      }
       if (sprintId !== current.sprintId) {
         await assertOpenSprint(tx, projectId, sprintId);
         note('sprintId', current.sprintId, sprintId);
@@ -633,6 +721,7 @@ export class ItemsService {
         where: { id: current.id },
         data: { ...data, updatedAt: new Date() },
       });
+      if (data.description !== undefined) await this.references.sync(tx, current.id);
       await this.record(
         tx,
         auth,
@@ -642,6 +731,8 @@ export class ItemsService {
         { number: current.number, changes, ...options.auditMeta },
         itemFacts(current),
       );
+      if (changes['sprintId'] !== undefined && type === ItemType.STORY)
+        await this.followStory(tx, auth, access, current, sprintId);
       const updated = await tx.workItem.findUniqueOrThrow({
         where: { id: current.id },
         include: this.include(access),
@@ -777,8 +868,11 @@ export class ItemsService {
   }
 
   /**
-   * Deletes an item. An item with children is only deleted with
-   * `cascade=true`, which deletes its whole subtree (SPEC §4.1).
+   * Moves an item to the project's trash (M12). An item with children is
+   * only deleted with `cascade=true`, which trashes its whole subtree as one
+   * batch (SPEC §4.1). Trashed items keep their notes, files, references and
+   * links; restoring the batch brings them back, and the nightly purge
+   * removes them for good after the retention.
    *
    * Permissions: 404 unless visible; then project PMs and Leads may delete
    * any item, with or without cascade; team Leads their team's items without
@@ -791,19 +885,21 @@ export class ItemsService {
    * @param access The caller's access.
    * @param ref Item uuid or number.
    * @param cascade Whether to delete the subtree.
-   * @returns Resolves once deleted (204).
+   * @returns The trash batch, for Undo.
    */
   async remove(
     auth: AuthContext,
     access: ProjectAccess,
     ref: string,
     cascade: boolean,
-  ): Promise<void> {
+  ): Promise<DeleteItemResult> {
     const projectId = access.project.id;
-    const files = await serializable(this.prisma, async (tx) => {
+    return serializable(this.prisma, async (tx) => {
       const current = await this.findVisible(tx, access, ref);
-      // Every child counts here, also those the caller cannot see.
-      const children = await tx.workItem.count({ where: { parentId: current.id } });
+      // Every active child counts here, also those the caller cannot see.
+      const children = await tx.workItem.count({
+        where: { parentId: current.id, deletedAt: null },
+      });
       const facts = { ...itemFacts(current), hasChildren: children > 0 };
       if (!this.access.canDeleteItem(access, facts, cascade)) throw forbidden();
       if (children > 0 && !cascade) {
@@ -815,42 +911,36 @@ export class ItemsService {
       // Unscoped on purpose: cascades are for PMs and Leads, who see every item.
       const ids = [current.id];
       for (let frontier = [current.id]; frontier.length > 0;) {
-        const children = await tx.workItem.findMany({
-          where: { projectId, parentId: { in: frontier } },
+        const found = await tx.workItem.findMany({
+          where: { projectId, parentId: { in: frontier }, deletedAt: null },
           select: { id: true },
         });
-        frontier = children.map((c) => c.id);
+        frontier = found.map((c) => c.id);
         ids.push(...frontier);
       }
-      // Their notes, attachments and notifications go with the rows.
-      const files = await tx.attachment.findMany({
-        where: { workItemId: { in: ids } },
-        select: { storedName: true },
+      // Notes, files, references and ADO links stay with the rows until the purge.
+      const batchId = randomUUID();
+      await tx.workItem.updateMany({
+        where: { projectId, id: { in: ids } },
+        data: { deletedAt: new Date(), deletedById: auth.user.id, deleteBatchId: batchId },
       });
-      // One statement, so the parent links are checked only once all rows are gone.
-      await tx.adoItemLink.updateMany({
-        where: { projectId, itemId: { in: ids } },
-        data: { tombstonedAt: new Date() },
-      });
-      await tx.workItem.deleteMany({ where: { projectId, id: { in: ids } } });
       await this.record(
         tx,
         auth,
         access,
-        AuditAction.ITEM_DELETED,
+        AuditAction.ITEM_TRASHED,
         current.id,
         {
           number: current.number,
           type: current.type,
           title: current.title,
-          ...(cascade ? { cascade: true, descendants: ids.length - 1 } : {}),
+          batchId,
+          ...(ids.length > 1 ? { cascade: true, descendants: ids.length - 1 } : {}),
         },
         facts,
       );
-      return files;
+      return { batchId, count: ids.length };
     });
-    // Only once the rows are gone for good; a rolled-back delete keeps its files.
-    await this.files.remove(files.map((f) => ({ projectId, storedName: f.storedName })));
   }
 
   /**
@@ -887,6 +977,7 @@ export class ItemsService {
   async detail(db: DbClient, access: ProjectAccess, row: ItemRow): Promise<WorkItemDetailDto> {
     const key = access.project.key;
     const [ancestors] = await this.ancestors(db, access, [row]);
+    const [description] = await this.references.redact(db, access, [row.description]);
     const [checklist, blockedBy, blocks] = await Promise.all([
       db.checklistItem.findMany({
         where: { workItemId: row.id },
@@ -905,6 +996,7 @@ export class ItemsService {
     ]);
     return {
       ...toItemDto(key, row, ancestors ?? [], this.capabilities(access, row)),
+      description: description ?? '',
       checklistItems: checklist.map(toChecklistItemDto),
       blockedBy: blockedBy.map((r) => toItemRef(key, r)),
       blocks: blocks.map((r) => toItemRef(key, r)),
@@ -1014,6 +1106,90 @@ export class ItemsService {
   }
 
   /**
+   * Chooses the bucket of a new Story, Task or Bug created without one
+   * (M12): the project's "New items start in" bucket, else the first bucket,
+   * taking the first of them the caller could see the new item in.
+   *
+   * @param db Transaction client.
+   * @param access The caller's access.
+   * @param facts The new item's facts, without its bucket.
+   * @returns The bucket id, or null when the project has no bucket.
+   */
+  private async defaultBucketId(
+    db: DbClient,
+    access: ProjectAccess,
+    facts: Omit<ItemFacts, 'bucketId'>,
+  ): Promise<string | null> {
+    const buckets = await db.bucket.findMany({
+      where: { projectId: access.project.id },
+      orderBy: [{ position: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    const preferred = access.settings.newItemBucketId;
+    const ordered = [
+      ...buckets.filter((b) => b.id === preferred),
+      ...buckets.filter((b) => b.id !== preferred),
+    ];
+    const usable = ordered.find((b) =>
+      this.access.canViewItem(access, { ...facts, bucketId: b.id }),
+    );
+    return (usable ?? ordered[0])?.id ?? null;
+  }
+
+  /**
+   * Moves a Story's unfinished Tasks and Bugs that were in its old sprint (or
+   * none) into its new one (M12), recording `SPRINT_FOLLOWED` on each; children
+   * in a closed old sprint stay with it. Unscoped on
+   * purpose, like a cascade: the hierarchy decides, whoever sees the
+   * children; each entry is announced only to those who can see the child.
+   *
+   * @param tx Transaction client.
+   * @param auth The caller.
+   * @param access The caller's access.
+   * @param story The Story before the change.
+   * @param to The Story's new sprint.
+   * @returns Resolves once the children moved.
+   */
+  private async followStory(
+    tx: Prisma.TransactionClient,
+    auth: AuthContext,
+    access: ProjectAccess,
+    story: ItemRow,
+    to: string | null,
+  ): Promise<void> {
+    const from = story.sprintId;
+    // Children in a closed sprint stay there: that sprint's history is kept.
+    const closed =
+      from !== null &&
+      (await tx.sprint.count({ where: { id: from, state: SprintState.CLOSED } })) > 0;
+    const children = await tx.workItem.findMany({
+      where: {
+        projectId: access.project.id,
+        parentId: story.id,
+        deletedAt: null,
+        type: { in: [ItemType.TASK, ItemType.BUG] },
+        status: { not: ItemStatus.DONE },
+        OR: closed ? [{ sprintId: null }] : [{ sprintId: from }, { sprintId: null }],
+      },
+      select: { id: true, number: true, sprintId: true },
+      orderBy: { number: 'asc' },
+    });
+    for (const child of children) {
+      if (child.sprintId === to) continue;
+      await tx.workItem.update({
+        where: { id: child.id },
+        data: { sprintId: to, updatedAt: new Date() },
+      });
+      await this.record(tx, auth, access, AuditAction.SPRINT_FOLLOWED, child.id, {
+        number: child.number,
+        storyId: story.id,
+        storyNumber: story.number,
+        changes: { sprintId: { from: child.sprintId, to } },
+      });
+    }
+  }
+
+  /**
    * Loads a referenced item (a parent) through the caller's visibility
    * filter. Unknown and invisible items get the same 400, so a body
    * reference reveals nothing.
@@ -1094,10 +1270,16 @@ export class ItemsService {
   ): Promise<Page<WorkItemDto>> {
     const result = toPage(rows, page, (row) => row);
     const chains = await this.ancestors(db, access, result.items);
+    const descriptions = await this.references.redact(
+      db,
+      access,
+      result.items.map((r) => r.description),
+    );
     return {
-      items: result.items.map((row, i) =>
-        toItemDto(access.project.key, row, chains[i] ?? [], this.capabilities(access, row)),
-      ),
+      items: result.items.map((row, i) => ({
+        ...toItemDto(access.project.key, row, chains[i] ?? [], this.capabilities(access, row)),
+        description: descriptions[i] ?? '',
+      })),
       nextCursor: result.nextCursor,
     };
   }
@@ -1475,6 +1657,46 @@ async function setLabels(
       data: added.map((labelId) => ({ workItemId: itemId, projectId, labelId })),
     });
   }
+}
+
+/**
+ * The 400 for a sprint on an Epic or Feature (M12).
+ *
+ * @returns The error to throw.
+ */
+function noOwnSprint(): Error {
+  return invalidField(
+    'sprintId',
+    'Epics and Features have no sprint of their own; plan their Stories instead',
+  );
+}
+
+/**
+ * Throws 400 unless an ad-hoc item fits (M12): a Task or Bug without parent.
+ *
+ * @param type The item's type.
+ * @param parentId Its parent, or null.
+ */
+export function assertAdHocFits(type: ItemType, parentId: string | null): void {
+  if (!mayBeAdHoc(type)) throw invalidField('adHoc', 'Only Tasks and Bugs can be ad hoc');
+  if (parentId !== null) throw invalidField('parentId', 'Ad-hoc items have no parent');
+}
+
+/**
+ * The sprint a new child of a Story starts in (M12): the Story's sprint
+ * while it is open, otherwise none.
+ *
+ * @param db Transaction client.
+ * @param storyId The Story.
+ * @returns Sprint id, or null.
+ */
+async function openSprintOf(db: DbClient, storyId: string): Promise<string | null> {
+  const story = await db.workItem.findUnique({
+    where: { id: storyId },
+    select: { sprint: { select: { id: true, state: true } } },
+  });
+  const sprint = story?.sprint ?? null;
+  return sprint === null || sprint.state === SprintState.CLOSED ? null : sprint.id;
 }
 
 /**

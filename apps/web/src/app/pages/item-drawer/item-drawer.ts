@@ -20,6 +20,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { Router, RouterLink } from '@angular/router';
 import {
   ALLOWED_PARENT_TYPES,
@@ -40,17 +41,22 @@ import {
   type UpdateItemRequest,
   type WorkItemDetailDto,
   type WorkItemDto,
+  hasOwnSprint,
+  type ItemReferrerDto,
+  mayBeAdHoc,
+  referenceKey,
 } from '@kloister/shared';
 import { AnnotationsApiService } from '../../core/annotations-api.service';
 import { errorMessage } from '../../core/api';
 import { isoDate, NONE } from '../../core/board-logic';
 import { dueState, dueText, revertMove, shortDate, undoFields } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
+import { TrashApiService } from '../../core/trash-api.service';
 import { PRIORITY_LABELS, SPRINT_STATE_LABELS, TYPE_LABELS } from '../../core/labels';
 import { changedFields, personName, personWithRole } from '../../core/live-logic';
 import { ProjectContext, type RemoteChange } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
-import { forDisplay, type Mentionable } from '../../core/rich-text';
+import { forDisplay, type Mentionable, type Referable, referencePath } from '../../core/rich-text';
 import { SessionStore } from '../../core/session.store';
 import { Shortcuts } from '../../core/shortcuts';
 import { Avatar, PERSON_FILTER, StaticAvatar } from '../../ui/avatar';
@@ -59,6 +65,7 @@ import { Dialogs } from '../../ui/dialogs';
 import { Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { ViewImages } from '../../ui/image-viewer';
+import { ItemRefs, ItemRefStyles, type RefLookup } from '../../ui/item-refs';
 import { LabelPill } from '../../ui/label-pill';
 import { PresenceAvatars } from '../../ui/live-ui';
 import { PriorityIcon, StatusPill, TypeIcon } from '../../ui/signals';
@@ -135,6 +142,9 @@ const FIELD_NAMES: Record<string, string> = {
     StatusPill,
     TypeIcon,
     ViewImages,
+    ItemRefs,
+    ItemRefStyles,
+    MatSlideToggleModule,
   ],
   // Avatars here show their hover card on click; they do not filter the
   // board behind the drawer.
@@ -143,6 +153,7 @@ const FIELD_NAMES: Record<string, string> = {
     '(keydown.escape)': 'onEscape($event)',
   },
   template: `
+    <app-item-ref-styles />
     <div class="drawer-scrim" aria-hidden="true" (click)="close()"></div>
     <div
       #panel
@@ -447,7 +458,15 @@ const FIELD_NAMES: Record<string, string> = {
               Sprint<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['sprint'] }" />
             </dt>
             <dd data-presence="sprint">
-              @if (canPlan()) {
+              @if (!ownSprint(d)) {
+                <div class="plain">
+                  @if (childSprints(d); as names) {
+                    {{ names }}
+                  } @else {
+                    <span class="muted">From its stories</span>
+                  }
+                </div>
+              } @else if (canPlan()) {
                 <mat-select
                   class="k-inline"
                   aria-label="Sprint"
@@ -466,6 +485,11 @@ const FIELD_NAMES: Record<string, string> = {
                 </mat-select>
               } @else {
                 <div class="plain">{{ sprintName(d) }}</div>
+              }
+              @if (outOfStorySprint(d)) {
+                <span class="k-pill warn" data-testid="story-sprint-marker"
+                  >Not in its story's sprint</span
+                >
               }
             </dd>
 
@@ -660,7 +684,9 @@ const FIELD_NAMES: Record<string, string> = {
               Parent<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['parent'] }" />
             </dt>
             <dd data-presence="parent">
-              @if (canPlan() && d.type !== epic) {
+              @if (d.adHoc) {
+                <div class="plain"><span class="muted">Ad hoc items have no parent</span></div>
+              } @else if (canPlan() && d.type !== epic) {
                 <mat-select
                   class="k-inline"
                   aria-label="Parent"
@@ -686,6 +712,18 @@ const FIELD_NAMES: Record<string, string> = {
                 </div>
               }
             </dd>
+
+            @if (adHocAllowed(d)) {
+              <dt>Ad hoc</dt>
+              <dd>
+                <mat-slide-toggle
+                  [checked]="d.adHoc"
+                  [disabled]="!canPlan() || (!d.adHoc && d.parentId !== null)"
+                  (change)="save({ adHoc: $event.checked })"
+                  >Not part of the plan</mat-slide-toggle
+                >
+              </dd>
+            }
           </dl>
 
           <section aria-labelledby="d-desc" data-presence="description">
@@ -698,10 +736,19 @@ const FIELD_NAMES: Record<string, string> = {
               <app-rich-text-editor
                 [html]="d.description"
                 [uploadImage]="imageUploader()"
+                [referables]="referables()"
+                [projectKey]="ctx.project()?.key ?? null"
+                [appItemRefs]="refLookup()"
+                hint="Type # to link an item, paste or drop PNG, JPEG, GIF or WebP images."
                 (save)="save({ description: $event })"
               />
             } @else if (d.description) {
-              <div class="description k-rich" appViewImages [innerHTML]="descriptionHtml()"></div>
+              <div
+                class="description k-rich"
+                appViewImages
+                [appItemRefs]="refLookup()"
+                [innerHTML]="descriptionHtml()"
+              ></div>
             } @else {
               <p class="muted">No description.</p>
             }
@@ -752,7 +799,7 @@ const FIELD_NAMES: Record<string, string> = {
                 <p class="muted">No dependencies.</p>
               }
             </div>
-            @if (canPlan()) {
+            @if (canPlan() && !d.adHoc) {
               <mat-select
                 class="k-inline add-ref"
                 aria-label="Add a blocking item"
@@ -790,6 +837,27 @@ const FIELD_NAMES: Record<string, string> = {
             }
           </section>
 
+          @if (referrers().length > 0) {
+            <section aria-labelledby="d-referenced">
+              <h2 id="d-referenced">Referenced in</h2>
+              <div class="refs">
+                @for (r of referrers(); track r.id) {
+                  <div class="ref-row">
+                    <app-type-icon [type]="r.type" />
+                    <span class="k-key">{{ r.key }}</span>
+                    @if (r.projectId === projectId()) {
+                      <a class="ref-title" href="" (click)="openItem($event, r.number)">{{
+                        r.title
+                      }}</a>
+                    } @else {
+                      <a class="ref-title" [routerLink]="['/', refPath(r.key)]">{{ r.title }}</a>
+                    }
+                  </div>
+                }
+              </div>
+            </section>
+          }
+
           <section aria-labelledby="d-files">
             <app-item-attachments
               [projectId]="projectId()"
@@ -808,6 +876,9 @@ const FIELD_NAMES: Record<string, string> = {
               [canAnnotate]="canAnnotate()"
               [writable]="ctx.writable()"
               [mentionables]="mentionables()"
+              [referables]="referables()"
+              [projectKey]="ctx.project()?.key ?? null"
+              [refLookup]="refLookup()"
               [uploadImage]="imageUploader()"
             />
           </section>
@@ -863,6 +934,7 @@ export class ItemDrawer {
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
   private readonly api = inject(ItemsApiService);
+  private readonly trashApi = inject(TrashApiService);
   private readonly router = inject(Router);
   private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
@@ -982,6 +1054,40 @@ export class ItemDrawer {
       .filter((m) => m.isActive)
       .map((m) => ({ id: m.userId, name: m.displayName })),
   );
+  /** Visible items of the project, which text can reference with `#` (M12). */
+  protected readonly referables = computed<Referable[]>(() => {
+    const key = this.ctx.project()?.key ?? null;
+    return this.ctx
+      .items()
+      .map((i) => ({ key: referenceKey(key, i.number), title: i.title, type: i.type }));
+  });
+  /** Finds referenced items of this project in the live store, for hover cards. */
+  protected readonly refLookup = computed<RefLookup>(() => {
+    const key = this.ctx.project()?.key ?? null;
+    const byKey = new Map(this.ctx.items().map((i) => [referenceKey(key, i.number), i]));
+    const names = new Map(this.ctx.members().map((m) => [m.userId, m.displayName]));
+    return (ref) => {
+      const item = byKey.get(ref);
+      return item === undefined
+        ? undefined
+        : {
+            key: ref,
+            type: item.type,
+            title: item.title,
+            status: item.status,
+            dueDate: item.dueDate,
+            assignees: item.assigneeIds
+              .map((id) => names.get(id) ?? '')
+              .filter((n) => n !== '')
+              .join(', '),
+          };
+    };
+  });
+  /** Visible items whose description or notes name this one (M12). */
+  protected readonly referrers = signal<ItemReferrerDto[]>([]);
+  /** The app path of a referenced item, for links into other projects. */
+  protected readonly refPath = referencePath;
+
   /** The description prepared for read-only display. */
   protected readonly descriptionHtml = computed(() => forDisplay(this.detail()?.description ?? ''));
 
@@ -1340,6 +1446,61 @@ export class ItemDrawer {
   }
 
   /**
+   * Reports whether the item has a sprint of its own (M12).
+   *
+   * @param d The item.
+   * @returns False for Epics and Features.
+   */
+  protected ownSprint(d: WorkItemDto): boolean {
+    return hasOwnSprint(d.type);
+  }
+
+  /**
+   * The sprints of an Epic's or Feature's visible descendants, read-only
+   * (M12), in sprint order.
+   *
+   * @param d The Epic or Feature.
+   * @returns Their names, or an empty string when none has a sprint.
+   */
+  protected childSprints(d: WorkItemDto): string {
+    const ids = new Set(
+      this.ctx
+        .items()
+        .filter((i) => i.ancestors.some((a) => a.id === d.id) && i.sprintId !== null)
+        .map((i) => i.sprintId),
+    );
+    const names = this.ctx
+      .sprints()
+      .filter((s) => ids.has(s.id))
+      .map((s) => s.name);
+    return names.length === 0
+      ? ''
+      : `${names.length === 1 ? 'Sprint' : 'Sprints'}: ${names.join(', ')}`;
+  }
+
+  /**
+   * Reports whether a Task or Bug was put into another sprint than its
+   * Story on purpose (M12).
+   *
+   * @param d The item.
+   * @returns True when its Story has a different sprint.
+   */
+  protected outOfStorySprint(d: WorkItemDto): boolean {
+    const parent = this.ctx.items().find((i) => i.id === d.parentId);
+    return d.sprintId !== null && parent?.type === ItemType.STORY && parent.sprintId !== d.sprintId;
+  }
+
+  /**
+   * Reports whether the item may be ad hoc: a Task or Bug (M12).
+   *
+   * @param d The item.
+   * @returns True for Tasks and Bugs.
+   */
+  protected adHocAllowed(d: WorkItemDto): boolean {
+    return mayBeAdHoc(d.type);
+  }
+
+  /**
    * The item's sprint name with its dates and state.
    *
    * @param d The item.
@@ -1597,8 +1758,9 @@ export class ItemDrawer {
   }
 
   /**
-   * Deletes the item after confirmation; items with children are deleted
-   * with their subtree when the caller may cascade (PM, Lead).
+   * Moves the item to the trash after confirmation; items with children go
+   * with their subtree when the caller may cascade (PM, Lead). The toast's
+   * Undo restores the batch (M12).
    *
    * @returns Resolves once deleted.
    */
@@ -1609,20 +1771,28 @@ export class ItemDrawer {
     const confirmed = await this.dialogs.confirm({
       title: cascade ? `Delete ${d.key} and everything under it?` : `Delete ${d.key}?`,
       message: cascade
-        ? `"${d.title}" and everything under it are deleted. This cannot be undone.`
-        : `"${d.title}" is deleted. This cannot be undone.`,
+        ? `"${d.title}" and everything under it move to the trash, where they can be restored for a while.`
+        : `"${d.title}" moves to the trash, where it can be restored for a while.`,
       confirm: 'Delete',
       danger: true,
     });
     if (!confirmed) return;
     try {
-      await this.api.remove(this.projectId(), d.id, cascade);
+      const projectId = this.projectId();
+      const { batchId } = await this.api.remove(projectId, d.id, cascade);
       const gone = this.ctx
         .items()
         .filter((i) => i.id === d.id || i.ancestors.some((a) => a.id === d.id))
         .map((i) => i.id);
       this.ctx.forget(gone);
-      this.toast.show(`${d.key} deleted`);
+      this.toast.show(
+        `${d.key} moved to the trash`,
+        async () => {
+          await this.trashApi.restore(projectId, batchId);
+          await this.ctx.refresh();
+        },
+        { action: 'Undo', done: `${d.key} restored` },
+      );
       this.close();
     } catch (error) {
       this.toast.error(error);
@@ -1693,20 +1863,23 @@ export class ItemDrawer {
     const run = ++this.loadRun;
     this.detail.set(null);
     this.children.set([]);
+    this.referrers.set([]);
     this.error.set('');
     this.gone.set('');
     this.pendingRemote = null;
     this.editingTitle.set(false);
     try {
-      const [detail, children] = await Promise.all([
+      const [detail, children, referrers] = await Promise.all([
         this.api.get(projectId, number),
         this.api.children(projectId, number),
+        this.trashApi.referencedIn(projectId, number).catch(() => []),
       ]);
       // A newer item was opened meanwhile; its answer wins.
       if (run !== this.loadRun) return;
       this.detail.set(detail);
       this.children.set(children.items);
       this.childCursor.set(children.nextCursor);
+      this.referrers.set(referrers);
     } catch (error) {
       if (run === this.loadRun) this.error.set(errorMessage(error));
     }
@@ -1727,6 +1900,8 @@ export class ItemDrawer {
     try {
       const updated = await change();
       if (this.ctx.project()?.id === projectId) this.ctx.upsert(updated);
+      // A Story's Tasks and Bugs followed it into the new sprint (M12).
+      if (followed(before, updated)) void this.ctx.refresh();
       // Another item was opened meanwhile: keep showing that one.
       if (run !== this.loadRun) return;
       this.detail.set(updated);
@@ -1762,9 +1937,22 @@ export class ItemDrawer {
     const fields = undoFields(before, after, current);
     if (fields !== null) current = await this.api.update(this.projectId(), before.id, fields);
     this.ctx.upsert(current);
+    if (followed(after, current)) void this.ctx.refresh();
     if (run === this.loadRun) {
       this.detail.set(current);
       this.version.update((v) => v + 1);
     }
   }
+}
+
+/**
+ * Reports whether a change moved a Story to another sprint, so its Tasks and
+ * Bugs followed on the server (M12) and the store needs a refresh.
+ *
+ * @param before The item before the change, if known.
+ * @param after The item after it.
+ * @returns True for a Story whose sprint changed.
+ */
+function followed(before: WorkItemDto | null, after: WorkItemDto): boolean {
+  return before !== null && after.type === ItemType.STORY && before.sprintId !== after.sprintId;
 }

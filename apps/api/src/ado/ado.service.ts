@@ -13,6 +13,8 @@ import {
   type AdoSampleResult,
   type AdoSummary,
   AuditAction,
+  hasOwnSprint,
+  type ItemType,
   ProjectRole,
   type Page,
 } from '@kloister/shared';
@@ -529,6 +531,11 @@ export class AdoService {
         if (Array.isArray(changes.labelIds))
           changes.labelIds = changes.labelIds.map((id) => labels.get(id) ?? id);
         let itemId = op.itemId;
+        // Epics and Features have no sprint of their own (M12); an iteration
+        // path on them is not applied.
+        const incomingType = (changes.type ?? items.find((i) => i.id === itemId)?.type) as
+          ItemType | undefined;
+        if (incomingType !== undefined && !hasOwnSprint(incomingType)) delete changes.sprintId;
         if (request.mode === 'import') {
           const { bucketId, ...fields } = changes;
           if (itemId === null) {

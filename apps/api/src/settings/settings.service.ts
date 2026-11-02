@@ -42,6 +42,7 @@ export const DEFAULT_STORAGE_SETTINGS: StorageSettings = {
   maxFileSizeMb: 25,
   projectQuotaMb: 2048,
   personalQuotaMb: 1024,
+  trashRetentionDays: 30,
 };
 
 /** `AppSetting.key` holding {@link StorageSettings}. */

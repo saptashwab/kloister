@@ -64,6 +64,12 @@ interface UsageRow {
             >Separate from project storage</mat-hint
           ></mat-form-field
         >
+        <mat-form-field
+          ><mat-label>Keep deleted items (days)</mat-label
+          ><input matInput type="number" formControlName="trashRetentionDays" /><mat-hint
+            >1 to 365; the trash is emptied every night after that</mat-hint
+          ></mat-form-field
+        >
       </div>
       <div class="k-actions">
         <button mat-flat-button type="submit" [disabled]="form.invalid || busy()">
@@ -129,6 +135,7 @@ export class AdminStoragePage implements OnInit {
     maxFileSizeMb: [25, wholeNumber(STORAGE_LIMITS.maxFileSizeMb)],
     projectQuotaMb: [2048, wholeNumber(STORAGE_LIMITS.projectQuotaMb)],
     personalQuotaMb: [1024, wholeNumber(STORAGE_LIMITS.personalQuotaMb)],
+    trashRetentionDays: [30, wholeNumber(STORAGE_LIMITS.trashRetentionDays)],
   });
 
   /** The folders, each as a share of the app folder. */
@@ -213,6 +220,7 @@ export class AdminStoragePage implements OnInit {
           maxFileSizeMb: Number(v.maxFileSizeMb),
           projectQuotaMb: Number(v.projectQuotaMb),
           personalQuotaMb: Number(v.personalQuotaMb),
+          trashRetentionDays: Number(v.trashRetentionDays),
         }),
       );
       this.toast.show('Attachment limits saved');

@@ -107,7 +107,7 @@ export async function startApp(): Promise<{ app: NestFastifyApplication; prisma:
  */
 export async function resetDb(prisma: PrismaService): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "Holiday", "Notification", "Attachment", "Note", "AuditLog", "Session", "AppSetting", "ChecklistItem", "WorkItemLabel", "WorkItemDependency", "WorkItemAssignee", "WorkItem", "Label", "Sprint", "Bucket", "TeamMember", "Team", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "ItemReference", "Holiday", "Notification", "Attachment", "Note", "AuditLog", "Session", "AppSetting", "ChecklistItem", "WorkItemLabel", "WorkItemDependency", "WorkItemAssignee", "WorkItem", "Label", "Sprint", "Bucket", "TeamMember", "Team", "ProjectMember", "Project", "User" RESTART IDENTITY CASCADE',
   );
 }
 

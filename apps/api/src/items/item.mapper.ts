@@ -138,6 +138,7 @@ export function toItemDto(
       total: row.checklist.length,
     },
     childCount: row._count.children,
+    adHoc: row.adHoc,
     completedAt: row.completedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),

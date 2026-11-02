@@ -98,6 +98,23 @@ The upgrade helper and scripts never change httpd configuration, so this line is
 added by hand. Until streaming works, an administrator can switch **Live updates** off under Admin settings ›
 General; the app then behaves as before (changes show after a reload).
 
+## Epic and Feature sprints after upgrading to v1.3.0 (M12)
+
+From v1.3.0 Epics and Features have no sprint of their own: they show the sprints of their
+stories. The upgrade's migration clears any sprint still set on an Epic or Feature and records
+each one in that item's history as an unattributed change marked `"upgrade": "M12"`. Nothing else
+changes: Stories, Tasks and Bugs keep their sprints. To see how many items each project had
+cleared, run as the app account in **Bash** with the same private `PG*` environment as the
+database checks in [ADMIN](ADMIN.md#manual-database-validation-and-restore) (passwords only in the
+password file) and the selected major's binary:
+
+```bash
+/usr/pgsql-18/bin/psql --no-password -c "SELECT p.\"key\", count(*) FROM \"AuditLog\" a JOIN \"Project\" p ON p.\"id\" = a.\"projectId\" WHERE a.\"meta\"->>'upgrade' = 'M12' GROUP BY p.\"key\" ORDER BY 1"
+```
+
+Deleting an item now moves it to the project's trash, where it can be restored for 30 days by
+default (Admin settings › Storage).
+
 ## Manual upgrade
 
 The sections below describe the shipped `deploy/upgrade.sh` on its own, for operators who

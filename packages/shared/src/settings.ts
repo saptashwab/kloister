@@ -187,6 +187,8 @@ export interface StorageSettingsDto {
   projectQuotaMb: number;
   /** Per-user personal attachment quota in MB; default 1024. */
   personalQuotaMb: number;
+  /** Days deleted items stay in the trash before the nightly purge; default 30 (M12). */
+  trashRetentionDays: number;
 }
 
 /** Accepted ranges of {@link StorageSettingsDto}, inclusive. */
@@ -194,6 +196,7 @@ export const STORAGE_LIMITS = {
   maxFileSizeMb: { min: 1, max: 1_024 },
   projectQuotaMb: { min: 1, max: 1_048_576 },
   personalQuotaMb: { min: 1, max: 1_048_576 },
+  trashRetentionDays: { min: 1, max: 365 },
 } as const;
 
 /** Space used by one folder. */

@@ -23,21 +23,21 @@ Types and rules shared with the API (DTOs, permissions, the scheduling planner) 
 
 ## Routes
 
-| Path                                                   | Page                                                             |
-| ------------------------------------------------------ | ---------------------------------------------------------------- |
-| `/`                                                    | Projects                                                         |
-| `/login`, `/change-password`                           | Sign-in and the required password change                         |
-| `/p/:key`                                              | Board; `/p/:key/items/:number` opens the item drawer over it     |
-| `/p/:key/backlog`, `/p/:key/timeline`                  | Backlog tree and timeline, each with the same drawer route       |
-| `/p/:key/sprints`                                      | Sprints                                                          |
-| `/p/:key/settings/:section`                            | Project settings tabs (general, members, teams, buckets, labels) |
-| `/p/:key/ado`                                          | ADO transfer                                                     |
-| `/personal`                                            | The caller's personal space (`/p/personal`)                      |
-| `/work`, `/people/:userId`                             | My work, and another person's work in shared projects            |
-| `/notifications`                                       | Notifications                                                    |
-| `/settings`                                            | Account settings (name, password, theme)                         |
-| `/help`                                                | Help and FAQ                                                     |
-| `/admin/users`, `/admin/settings/:tab`, `/admin/audit` | Administration                                                   |
+| Path                                                   | Page                                                                    |
+| ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `/`                                                    | Projects                                                                |
+| `/login`, `/change-password`                           | Sign-in and the required password change                                |
+| `/p/:key`                                              | Board; `/p/:key/items/:number` opens the item drawer over it            |
+| `/p/:key/backlog`, `/p/:key/timeline`                  | Backlog tree and timeline, each with the same drawer route              |
+| `/p/:key/sprints`                                      | Sprints                                                                 |
+| `/p/:key/settings/:section`                            | Project settings tabs (general, members, teams, buckets, labels, trash) |
+| `/p/:key/ado`                                          | ADO transfer                                                            |
+| `/personal`                                            | The caller's personal space (`/p/personal`)                             |
+| `/work`, `/people/:userId`                             | My work, and another person's work in shared projects                   |
+| `/notifications`                                       | Notifications                                                           |
+| `/settings`                                            | Account settings (name, password, theme)                                |
+| `/help`                                                | Help and FAQ                                                            |
+| `/admin/users`, `/admin/settings/:tab`, `/admin/audit` | Administration                                                          |
 
 Child routes inherit `:key` (`paramsInheritanceStrategy: 'always'`), and route parameters bind to
 component inputs. The guards in `core/auth.guards.ts` only shape navigation (signed in, password
@@ -66,6 +66,12 @@ change pending, administrator); the API checks every request.
   decides what is allowed.
 - `RescheduleFlow` (`core/reschedule.ts`), also provided by the project shell, handles every date
   change with dependent moves, previews and Undo (see [SCHEDULING.md](SCHEDULING.md)).
+- Item references (M12): `core/rich-text.ts` turns stored marks into links (`forDisplay`), keeps
+  them through editing (`forEditing`) and offers `#`/key autocomplete in the editor. The
+  `appItemRefs` directive (`ui/item-refs.ts`) opens links inside the app and shows the hover card,
+  reading the open project's live store; items of other projects come from `GET /references`
+  through `core/trash-api.service.ts`, which also holds the trash calls so only lazy pages load
+  them. The trash itself is `pages/project-settings/project-trash.ts`.
 
 ## Shared UI and theming
 

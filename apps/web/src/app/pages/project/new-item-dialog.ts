@@ -5,12 +5,15 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import {
   type BucketDto,
   type CreateItemRequest,
+  hasOwnSprint,
   isAllowedParent,
   ItemType,
   ITEM_TITLE_MAX,
+  mayBeAdHoc,
   requiresBucket,
   type SprintDto,
 } from '@kloister/shared';
@@ -37,6 +40,8 @@ export interface NewItemData {
   parents?: NewItemParent[];
   /** Sprints a new item may join (not closed). */
   sprints?: SprintDto[];
+  /** The project's "New items start in" bucket (M12); the first bucket when missing. */
+  defaultBucketId?: string | null;
 }
 
 /**
@@ -44,7 +49,9 @@ export interface NewItemData {
  * optionally its parent, sprint and dates. Those plan fields are offered
  * here because a project may keep later changes to PMs and Leads (SPEC §3.2,
  * M9.2). Epics and Features may stay off the board; Stories, Tasks and Bugs
- * need a bucket (SPEC §4). Answers the create request, or null when
+ * need a bucket (SPEC §4), preselected from the project's "New items start
+ * in" setting. Epics and Features take no sprint, and Tasks and Bugs may be
+ * ad hoc, without a parent (M12). Answers the create request, or null when
  * cancelled.
  */
 @Component({
@@ -56,6 +63,7 @@ export interface NewItemData {
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatSlideToggleModule,
     DateField,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -93,7 +101,16 @@ export interface NewItemData {
             }
           </mat-select>
         </mat-form-field>
-        @if (parentOptions().length > 0) {
+        @if (canBeAdHoc()) {
+          <mat-slide-toggle
+            name="adHoc"
+            [(ngModel)]="adHoc"
+            style="margin-bottom: var(--k-space-4)"
+          >
+            Ad hoc: not part of the plan
+          </mat-slide-toggle>
+        }
+        @if (!adHoc && parentOptions().length > 0) {
           <mat-form-field>
             <mat-label>Parent</mat-label>
             <mat-select name="parent" [(ngModel)]="parentId">
@@ -104,7 +121,7 @@ export interface NewItemData {
             </mat-select>
           </mat-form-field>
         }
-        @if (sprints.length > 0) {
+        @if (sprints.length > 0 && hasSprint()) {
           <mat-form-field>
             <mat-label>Sprint</mat-label>
             <mat-select name="sprint" [(ngModel)]="sprintId">
@@ -157,7 +174,12 @@ export class NewItemDialog {
   /** Chosen type. */
   protected type: ItemType = ItemType.TASK;
   /** Chosen bucket, or null for off the board. */
-  protected bucketId: string | null = this.data.buckets[0]?.id ?? null;
+  protected bucketId: string | null =
+    this.data.buckets.find((b) => b.id === this.data.defaultBucketId)?.id ??
+    this.data.buckets[0]?.id ??
+    null;
+  /** Ad hoc: tracked but not part of the plan (M12). */
+  protected adHoc = false;
   /** Chosen parent, or null. */
   protected parentId: string | null = null;
   /** Chosen sprint, or null. */
@@ -176,9 +198,29 @@ export class NewItemDialog {
     return (this.data.parents ?? []).filter((p) => isAllowedParent(this.type, p.type));
   }
 
-  /** Drops a parent the new type may not sit under. */
+  /**
+   * Reports whether the chosen type may be ad hoc.
+   *
+   * @returns True for Tasks and Bugs.
+   */
+  protected canBeAdHoc(): boolean {
+    return mayBeAdHoc(this.type);
+  }
+
+  /**
+   * Reports whether the chosen type has a sprint of its own.
+   *
+   * @returns False for Epics and Features.
+   */
+  protected hasSprint(): boolean {
+    return hasOwnSprint(this.type);
+  }
+
+  /** Drops a parent, sprint or ad-hoc choice the new type may not have. */
   protected typeChanged(): void {
     if (!this.parentOptions().some((p) => p.id === this.parentId)) this.parentId = null;
+    if (!this.hasSprint()) this.sprintId = null;
+    if (!this.canBeAdHoc()) this.adHoc = false;
   }
 
   /**
@@ -210,8 +252,9 @@ export class NewItemDialog {
       type: this.type,
       title: this.title.trim(),
       bucketId: this.bucketId,
-      ...(this.parentId === null ? {} : { parentId: this.parentId }),
+      ...(this.parentId === null || this.adHoc ? {} : { parentId: this.parentId }),
       ...(this.sprintId === null ? {} : { sprintId: this.sprintId }),
+      ...(this.adHoc ? { adHoc: true } : {}),
       ...(this.startDate === null ? {} : { startDate: this.startDate }),
       ...(this.dueDate === null ? {} : { dueDate: this.dueDate }),
     });

@@ -7,7 +7,8 @@ import { AnnotationsApiService } from '../../core/annotations-api.service';
 import { errorMessage } from '../../core/api';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
-import type { Mentionable } from '../../core/rich-text';
+import type { Mentionable, Referable } from '../../core/rich-text';
+import { ItemRefs, type RefLookup } from '../../ui/item-refs';
 import { StaticAvatar } from '../../ui/avatar';
 import { ToastService } from '../../ui/toast.service';
 import { ItemNote } from './item-note';
@@ -55,6 +56,7 @@ type Filter = 'all' | 'notes' | 'history';
     MatButtonModule,
     MatButtonToggleModule,
     ItemNote,
+    ItemRefs,
     RichTextEditor,
     StaticAvatar,
   ],
@@ -83,13 +85,16 @@ type Filter = 'all' | 'notes' | 'history';
         placeholder="Write a note…"
         [hint]="
           mentionables().length
-            ? 'Type @ to mention someone, paste or drop an image.'
-            : 'Paste or drop an image.'
+            ? 'Type @ to mention someone, # to link an item, paste or drop an image.'
+            : 'Type # to link an item, paste or drop an image.'
         "
         [alwaysShowActions]="true"
         [clearOnSave]="true"
         [maxLength]="noteMax"
         [mentionables]="mentionables()"
+        [referables]="referables()"
+        [projectKey]="projectKey()"
+        [appItemRefs]="refLookup()"
         [uploadImage]="uploadImage()"
         (save)="post($event)"
       />
@@ -110,6 +115,9 @@ type Filter = 'all' | 'notes' | 'history';
               [itemId]="itemId()"
               [writable]="writable()"
               [mentionables]="mentionables()"
+              [referables]="referables()"
+              [projectKey]="projectKey()"
+              [refLookup]="refLookup()"
               [uploadImage]="uploadImage()"
               (updated)="replace($event)"
               (removed)="forget($event)"
@@ -151,6 +159,12 @@ export class ItemActivity {
   readonly writable = input(true);
   /** People who can be mentioned. */
   readonly mentionables = input<readonly Mentionable[]>([]);
+  /** Items notes can reference with `#` (M12). */
+  readonly referables = input<readonly Referable[]>([]);
+  /** The project key typed before a number, or null in a personal space. */
+  readonly projectKey = input<string | null>(null);
+  /** Finds referenced items for hover cards. */
+  readonly refLookup = input<RefLookup | null>(null);
   /** Uploads images pasted or dropped into notes. */
   readonly uploadImage = input<ImageUploader | null>(null);
 

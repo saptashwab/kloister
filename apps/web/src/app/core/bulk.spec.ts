@@ -29,6 +29,13 @@ describe('bulk edits', () => {
     });
   });
 
+  it('skips Epics and Features when setting a sprint (M12)', () => {
+    const items = [makeItem(1, { type: 'EPIC' }), makeItem(2, { type: 'FEATURE' }), makeItem(3)];
+    const plan = planBulk(items, 'sprint', 's1', rights(true));
+    expect(plan.steps.map((s) => s.item.number)).toEqual([3]);
+    expect(plan.skipped.map((i) => i.number)).toEqual([1, 2]);
+  });
+
   it('moves cards with the move endpoint and needs can.move', () => {
     const movable = makeItem(1, { can: { ...readOnly, move: true } });
     const fixed = makeItem(2, { can: { ...readOnly, edit: true } });

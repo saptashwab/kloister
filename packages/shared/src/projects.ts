@@ -225,6 +225,11 @@ export interface ProjectSettings {
    * Members still set them when creating.
    */
   planLeadsOnly: boolean;
+  /**
+   * "New items start in" (M12): the bucket for Stories, Tasks and Bugs created
+   * without one; null for the first bucket.
+   */
+  newItemBucketId: string | null;
 }
 
 /**
@@ -253,6 +258,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   useInstanceHolidays: true,
   holidaysReviewedAt: null,
   planLeadsOnly: true,
+  newItemBucketId: null,
 };
 
 /** A project as the API returns it, from the caller's point of view. */

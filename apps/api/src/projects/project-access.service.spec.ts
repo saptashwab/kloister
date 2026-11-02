@@ -305,7 +305,9 @@ describe('ProjectAccessService', () => {
         const { service, access } = await scoped(role, 'ALL');
         expect(service.canViewItem(access, item())).toBe(true);
         expect(service.canViewItem(access, item({ bucketId: null }))).toBe(true);
-        expect(service.itemScopeFilter(access)).toEqual({});
+        expect(service.itemVisibilityFilter(access)).toEqual({});
+        // Trashed items are left out of every scoped query (M12).
+        expect(service.itemScopeFilter(access)).toEqual({ deletedAt: null });
         expect(service.ancestorsAreTitleOnly(access)).toBe(false);
       });
 
@@ -318,7 +320,10 @@ describe('ProjectAccessService', () => {
         expect(service.canViewItem(access, item({ bucketId: BUCKET_B, createdById: ME }))).toBe(
           false,
         );
-        expect(service.itemScopeFilter(access)).toEqual({ bucketId: { in: [BUCKET_A] } });
+        expect(service.itemVisibilityFilter(access)).toEqual({ bucketId: { in: [BUCKET_A] } });
+        expect(service.itemScopeFilter(access)).toEqual({
+          AND: [{ deletedAt: null }, { bucketId: { in: [BUCKET_A] } }],
+        });
         expect(service.ancestorsAreTitleOnly(access)).toBe(true);
       });
 
@@ -327,7 +332,7 @@ describe('ProjectAccessService', () => {
         expect(service.canViewItem(access, item())).toBe(false);
         expect(service.canViewItem(access, item({ createdById: ME }))).toBe(true);
         expect(service.canViewItem(access, item({ assigneeIds: [OTHER, ME] }))).toBe(true);
-        expect(service.itemScopeFilter(access)).toEqual({
+        expect(service.itemVisibilityFilter(access)).toEqual({
           OR: [{ createdById: ME }, { assignees: { some: { userId: ME } } }],
         });
         expect(service.ancestorsAreTitleOnly(access)).toBe(true);
@@ -345,7 +350,7 @@ describe('ProjectAccessService', () => {
         const { service } = setup([member(role, 'BUCKETS', [BUCKET_B])]);
         const access = await resolveAs(service);
         expect(service.canViewItem(access, item({ bucketId: BUCKET_A }))).toBe(true);
-        expect(service.itemScopeFilter(access)).toEqual({});
+        expect(service.itemVisibilityFilter(access)).toEqual({});
       }
     });
   });
@@ -402,6 +407,19 @@ describe('ProjectAccessService', () => {
       expect(open.service.canPlanItem(open.access, others)).toBe(false);
       const v = await as('VIEWER', { planLeadsOnly: false });
       expect(v.service.canPlanItem(v.access, created)).toBe(false);
+    });
+
+    it('restore: PM/Lead any batch; others a single item they deleted (M12)', async () => {
+      for (const role of ['PM', 'LEAD'] as const) {
+        const { service, access } = await as(role);
+        expect(service.canRestoreBatch(access, others, 'someone-else', 5)).toBe(true);
+      }
+      const m = await as('MEMBER');
+      expect(m.service.canRestoreBatch(m.access, created, m.access.userId, 1)).toBe(true);
+      expect(m.service.canRestoreBatch(m.access, created, 'someone-else', 1)).toBe(false);
+      expect(m.service.canRestoreBatch(m.access, created, m.access.userId, 2)).toBe(false);
+      const v = await as('VIEWER');
+      expect(v.service.canRestoreBatch(v.access, created, v.access.userId, 1)).toBe(false);
     });
 
     it('move: PM/Lead any card, Member own or assigned only, Viewer never', async () => {
@@ -534,7 +552,7 @@ describe('ProjectAccessService', () => {
         expect(service.canViewItem(access, item({ teamId: TEAM_B }))).toBe(true);
         expect(service.canViewItem(access, item({ teamId: TEAM_C }))).toBe(false);
         expect(service.canViewItem(access, item({ teamId: null }))).toBe(false);
-        expect(service.itemScopeFilter(access)).toEqual({ teamId: { in: [TEAM_A, TEAM_B] } });
+        expect(service.itemVisibilityFilter(access)).toEqual({ teamId: { in: [TEAM_A, TEAM_B] } });
         expect(service.ancestorsAreTitleOnly(access)).toBe(true);
       });
     }
@@ -542,7 +560,7 @@ describe('ProjectAccessService', () => {
     it('TEAMS with no teams sees nothing', async () => {
       const { service, access } = await withTeams('MEMBER', 'TEAMS', []);
       expect(service.canViewItem(access, item({ teamId: TEAM_A }))).toBe(false);
-      expect(service.itemScopeFilter(access)).toEqual({ teamId: { in: [] } });
+      expect(service.itemVisibilityFilter(access)).toEqual({ teamId: { in: [] } });
     });
 
     it('a team Lead has Lead rights on their team items, whatever their scope', async () => {
@@ -558,7 +576,7 @@ describe('ProjectAccessService', () => {
       // Cascading deletes stay with project PMs and Leads.
       expect(service.canDeleteItem(access, led, true)).toBe(false);
       expect(service.canAssign(access, [OTHER], { teamId: TEAM_A })).toBe(true);
-      expect(service.itemScopeFilter(access)).toEqual({
+      expect(service.itemVisibilityFilter(access)).toEqual({
         OR: [
           { OR: [{ createdById: ME }, { assignees: { some: { userId: ME } } }] },
           { teamId: { in: [TEAM_A] } },
@@ -605,7 +623,7 @@ describe('ProjectAccessService', () => {
       const teamItem = item({ teamId: TEAM_A });
       expect(service.canViewItem(access, teamItem)).toBe(false);
       expect(service.canEditItem(access, teamItem)).toBe(false);
-      expect(service.itemScopeFilter(access)).toEqual({
+      expect(service.itemVisibilityFilter(access)).toEqual({
         OR: [{ createdById: ME }, { assignees: { some: { userId: ME } } }],
       });
     });
@@ -618,7 +636,7 @@ describe('ProjectAccessService', () => {
       expect(service.canViewItem(access, teamItem)).toBe(true);
       expect(service.canEditItem(access, teamItem)).toBe(false);
       expect(service.canAssign(access, [OTHER], teamItem)).toBe(false);
-      expect(service.itemScopeFilter(access)).toEqual({ teamId: { in: [TEAM_A] } });
+      expect(service.itemVisibilityFilter(access)).toEqual({ teamId: { in: [TEAM_A] } });
     });
 
     it('PMs and project Leads keep an empty filter whatever their teams', async () => {
@@ -626,7 +644,7 @@ describe('ProjectAccessService', () => {
         const { service, access } = await withTeams(role, 'TEAMS', [
           { teamId: TEAM_A, role: 'LEAD' },
         ]);
-        expect(service.itemScopeFilter(access)).toEqual({});
+        expect(service.itemVisibilityFilter(access)).toEqual({});
         expect(service.canViewItem(access, item({ teamId: TEAM_C }))).toBe(true);
       }
     });

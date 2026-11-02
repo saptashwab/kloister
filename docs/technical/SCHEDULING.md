@@ -115,6 +115,14 @@ changed since.
 The item drawer uses the same flow for date fields, so a date changed there moves dependent items
 by the same rules.
 
+## Ad-hoc items and sprints
+
+Ad-hoc items (M12) are not part of the plan: the planner, the grid, parent spans, plan totals and
+the Excel Timeline sheet leave them out, and the API refuses to reschedule them. The timeline shows
+how many there are, with a link to the board. Epics and Features have no sprint of their own; the
+grid shows their stories' sprints read-only, and a Task or Bug in another sprint than its Story
+is marked.
+
 ## Who may change the plan
 
 The plan of an existing item is its title, type, parent, sprint, dates, half days, pin and

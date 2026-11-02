@@ -17,7 +17,17 @@ import {
   type UpdateBrandingRequest,
 } from '@kloister/shared';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsIn, IsInt, IsString, Length, Matches, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  Max,
+  Min,
+} from 'class-validator';
 import { trim } from '../common/dto-helpers.js';
 
 /**
@@ -56,7 +66,7 @@ export class SecuritySettingsBody implements SecuritySettingsDto {
 }
 
 /** Body of `PUT /admin/settings/storage`; every field is required. */
-export class StorageSettingsBody implements StorageSettingsDto {
+export class StorageSettingsBody implements Partial<StorageSettingsDto> {
   /** Largest file in MB. */
   @IntIn(STORAGE_LIMITS.maxFileSizeMb)
   maxFileSizeMb: number;
@@ -68,6 +78,11 @@ export class StorageSettingsBody implements StorageSettingsDto {
   /** Per-user personal quota, in MB. */
   @IntIn(STORAGE_LIMITS.personalQuotaMb)
   personalQuotaMb: number;
+
+  /** Days deleted items stay in the trash (M12); the stored value is kept when omitted. */
+  @IsOptional()
+  @IntIn(STORAGE_LIMITS.trashRetentionDays)
+  trashRetentionDays?: number;
 }
 
 /** Body of `PUT /admin/settings/logs`. */

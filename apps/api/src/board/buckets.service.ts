@@ -201,11 +201,13 @@ export class BucketsService {
       if ((await tx.bucket.count({ where: { projectId } })) === 1) {
         throw conflict('A project needs at least one bucket');
       }
-      const items = await tx.workItem.findMany({
+      const all = await tx.workItem.findMany({
         where: { projectId, bucketId },
         orderBy: [{ position: 'asc' }, { id: 'asc' }],
-        select: { id: true },
+        select: { id: true, deletedAt: true },
       });
+      // Only active items need a decision; trashed ones go along (M12).
+      const items = all.filter((i) => i.deletedAt === null);
       let target: Bucket | null = null;
       if (items.length > 0) {
         if (query.moveItemsTo === undefined) {
@@ -233,6 +235,20 @@ export class BucketsService {
             data: { bucketId: target.id, position },
           });
         }
+      }
+      if (all.length > items.length) {
+        // Trashed items keep a bucket so they can be restored: the chosen
+        // one, or the first remaining bucket.
+        const keep =
+          target ??
+          (await tx.bucket.findFirstOrThrow({
+            where: { projectId, id: { not: bucketId } },
+            orderBy: [{ position: 'asc' }, { id: 'asc' }],
+          }));
+        await tx.workItem.updateMany({
+          where: { projectId, bucketId, deletedAt: { not: null } },
+          data: { bucketId: keep.id },
+        });
       }
       await tx.bucket.delete({ where: { id: bucketId } });
       // Drop the bucket from every member's BUCKETS scope of this project.

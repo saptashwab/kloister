@@ -40,18 +40,22 @@ sequenceDiagram
 audit action to a live kind through `AUDIT_LIVE_KIND`. That map is a complete record of every
 `AuditAction`, so a new action does not compile until it is mapped or marked as not live.
 
-| Kind      | Audit actions                                                                 | Message                                                                                        |
-| --------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `item`    | Item created, updated, moved, deleted; checklist, note and attachment changes | Item ids with their visibility facts after (and before, when the change can alter who sees it) |
-| `links`   | Dependency added or removed                                                   | Both ends with their facts                                                                     |
-| `board`   | Buckets, labels, sprints, holidays                                            | Project id                                                                                     |
-| `access`  | Members, teams, project settings, archive and unarchive                       | Project id                                                                                     |
-| `session` | Sign-out, password changed or reset, user updated                             | User ids whose streams must check their session                                                |
-| `setting` | Settings updated with `meta.key = 'live'` (the admin switch)                  | None                                                                                           |
-| not live  | Sign-in, account and admin actions, backups, exports, ADO transfers           | Nothing (ADO imports change items through the item actions)                                    |
+| Kind      | Audit actions                                                                                                     | Message                                                                                        |
+| --------- | ----------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `item`    | Item created, updated, moved, deleted, trashed, restored; sprint followed; checklist, note and attachment changes | Item ids with their visibility facts after (and before, when the change can alter who sees it) |
+| `links`   | Dependency added or removed                                                                                       | Both ends with their facts                                                                     |
+| `board`   | Buckets, labels, sprints, holidays, trash purges                                                                  | Project id                                                                                     |
+| `access`  | Members, teams, project settings, archive and unarchive                                                           | Project id                                                                                     |
+| `session` | Sign-out, password changed or reset, user updated                                                                 | User ids whose streams must check their session                                                |
+| `setting` | Settings updated with `meta.key = 'live'` (the admin switch)                                                      | None                                                                                           |
+| not live  | Sign-in, account and admin actions, backups, exports, ADO transfers                                               | Nothing (ADO imports change items through the item actions)                                    |
 
 The visibility facts are the item's creator, assignees, bucket and team: everything
-`canViewItem` needs. A cascade delete becomes a project resync. Reordering a card inside its
+`canViewItem` needs. A trashed item has no facts after the change, so viewers who saw it get
+`item-removed`; a restore is an ordinary `item-changed` (M12). A cascade delete, and the trash or
+restore of a batch of several items, becomes a project resync. A Story's followers each get their
+own `SPRINT_FOLLOWED` entry, so every viewer hears only of the children they can see. A purge is a
+`board` change, which open Trash pages reload on. Reordering a card inside its
 bucket is not audited but is announced the same way, so other boards show the order.
 
 `NotificationsService.notify()` publishes `notify` messages with the recipients' ids, in the

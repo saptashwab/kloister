@@ -1,11 +1,12 @@
 import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { NOTE_BODY_MAX, type NoteDto } from '@kloister/shared';
 import { AnnotationsApiService } from '../../core/annotations-api.service';
-import { forDisplay, type Mentionable } from '../../core/rich-text';
+import { forDisplay, type Mentionable, type Referable } from '../../core/rich-text';
 import { StaticAvatar } from '../../ui/avatar';
 import { Dialogs } from '../../ui/dialogs';
 import { Icon } from '../../ui/icon';
 import { ViewImages } from '../../ui/image-viewer';
+import { ItemRefs, type RefLookup } from '../../ui/item-refs';
 import { ToastService } from '../../ui/toast.service';
 import { type ImageUploader, RichTextEditor } from './rich-text-editor';
 import { AppDatePipe } from '../../ui/app-date.pipe';
@@ -19,7 +20,7 @@ import { AppDatePipe } from '../../ui/app-date.pipe';
  */
 @Component({
   selector: 'app-item-note',
-  imports: [AppDatePipe, Icon, RichTextEditor, StaticAvatar, ViewImages],
+  imports: [AppDatePipe, Icon, ItemRefs, RichTextEditor, StaticAvatar, ViewImages],
   host: { class: 'note' },
   template: `
     @let n = note();
@@ -53,17 +54,25 @@ import { AppDatePipe } from '../../ui/app-date.pipe';
           [html]="n.body"
           label="Note"
           saveLabel="Save note"
-          hint="Type @ to mention someone, paste or drop an image."
+          hint="Type @ to mention someone, # to link an item, paste or drop an image."
           [alwaysShowActions]="true"
           [showCancel]="true"
           [maxLength]="noteMax"
           [mentionables]="mentionables()"
+          [referables]="referables()"
+          [projectKey]="projectKey()"
+          [appItemRefs]="refLookup()"
           [uploadImage]="uploadImage()"
           (save)="saveEdit($event)"
           (cancelled)="editing.set(false)"
         />
       } @else {
-        <div class="note-body k-rich" appViewImages [innerHTML]="display()"></div>
+        <div
+          class="note-body k-rich"
+          appViewImages
+          [appItemRefs]="refLookup()"
+          [innerHTML]="display()"
+        ></div>
       }
     </article>
   `,
@@ -83,6 +92,12 @@ export class ItemNote {
   readonly writable = input(true);
   /** People who can be mentioned while editing. */
   readonly mentionables = input<readonly Mentionable[]>([]);
+  /** Items the note can reference with `#` while editing (M12). */
+  readonly referables = input<readonly Referable[]>([]);
+  /** The project key typed before a number, or null in a personal space. */
+  readonly projectKey = input<string | null>(null);
+  /** Finds referenced items for hover cards. */
+  readonly refLookup = input<RefLookup | null>(null);
   /** Uploads images pasted into the note while editing. */
   readonly uploadImage = input<ImageUploader | null>(null);
   /** Emits the note after an edit. */

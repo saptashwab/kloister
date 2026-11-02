@@ -6,6 +6,9 @@ import {
   isInlineImage,
   mentionAt,
   mentionSuggestions,
+  referenceAt,
+  referencePath,
+  referenceSuggestions,
 } from './rich-text';
 
 const MENTION = '<span data-mention="u2">@Bob</span>';
@@ -21,6 +24,42 @@ const IMG = '<img src="api/v1/projects/p/items/i/images/a" alt="Shot">';
 function dropData(html: string): string {
   return html.replace(/ data-[a-z-]+="[^"]*"/g, '');
 }
+
+describe('item references (M12)', () => {
+  const REF = '<span data-ref="KLO-12">KLO-12</span>';
+
+  it('shows marks as links to the drawer, relative to the base href', () => {
+    const doc = new DOMParser().parseFromString(forDisplay(`<p>See ${REF}</p>`), 'text/html');
+    const link = doc.querySelector('a');
+    expect(link?.className).toBe('k-ref');
+    expect(link?.getAttribute('href')).toBe('p/KLO/items/12');
+    expect(link?.textContent).toBe('KLO-12');
+    expect(referencePath('#3')).toBe('p/personal/items/3');
+    expect(referencePath('bad')).toBeNull();
+  });
+
+  it('keeps marks through editing, whose sanitizer drops data attributes', () => {
+    const html = forEditing(`<p>${REF} and ${MENTION}</p>`, dropData);
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const ref = doc.querySelector('span.k-ref');
+    expect(ref?.getAttribute('data-ref')).toBe('KLO-12');
+    expect(ref?.getAttribute('contenteditable')).toBe('false');
+    expect(doc.querySelector('span.k-mention')?.getAttribute('data-mention')).toBe('u2');
+  });
+
+  it('finds a reference being typed and suggests numbers first, then titles', () => {
+    expect(referenceAt('see #1', 'KLO')).toEqual({ query: '1', start: 4 });
+    expect(referenceAt('see KLO-', 'KLO')).toEqual({ query: '', start: 4 });
+    expect(referenceAt('see OPS-', 'KLO')).toBeNull();
+    expect(referenceAt('a#1', 'KLO')).toBeNull();
+    const items = [
+      { key: 'KLO-12', title: 'Login page', type: 'TASK' as const },
+      { key: 'KLO-1', title: 'Setup 12 servers', type: 'TASK' as const },
+    ];
+    expect(referenceSuggestions(items, '1').map((i) => i.key)).toEqual(['KLO-12', 'KLO-1']);
+    expect(referenceSuggestions(items, 'login').map((i) => i.key)).toEqual(['KLO-12']);
+  });
+});
 
 describe('forDisplay', () => {
   it('marks mentions and makes images focusable', () => {

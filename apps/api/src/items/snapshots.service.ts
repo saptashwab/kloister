@@ -291,23 +291,25 @@ export class SnapshotsService {
         'Checklists; Notes; Dependencies; Files; Activity (linked by Item)',
         item.dueTime ?? '',
       ]);
-      timelineItems?.push({
-        id: item.id,
-        parentId: item.parentId,
-        number: item.number,
-        key: item.key,
-        title: item.title,
-        type: item.type,
-        status: item.status,
-        assignees: row.assignees.map((a) => a.projectMember.user.displayName).join('\n'),
-        sprint: row.sprint?.name ?? '',
-        startDate: item.startDate,
-        startSecondHalf: item.startSecondHalf,
-        dueDate: item.dueDate,
-        dueFirstHalf: item.dueFirstHalf,
-        pin: item.startNoEarlierThan,
-        predecessors: item.blockedBy.map((b) => b.key),
-      });
+      // Ad-hoc items are not part of the plan (M12).
+      if (!item.adHoc)
+        timelineItems?.push({
+          id: item.id,
+          parentId: item.parentId,
+          number: item.number,
+          key: item.key,
+          title: item.title,
+          type: item.type,
+          status: item.status,
+          assignees: row.assignees.map((a) => a.projectMember.user.displayName).join('\n'),
+          sprint: row.sprint?.name ?? '',
+          startDate: item.startDate,
+          startSecondHalf: item.startSecondHalf,
+          dueDate: item.dueDate,
+          dueFirstHalf: item.dueFirstHalf,
+          pin: item.startNoEarlierThan,
+          predecessors: item.blockedBy.map((b) => b.key),
+        });
       for (const line of item.checklistItems)
         tables['Checklists']?.rows.push([
           item.key,
@@ -386,7 +388,12 @@ export class SnapshotsService {
               `<li><a href="files/${escapeHtml(archiveLeaf(f.id, f.originalName))}" download>${escapeHtml(f.originalName)}</a></li>`,
           )
           .join('');
-        const html = `<h1>${escapeHtml(item.key)} ${escapeHtml(item.title)}</h1><h2>Description</h2>${localHtml(item.description)}<h2>Checklist</h2><ul>${item.checklistItems.map((l) => `<li>${l.done ? '☑' : '☐'} ${escapeHtml(l.text)}</li>`).join('')}</ul><h2>Notes</h2>${row.notes.map((n) => `<article><h3>${escapeHtml(n.author.displayName)}</h3>${localHtml(n.body)}</article>`).join('')}<h2>Attachments</h2><ul>${files}</ul>`;
+        // References in notes are shown to this reader only where they may see the item (M12).
+        const bodies = await this.items.redactText(
+          access,
+          row.notes.map((n) => n.body),
+        );
+        const html = `<h1>${escapeHtml(item.key)} ${escapeHtml(item.title)}</h1><h2>Description</h2>${localHtml(item.description)}<h2>Checklist</h2><ul>${item.checklistItems.map((l) => `<li>${l.done ? '☑' : '☐'} ${escapeHtml(l.text)}</li>`).join('')}</ul><h2>Notes</h2>${row.notes.map((n, i) => `<article><h3>${escapeHtml(n.author.displayName)}</h3>${localHtml(bodies[i] ?? '')}</article>`).join('')}<h2>Attachments</h2><ul>${files}</ul>`;
         zip.file(`items/${itemKey}/index.html`, Buffer.from(offlineDocument(html), 'utf8'));
         index.push(
           `<li><a href="items/${itemKey}/index.html">${escapeHtml(item.key)} ${escapeHtml(item.title)}</a></li>`,

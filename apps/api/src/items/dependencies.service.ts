@@ -37,7 +37,7 @@ export class DependenciesService {
   /**
    * Records that an item is blocked by another. Adding an existing
    * dependency changes nothing. Runs serializable, so two concurrent links
-   * cannot close a cycle together.
+   * cannot close a cycle together. Ad-hoc items take no links (400, M12).
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -57,11 +57,13 @@ export class DependenciesService {
       if (dto.blockingItemId === item.id) {
         throw invalidField('blockingItemId', 'An item cannot block itself');
       }
+      if (item.adHoc) throw invalidField('blockingItemId', 'Ad-hoc items have no dependencies');
       const blocking = await tx.workItem.findFirst({
         where: this.items.scoped(access, { id: dto.blockingItemId }),
-        select: { id: true, number: true },
+        select: { id: true, number: true, adHoc: true },
       });
       if (blocking === null) throw invalidField('blockingItemId', 'Item not found');
+      if (blocking.adHoc) throw invalidField('blockingItemId', 'Ad-hoc items have no dependencies');
       // Compared again on the stored ids, which are canonical.
       if (blocking.id === item.id) {
         throw invalidField('blockingItemId', 'An item cannot block itself');

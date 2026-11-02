@@ -101,7 +101,7 @@ test('inline edits in the drawer can be undone', async ({ page }) => {
   await drawer.getByRole('button', { name: 'More actions' }).click();
   await page.getByRole('menuitem', { name: 'Delete item' }).click();
   const dialog = page.getByRole('dialog', { name: `Delete ${PROJECT_KEY}-${ITEMS.taskB}?` });
-  await expect(dialog).toContainText('cannot be undone');
+  await expect(dialog).toContainText('moves to the trash');
   await snap(page, 'confirm dialog');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(drawer.getByRole('heading', { name: 'Invoice PDF layout' })).toBeVisible();

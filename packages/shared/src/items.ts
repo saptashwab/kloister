@@ -69,6 +69,28 @@ export function isAllowedParent(child: ItemType, parent: ItemType): boolean {
 }
 
 /**
+ * Reports whether an item type has a sprint of its own (M12): Epics and
+ * Features show their children's sprints instead.
+ *
+ * @param type The item type.
+ * @returns True for STORY, TASK and BUG.
+ */
+export function hasOwnSprint(type: ItemType): boolean {
+  return type !== ItemType.EPIC && type !== ItemType.FEATURE;
+}
+
+/**
+ * Reports whether an item type may be ad hoc (M12): only types that never
+ * have children, Tasks and Bugs.
+ *
+ * @param type The item type.
+ * @returns True for TASK and BUG.
+ */
+export function mayBeAdHoc(type: ItemType): boolean {
+  return type === ItemType.TASK || type === ItemType.BUG;
+}
+
+/**
  * Reports whether an item type must be in a bucket (SPEC §4): Stories, Tasks
  * and Bugs always are; Epics and Features may stay off the board.
  *
@@ -227,6 +249,8 @@ export interface WorkItemDto {
   checklist: { done: number; total: number };
   /** Number of child items (in any scope). */
   childCount: number;
+  /** Tracked but not part of the plan: no parent, children or links, not on the timeline (M12). */
+  adHoc: boolean;
   /** ISO timestamp when the status became DONE, or null. */
   completedAt: string | null;
   /** ISO timestamp of creation. */
@@ -273,10 +297,18 @@ export interface CreateItemRequest {
   status?: ItemStatus;
   /** 1 (highest) to 4; default 2. */
   priority?: number;
-  /** Bucket; required for STORY, TASK and BUG. New cards go to the top. */
+  /**
+   * Bucket. Stories, Tasks and Bugs without one start in the project's
+   * "New items start in" bucket (M12). New cards go to the top.
+   */
   bucketId?: string | null;
-  /** Sprint (not closed). */
+  /**
+   * Sprint (not closed); never on Epics and Features (M12). A child of a Story
+   * starts in its Story's sprint when omitted.
+   */
   sprintId?: string | null;
+  /** Ad hoc: not part of the plan (Tasks and Bugs without parent only, M12). */
+  adHoc?: boolean;
   /** Team (SPEC §3.5). */
   teamId?: string | null;
   /** `YYYY-MM-DD`. */
@@ -313,8 +345,13 @@ export interface UpdateItemRequest {
   status?: ItemStatus;
   /** New priority. */
   priority?: number;
-  /** New sprint, or null. */
+  /**
+   * New sprint, or null; never on Epics and Features. A Story's Tasks and Bugs
+   * in its old sprint (or none) follow it (M12).
+   */
   sprintId?: string | null;
+  /** Make the item ad hoc or plan it again (a plan change, M12). */
+  adHoc?: boolean;
   /** New team, or null. */
   teamId?: string | null;
   /** New start date, or null. */
@@ -487,4 +524,68 @@ export interface CloseSprintResult {
   sprint: SprintDto;
   /** How many unfinished items were moved. */
   movedItems: number;
+}
+
+/** Most item references resolved by one `GET /references` request (M12). */
+export const REFERENCE_KEYS_MAX = 50;
+
+/**
+ * A visible item named in rich text (`KLO-12`, M12): enough for the hover
+ * card. Items the caller cannot see are never returned.
+ */
+export interface ItemPreviewDto extends ItemRefDto {
+  /** Project id. */
+  projectId: string;
+  /** Status. */
+  status: ItemStatus;
+  /** Assignee user ids. */
+  assigneeIds: string[];
+  /** `YYYY-MM-DD`, or null. */
+  dueDate: string | null;
+}
+
+/** An item whose description or notes name another item (M12 "Referenced in"). */
+export interface ItemReferrerDto extends ItemRefDto {
+  /** Project id. */
+  projectId: string;
+}
+
+/** One trashed item as listed in a delete batch (M12). */
+export interface TrashItemDto extends ItemRefDto {
+  /** Parent id when trashed, or null. */
+  parentId: string | null;
+}
+
+/** One delete batch in a project's trash, newest first (M12). */
+export interface TrashBatchDto {
+  /** Batch id (uuid). */
+  id: string;
+  /** ISO timestamp of the delete. */
+  deletedAt: string;
+  /** Who deleted it, or null when that account is gone. */
+  deletedBy: { id: string; displayName: string } | null;
+  /** ISO timestamp after which the nightly purge removes it for good. */
+  purgeAfter: string;
+  /** The visible items of the batch, the deleted item first. */
+  items: TrashItemDto[];
+  /** The caller may restore the batch. */
+  canRestore: boolean;
+  /** The caller may delete the batch permanently (PMs). */
+  canPurge: boolean;
+}
+
+/** Answer of `DELETE /projects/:id/items/:item` since M12: the trash batch, for Undo. */
+export interface DeleteItemResult {
+  /** The delete batch; restoring it is the Undo. */
+  batchId: string;
+  /** Items moved to the trash, the deleted item included. */
+  count: number;
+}
+
+/** Answer of `POST /projects/:id/trash/:batchId/restore` (M12). */
+export interface RestoreBatchResult {
+  /** Items restored. */
+  restored: number;
+  /** The restored item went back without its parent, which is still in the trash. */
+  parentDropped: boolean;
 }

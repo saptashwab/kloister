@@ -180,6 +180,9 @@ export class SprintsService {
   /**
    * Closes a planned or active sprint, optionally moving its unfinished
    * (not DONE) items to another open sprint or to the backlog (no sprint).
+   * An unfinished Story therefore moves together with its unfinished Tasks
+   * and Bugs of the same sprint (M12, owner decision 8.4); finished children
+   * stay with the closed sprint. Items in the trash keep their sprint.
    *
    * Permissions: `MANAGE_BOARD`. 409 `CONFLICT` when already closed; 400
    * when the target sprint is not an open sprint of the project.
@@ -210,7 +213,7 @@ export class SprintsService {
           }
         }
         const moved = await tx.workItem.updateMany({
-          where: { projectId, sprintId, status: { not: ItemStatus.DONE } },
+          where: { projectId, sprintId, deletedAt: null, status: { not: ItemStatus.DONE } },
           data: { sprintId: targetId },
         });
         movedItems = moved.count;
@@ -242,7 +245,7 @@ export class SprintsService {
     const projectId = access.project.id;
     await serializable(this.prisma, async (tx) => {
       const sprint = await findSprint(tx, projectId, sprintId);
-      const items = await tx.workItem.count({ where: { sprintId } });
+      const items = await tx.workItem.count({ where: { sprintId, deletedAt: null } });
       await tx.sprint.delete({ where: { id: sprintId } });
       await this.record(tx, auth, projectId, AuditAction.SPRINT_DELETED, sprintId, {
         name: sprint.name,

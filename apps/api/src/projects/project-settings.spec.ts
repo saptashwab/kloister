@@ -14,6 +14,7 @@ describe('project settings', () => {
         useInstanceHolidays: true,
         holidaysReviewedAt: null,
         planLeadsOnly: true,
+        newItemBucketId: null,
       });
     }
   });

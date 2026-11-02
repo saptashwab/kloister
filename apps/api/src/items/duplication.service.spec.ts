@@ -8,6 +8,7 @@ import type { ProjectAccess } from '../projects/project-access.service.js';
 import type { SettingsService } from '../settings/settings.service.js';
 import type { FileStoreService } from '../storage/file-store.service.js';
 import type { ItemsService } from './items.service.js';
+import type { ReferencesService } from './references.service.js';
 import { DuplicationService } from './duplication.service.js';
 
 const bytes = Buffer.from('GIF89a-content');
@@ -77,13 +78,23 @@ function setup(personal = false) {
   files.remove.mockResolvedValue(undefined);
   files.discard.mockResolvedValue(undefined);
   files.keep.mockResolvedValue(undefined);
-  const limits = { maxFileSizeMb: 1, projectQuotaMb: 2, personalQuotaMb: 1 };
+  const limits = {
+    maxFileSizeMb: 1,
+    projectQuotaMb: 2,
+    personalQuotaMb: 1,
+    trashRetentionDays: 30,
+  };
   const settings = { getStorage: () => Promise.resolve(limits) } as SettingsService;
+  const references = {
+    markable: () => Promise.resolve(new Map<string, string>()),
+    sync: () => Promise.resolve(),
+  } as unknown as ReferencesService;
   const service = new DuplicationService(
     db as unknown as PrismaService,
     items as unknown as ItemsService,
     files as unknown as FileStoreService,
     settings,
+    references,
   );
   return { service, db, items, files, source, limits, access, auth: { user, sessionId: 'sid' } };
 }

@@ -5,7 +5,13 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
-import { ItemType, ProjectPermission, SprintState, type WorkItemDto } from '@kloister/shared';
+import {
+  hasOwnSprint,
+  ItemType,
+  ProjectPermission,
+  SprintState,
+  type WorkItemDto,
+} from '@kloister/shared';
 import { errorMessage } from '../../core/api';
 import {
   type BoardFilter,
@@ -17,6 +23,7 @@ import {
   matchesFilter,
   NONE,
   pruneTree,
+  type TreeNode,
 } from '../../core/board-logic';
 import { type BulkField, planBulk, runBulk } from '../../core/bulk';
 import { ItemsApiService } from '../../core/items-api.service';
@@ -30,6 +37,9 @@ import { SessionStore } from '../../core/session.store';
 import { PageActions } from '../../core/page-actions';
 import { NgTemplateOutlet } from '@angular/common';
 import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
+
+/** Id of the backlog's group row for ad-hoc items (M12); never an item id. */
+const AD_HOC_GROUP = 'ad-hoc';
 
 /**
  * The backlog / hierarchy view (SPEC §6): the Epic → Feature → Story → Task
@@ -346,7 +356,12 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
                     <app-status-pill [status]="item.status" />
                   }
                 </td>
-                <td>{{ item ? sprintName(item) : '' }}</td>
+                <td>
+                  {{ item ? sprintName(item) : '' }}
+                  @if (item && outOfStorySprint(item)) {
+                    <span class="k-pill warn" title="Not in its story's sprint">≠ story</span>
+                  }
+                </td>
                 <td>{{ item ? bucketName(item) : '' }}</td>
                 <td>
                   {{ item ? assigneeNames(item) : '' }}
@@ -384,9 +399,15 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
         } @else {
           <span class="spacer-24"></span>
         }
-        <app-type-icon [type]="row.node.ref.type" />
-        <span class="k-key">{{ row.node.ref.key }}</span>
-        @if (item) {
+        @if (row.node.id === adHocGroup) {
+          <strong>Ad hoc</strong>
+          <span class="muted">· not part of the plan</span>
+        } @else {
+          <app-type-icon [type]="row.node.ref.type" />
+          <span class="k-key">{{ row.node.ref.key }}</span>
+        }
+        @if (row.node.id === adHocGroup) {
+        } @else if (item) {
           <a href="" (click)="open($event, item)">{{ item.title }}</a>
         } @else {
           <span class="ghost" title="Outside your view: shown as a title only">{{
@@ -480,8 +501,25 @@ export class BacklogPage implements OnInit {
   /** Number of bulk edits run, to reset the bulk pickers. */
   protected readonly bulkRuns = signal(0);
 
-  /** The full tree. */
-  private readonly tree = computed(() => buildTree(this.ctx.items()));
+  /**
+   * The full tree, with ad-hoc items in their own collapsible group at the
+   * end (M12): they have no parent and are not part of the plan.
+   */
+  private readonly tree = computed(() => {
+    const items = this.ctx.items();
+    const roots = buildTree(items.filter((i) => !i.adHoc));
+    const adHoc = items.filter((i) => i.adHoc);
+    if (adHoc.length === 0) return roots;
+    const group: TreeNode = {
+      id: AD_HOC_GROUP,
+      ref: { id: AD_HOC_GROUP, number: 0, key: '', type: ItemType.TASK, title: 'Ad hoc' },
+      item: null,
+      children: buildTree(adHoc),
+    };
+    return [...roots, group];
+  });
+  /** Id of the ad-hoc group row. */
+  protected readonly adHocGroup = AD_HOC_GROUP;
 
   /** Rows to show: the filtered tree, flattened, without collapsed subtrees. */
   protected readonly rows = computed(() => {
@@ -580,7 +618,34 @@ export class BacklogPage implements OnInit {
    * @returns Sprint name, or empty.
    */
   protected sprintName(item: WorkItemDto): string {
+    if (!hasOwnSprint(item.type)) {
+      // Epics and Features show their stories' sprints, read-only (M12).
+      const ids = new Set(
+        this.ctx
+          .items()
+          .filter((i) => i.sprintId !== null && i.ancestors.some((a) => a.id === item.id))
+          .map((i) => i.sprintId),
+      );
+      return this.ctx
+        .sprints()
+        .filter((s) => ids.has(s.id))
+        .map((s) => s.name)
+        .join(', ');
+    }
     return item.sprintId === null ? '' : (this.ctx.sprintsById().get(item.sprintId)?.name ?? '');
+  }
+
+  /**
+   * Reports whether a Task or Bug sits in another sprint than its Story (M12).
+   *
+   * @param item The item.
+   * @returns True when its Story's sprint differs.
+   */
+  protected outOfStorySprint(item: WorkItemDto): boolean {
+    const parent = this.ctx.itemsById().get(item.parentId ?? '');
+    return (
+      item.sprintId !== null && parent?.type === ItemType.STORY && parent.sprintId !== item.sprintId
+    );
   }
 
   /**

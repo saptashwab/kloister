@@ -96,7 +96,9 @@ kloister/
 | Change the plan of existing items: title, type, parent, sprint, dates, half days, pin, dependencies | ✔ | ✔ | Own unscheduled items; own/assigned when the project setting allows (default off) | ✘ |
 | Assign items to others | ✔ | ✔ | Project setting (default off) | ✘ |
 | Move cards between buckets | ✔ | ✔ | Own/assigned only | ✘ |
-| Delete items | ✔ | ✔ | Own created, no children; once scheduled only when the project setting allows (default off) | ✘ |
+| Delete items (to the project's trash, M12) | ✔ | ✔ | Own created, no children; once scheduled only when the project setting allows (default off) | ✘ |
+| Restore from the trash | ✔ | ✔ | A single item they deleted themselves | ✘ |
+| Delete permanently from the trash | ✔ | ✘ | ✘ | ✘ |
 | Notes and attachments on visible items | ✔ | ✔ | ✔ | ✘ |
 | Manage buckets, labels, sprints | ✔ | ✔ | ✘ | ✘ |
 | Manage members, roles, visibility | ✔ | ✘ | ✘ | ✘ |
@@ -119,6 +121,10 @@ due date, a sprint, or a dependency link or child the Member can see (M9.3); the
 last.
 A Member who may not change an item's plan can suggest a change: it is posted as a note on the item that
 mentions the project's PMs and Leads, who are notified as for any mention.
+
+Sprints and ad-hoc items (M12): changing a sprint or making an item ad hoc (or planning it again) is a plan
+change under the plan setting. Anyone who may create items may create ad-hoc items. Team Leads restore their
+team's single items as they delete them. The trash lists only items the reader could see.
 
 Duplication requires the ordinary create permission, full visibility of the source and the normal creation,
 assignment and destination-scope checks. A title-only ancestor is not a readable source. Excel/offline export
@@ -179,7 +185,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Session**: userId, tokenHash, expiresAt, lastSeenAt, userAgent, ip
 - **Project**: key (2–6 uppercase chars, unique, used in item numbers like `KLO-42`; null for personal spaces, whose
   items are shown as `#42`), ownerId (nullable, unique; set only for a personal space, its owner), name, description,
-  archivedAt, settings (json: membersCanAssignOthers, statusToBucket rules, labelStyle (`SOLID|TINTED|COVER`, default `SOLID`, set by PMs), ado settings)
+  archivedAt, settings (json: membersCanAssignOthers, statusToBucket rules, labelStyle (`SOLID|TINTED|COVER`, default `SOLID`, set by PMs), ado settings,
+  newItemBucketId ("New items start in", M12; null for the first bucket))
 - **ProjectMember**: projectId, userId, role (`PM|LEAD|MEMBER|VIEWER`), visibility (`ALL|BUCKETS|OWN|TEAMS`),
   allowedBucketIds (uuid[]); unique (projectId, userId)
 - **Bucket**: projectId, name, position, onEnterMode (`NONE|SET|SET_IF_NOT_STARTED`), onEnterStatus (nullable)
@@ -190,7 +197,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   startSecondHalf and dueFirstHalf (timeline half days, M9), startNoEarlierThan and
   startNoEarlierThanSecondHalf (timeline pin, M9),
   dueDate, dueTime (optional minutes after midnight, wall-clock with no time zone; needs a dueDate; M8.5),
-  position (fractional index for ordering), createdById, completedAt
+  position (fractional index for ordering), createdById, completedAt, adHoc (M12: a Task or Bug without parent,
+  children or dependencies, not part of the plan), deletedAt, deletedById and deleteBatchId (the trash, M12)
 - **WorkItemAssignee**: workItemId, userId (many-to-many)
 - **WorkItemDependency**: blockedItemId, blockingItemId (same project, may cross teams; no cycles)
 - **Team**: projectId, name (unique per project), description
@@ -201,12 +209,22 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Attachment**: workItemId, uploaderId, originalName, storedName, sizeBytes, mimeType, sha256, inline (true for images pasted or dropped into a description or note; these are not listed as attachments)
 - **Notification**: userId, type, workItemId, actorId, readAt
 - **AuditLog**: actorId, action, entityType, entityId, projectId, meta (json), createdAt only
+- **ItemReference** (M12): sourceItemId, targetItemId; an item named in another item's description or notes,
+  kept in step with the text for "Referenced in"
 - **AppSetting**: key (unique), value (json)
 
 ### 4.1 Hierarchy rules
 - Allowed parents: FEATURE→EPIC; STORY→FEATURE; TASK→STORY|FEATURE; BUG→STORY|FEATURE. Any item may have no parent.
 - No cycles. A parent must be in the same project.
 - Deleting an item that has children is rejected unless `?cascade=true` (PM/Lead only).
+- Deleting moves the item (with its subtree for a cascade, as one batch) to the project's trash (M12). Trashed
+  items disappear from every screen, list, count, export and the timeline; restoring a batch brings it back with
+  its number, notes, files and links. When the parent is still in the trash, the item comes back without a parent.
+  A nightly purge removes batches older than the admin's retention (default 30 days, 1–365) for good.
+- Sprints follow the hierarchy (M12): Epics and Features have no sprint of their own and show their children's
+  sprints read-only. When a Story's sprint changes, its Tasks and Bugs that were in the old sprint (or none) follow
+  in the same change; a child put into another sprint on purpose is marked "Not in its story's sprint". A child
+  created under a Story starts in its sprint.
 
 ### 4.2 Bucket ↔ status rules
 - Status and bucket are independent fields.
@@ -284,14 +302,21 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Item detail** (side drawer, deep-linkable `/<app>/p/:key/items/:number`):
   title, type, parent picker, status, bucket, sprint, assignees, labels, priority, start and due dates, optional due time,
   description editor (images can be pasted or dropped in; notes too), checklist (add, reorder, tick), notes thread with `@mention`, attachments,
-  children list, activity history (from AuditLog)
+  children list, activity history (from AuditLog), the ad-hoc switch for Tasks and Bugs, and "Referenced in" (M12)
+- **Item references** (M12): `KLO-12`, or `#12` in the same project, in a description or note becomes a link with a
+  hover card (title, status, assignees, due) when saved by someone who can see the item; typing `#` or the key offers
+  visible items. Readers who cannot see the item get plain text; other projects link only for their members.
+- **Ad-hoc items** (M12): shown on the board (tag "Ad hoc"), the backlog (own group), My work, search and
+  notifications, but left out of the timeline, its plan totals and the Excel Timeline sheet, and out of ADO export
+  unless included.
 - **Backlog / hierarchy view**: tree of Epic → Feature → Story → Task with expand/collapse,
   multi-select (also used to choose what to export), bulk set sprint/bucket/assignee
 - **Sprints**: create and edit, set active, sprint board (the board filtered to one sprint), close sprint with an option to move unfinished items
+  (an unfinished Story moves with its unfinished children of that sprint, M12)
 - **Timeline** (projects only, M9): plan grid and bars over the same items (6.4)
 - **Project settings** (PM), one tab each from M8.5 (General, Members, Teams, Buckets, Labels): general, members (role and visibility per member), teams (optional), buckets (with rules),
   labels, label style, statusToBucket map, ADO export settings, automatic moving of dependent items (6.4, M9),
-  who changes the plan (3.2, M9.2)
+  who changes the plan (3.2, M9.2), "New items start in" (M12), and a Trash tab for anyone who may delete (M12)
 - **Notifications**: bell with unread count, polled every 60s. Notification types:
   assigned to you, mentioned, due tomorrow, overdue, status change on items you created. Due tomorrow and overdue also
   cover the owner's personal tasks.
@@ -303,7 +328,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - branding (app name, logo upload, default theme, UI font: a preset (Figtree (default), Atkinson Hyperlegible, IBM Plex Sans,
     Georgia, Arial) or an uploaded font file; one font for everyone, no per-user override)
   - security (session timeouts, lockout)
-  - storage (attachment limits: file size, project quota, personal space quota per user; disk usage of `/app/kloister`)
+  - storage (attachment limits: file size, project quota, personal space quota per user; trash retention in days,
+    M12; disk usage of `/app/kloister`)
   - backups (enable, time, retention days, last results, "run now")
   - logs (retention days)
   - audit log viewer with filters

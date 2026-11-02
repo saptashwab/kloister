@@ -58,6 +58,7 @@ model User {
   auditLogs     AuditLog[]
   memberships   ProjectMember[]
   createdItems  WorkItem[]
+  trashedItems  WorkItem[]      @relation("TrashedItems")
   holidays      Holiday[]
   notes         Note[]
   attachments   Attachment[]
@@ -453,6 +454,16 @@ model WorkItem {
   createdById                  String     @db.Uuid
   /// Set when the status becomes DONE, cleared when it leaves DONE.
   completedAt                  DateTime?
+  /// Tracked but not part of the plan (M12): a Task or Bug without parent,
+  /// children or dependencies, left out of the timeline.
+  adHoc                        Boolean    @default(false)
+  /// In the project's trash since then (M12); null for active items. Trashed
+  /// items keep their notes, files and links until the batch is purged.
+  deletedAt                    DateTime?
+  /// Who moved the item to the trash.
+  deletedById                  String?    @db.Uuid
+  /// Items deleted together (a cascade) share this id and are restored together.
+  deleteBatchId                String?    @db.Uuid
   createdAt                    DateTime   @default(now())
   updatedAt                    DateTime   @updatedAt
 
@@ -463,6 +474,7 @@ model WorkItem {
   sprint        Sprint?              @relation(fields: [sprintId], references: [id], onDelete: SetNull)
   team          Team?                @relation(fields: [teamId], references: [id], onDelete: SetNull)
   createdBy     User                 @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  deletedBy     User?                @relation("TrashedItems", fields: [deletedById], references: [id], onDelete: SetNull)
   assignees     WorkItemAssignee[]
   labels        WorkItemLabel[]
   checklist     ChecklistItem[]
@@ -471,6 +483,8 @@ model WorkItem {
   notes         Note[]
   attachments   Attachment[]
   notifications Notification[]
+  referencesTo  ItemReference[]      @relation("ReferenceSource")
+  referencedBy  ItemReference[]      @relation("ReferenceTarget")
 
   @@unique([projectId, number])
   /// Target of the composite keys that keep links inside one project.
@@ -479,6 +493,25 @@ model WorkItem {
   @@index([parentId])
   @@index([sprintId])
   @@index([teamId])
+  @@index([projectId, deletedAt])
+  @@index([deleteBatchId])
+}
+
+/// An item named in another item's description or notes (`KLO-12`, M12),
+/// kept in step with the text on every save; it feeds "Referenced in".
+/// The target may be in another project.
+model ItemReference {
+  id           String   @id @default(uuid()) @db.Uuid
+  /// The item whose description or notes name the target.
+  sourceItemId String   @db.Uuid
+  targetItemId String   @db.Uuid
+  createdAt    DateTime @default(now())
+
+  source WorkItem @relation("ReferenceSource", fields: [sourceItemId], references: [id], onDelete: Cascade)
+  target WorkItem @relation("ReferenceTarget", fields: [targetItemId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceItemId, targetItemId])
+  @@index([targetItemId])
 }
 
 /// An item's assignee. The composite key ties the assignee to a membership

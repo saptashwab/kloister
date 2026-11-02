@@ -13,6 +13,8 @@ export interface SelectionItem {
   status: string;
   /** Optional sprint. */
   sprintId: string | null;
+  /** Ad hoc: left out unless the selection includes ad-hoc items (M12). */
+  adHoc: boolean;
   /** Attached labels. */
   labels: { labelId: string }[];
 }
@@ -55,6 +57,7 @@ export function selectItems<T extends SelectionItem>(
         const labels = new Set(i.labels.map((l) => l.labelId));
         return (
           scope &&
+          (selection.includeAdHoc === true || !i.adHoc) &&
           (!selection.excludeDone || i.status !== 'DONE') &&
           (selection.labelIds.length === 0 ||
             (selection.labelMode === 'all'

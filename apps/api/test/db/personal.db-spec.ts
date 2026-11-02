@@ -165,6 +165,8 @@ describe('personal spaces and My work (db)', () => {
     { method: 'GET', path: '/teams' },
     { method: 'POST', path: '/teams', body: { name: 'Leak' } },
     { method: 'POST', path: '/archive' },
+    { method: 'GET', path: '/trash' },
+    { method: 'GET', path: '/items/1/referenced-in' },
   ];
   for (const caller of ['other', 'admin'] as const)
     for (const route of routes) {

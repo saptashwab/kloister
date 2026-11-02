@@ -396,13 +396,23 @@ describe('scoped durable offline transfers (CI database only)', () => {
     expect(await prisma.workItem.count({ where: { projectId: project } })).toBe(2);
     expect(await prisma.adoItemLink.count({ where: { remoteId: '901' } })).toBe(1);
   });
-  it('keeps a tombstone after ordinary deletion and refuses resurrection', async () => {
+  it('treats a trashed item as a tombstone and keeps one after the purge', async () => {
     const p = await preview(incoming());
     expect((await apply(p)).statusCode).toBe(201);
     const link = await prisma.adoItemLink.findFirstOrThrow({ where: { remoteId: '901' } });
+    const trashed = await call(app, 'DELETE', `/api/v1/projects/${project}/items/${link.itemId}`, {
+      sid: sids['pm'],
+    });
+    expect(trashed.statusCode).toBe(200);
+    // In the trash the link waits for a restore (M12), but nothing can recreate the item.
+    expect(
+      (await prisma.adoItemLink.findUniqueOrThrow({ where: { id: link.id } })).tombstonedAt,
+    ).toBeNull();
+    expect((await preview(incoming())).errors.join()).toMatch(/tombstone/);
+    const { batchId } = trashed.json() as { batchId: string };
     expect(
       (
-        await call(app, 'DELETE', `/api/v1/projects/${project}/items/${link.itemId}`, {
+        await call(app, 'DELETE', `/api/v1/projects/${project}/trash/${batchId}`, {
           sid: sids['pm'],
         })
       ).statusCode,

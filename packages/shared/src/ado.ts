@@ -106,6 +106,8 @@ export interface AdoSelection {
   ancestors: boolean;
   /** Exclude completed matching items before adding context. */
   excludeDone: boolean;
+  /** Include ad-hoc items, which are left out by default (M12). */
+  includeAdHoc?: boolean;
   /** Render notes as labelled description content. */
   notes: boolean;
 }

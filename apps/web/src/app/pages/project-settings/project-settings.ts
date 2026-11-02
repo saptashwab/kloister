@@ -36,6 +36,7 @@ import { Skeleton } from '../../ui/feedback';
 import { SessionStore } from '../../core/session.store';
 import { required } from '../../core/validators';
 import { ProjectBoardSettings } from './project-board-settings';
+import { ProjectTrash } from './project-trash';
 import { ProjectTeamsComponent } from './project-teams';
 
 /**
@@ -69,6 +70,7 @@ import { ProjectTeamsComponent } from './project-teams';
     MatSelectModule,
     ProjectTeamsComponent,
     ProjectBoardSettings,
+    ProjectTrash,
     Skeleton,
   ],
   template: `
@@ -186,6 +188,20 @@ import { ProjectTeamsComponent } from './project-teams';
                     <mat-label>Description</mat-label>
                     <textarea matInput formControlName="description"></textarea>
                   </mat-form-field>
+                  @if (buckets().length > 0) {
+                    <mat-form-field>
+                      <mat-label>New items start in</mat-label>
+                      <mat-select formControlName="newItemBucketId">
+                        <mat-option value="">First bucket ({{ buckets()[0].name }})</mat-option>
+                        @for (b of buckets(); track b.id) {
+                          <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                        }
+                      </mat-select>
+                      <mat-hint
+                        >Where new Stories, Tasks and Bugs go when no bucket is chosen</mat-hint
+                      >
+                    </mat-form-field>
+                  }
                   @if (project.ownerId === null) {
                     <mat-checkbox formControlName="membersCanAssignOthers">
                       Members can assign items to others
@@ -368,6 +384,9 @@ import { ProjectTeamsComponent } from './project-teams';
           />
         }
 
+        @if (current() === 'trash') {
+          <app-project-trash [project]="project" />
+        }
         @if (current() === 'buckets' || current() === 'labels') {
           <app-project-board-settings
             [section]="current() === 'labels' ? 'labels' : 'board'"
@@ -433,6 +452,12 @@ export class ProjectSettingsPage implements OnInit {
         : []),
       { id: 'buckets', label: 'Buckets' },
       { id: 'labels', label: 'Labels' },
+      // Anyone who may delete something sees the trash (M12).
+      ...(this.project()?.myPermissions.some(
+        (p) => p === ProjectPermission.DELETE_ANY_ITEM || p === ProjectPermission.DELETE_OWN_ITEMS,
+      )
+        ? [{ id: 'trash', label: 'Trash' }]
+        : []),
     ];
   });
   /** The tab shown. */
@@ -505,6 +530,7 @@ export class ProjectSettingsPage implements OnInit {
     autoMoveDependents: [false],
     useInstanceHolidays: [true],
     planLeadsOnly: [true],
+    newItemBucketId: [''],
   });
 
   /**
@@ -594,19 +620,21 @@ export class ProjectSettingsPage implements OnInit {
       autoMoveDependents,
       useInstanceHolidays,
       planLeadsOnly,
+      newItemBucketId,
     } = this.generalForm.getRawValue();
     await this.run(async () => {
       const saved = await this.api.update(project.id, {
         name,
         description,
         ...(project.ownerId !== null
-          ? {}
+          ? { settings: { newItemBucketId: newItemBucketId === '' ? null : newItemBucketId } }
           : {
               settings: {
                 membersCanAssignOthers,
                 autoMoveDependents,
                 useInstanceHolidays,
                 planLeadsOnly,
+                newItemBucketId: newItemBucketId === '' ? null : newItemBucketId,
               },
             }),
       });
@@ -751,6 +779,7 @@ export class ProjectSettingsPage implements OnInit {
       autoMoveDependents: project.settings.autoMoveDependents,
       useInstanceHolidays: project.settings.useInstanceHolidays,
       planLeadsOnly: project.settings.planLeadsOnly,
+      newItemBucketId: project.settings.newItemBucketId ?? '',
     });
   }
 

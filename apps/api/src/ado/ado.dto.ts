@@ -54,6 +54,8 @@ export class SelectionDto implements AdoSelection {
   @IsBoolean() ancestors: boolean;
   /** Explicit completion filter. */
   @IsBoolean() excludeDone: boolean;
+  /** Ad-hoc items are left out unless included (M12). */
+  @IsOptional() @IsBoolean() includeAdHoc?: boolean;
   /** Optional labelled note rendering. */
   @IsBoolean() notes: boolean;
 }

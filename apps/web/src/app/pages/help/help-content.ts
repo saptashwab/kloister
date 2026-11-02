@@ -197,7 +197,25 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     id: 'sprints',
     title: 'Plan and close sprints',
     role: 'Project PM/Lead or personal owner manages sprints; others read.',
-    text: 'Open Sprints to create a dated planned sprint, activate it or open its filtered board. Only one sprint is active per space. When closing, move unfinished work to an open sprint or the backlog. Closed sprints do not accept new items. Duplication can retain a source sprint only while it remains open. Buckets remain independent of sprints.',
+    text: 'Open Sprints to create a dated planned sprint, activate it or open its filtered board. Only one sprint is active per space. Stories are what you plan into sprints: their Tasks and Bugs follow them when a Story moves to another sprint (one Undo moves them back), and a new Task under a Story starts in its sprint. A Task put into another sprint on purpose shows “Not in its story’s sprint”. Epics and Features have no sprint of their own; they show the sprints of their stories. When closing, move unfinished work to an open sprint or the backlog; an unfinished Story takes its unfinished Tasks and Bugs along. Closed sprints do not accept new items. Duplication can retain a source sprint only while it remains open. Buckets remain independent of sprints.',
+  },
+  {
+    id: 'ad-hoc',
+    title: 'Ad-hoc items outside the plan',
+    role: 'Anyone who can create items may create ad-hoc items; turning an existing item ad hoc is a plan change.',
+    text: 'A quick call or a check that needs tracking but is not part of the plan can be an ad-hoc Task or Bug: tick “Ad hoc” in New item, choose Ad hoc in the board’s “New cards” menu, or switch it on in the item. Ad-hoc items have no parent, children or dependencies. They show on the board with an Ad hoc tag, in their own group on the backlog, in My work, search and notifications, but not on the timeline, in plan totals or the Excel Timeline sheet. Transfers leave them out unless you include them.',
+  },
+  {
+    id: 'trash',
+    title: 'Deleted items and the trash',
+    role: 'Anyone who may delete sees the trash; PMs and Leads restore anything, others what they deleted; PMs delete permanently.',
+    text: 'Deleting an item moves it, and everything under it for a cascade, to the project’s trash. The toast’s Undo brings it straight back. Later, open Settings › Trash to restore a deleted batch with its notes, files and links; restored items keep their numbers. If the parent is still in the trash, the item comes back without a parent. The trash is emptied every night after the period an administrator sets (30 days unless changed); PMs can delete a batch permanently sooner. You see only items you could see before they were deleted.',
+  },
+  {
+    id: 'references',
+    title: 'Link items with their keys',
+    role: 'Everyone who edits descriptions or notes; links show only items the reader can see.',
+    text: 'Type an item key such as KLO-12, or #12 for an item of the same project, in a description or note. Typing # or the project key offers matching items. Once saved it becomes a link: hover or focus it for the title, status, assignees and due date, click it to open the item. Readers who cannot see the item read plain text, and keys of other projects link only for their members. An item lists the items that mention it under “Referenced in”.',
   },
   {
     id: 'timeline',

@@ -118,6 +118,7 @@ export class NotificationsService {
     const items = await this.prisma.workItem.findMany({
       where: {
         status: { not: ItemStatus.DONE },
+        deletedAt: null,
         project: { archivedAt: null },
         OR: [
           { dueDate: tomorrow },

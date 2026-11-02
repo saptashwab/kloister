@@ -129,6 +129,9 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
         @if (i.status === blocked) {
           <span class="k-pill warn">Blocked</span>
         }
+        @if (i.adHoc) {
+          <span class="k-pill" title="Not part of the plan">Ad hoc</span>
+        }
         <span class="spacer"></span>
         @if (presence().length > 0) {
           <app-presence [people]="presence()" [members]="members()" what="this card" [size]="18" />

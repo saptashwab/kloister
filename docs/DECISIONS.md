@@ -1,5 +1,62 @@
 # Decisions
 
+## M12 items in and out of the plan, trash and item references (2026-11-03)
+
+- Built as planned in docs/M12-PLAN.md (owner decisions in its section 8). Choices made while building,
+  closest to the plan:
+- Trash filter: `ProjectAccessService.itemScopeFilter()` now adds `deletedAt: null`, so every query that
+  already carried the visibility filter (lists, children, details, counts, timeline, snapshots, My work,
+  notifications, ADO export, live refetches, references) ignores trashed items without a second filter to
+  forget. Only the trash uses the new `itemVisibilityFilter()`. The documented unscoped queries were reviewed:
+  child counts for the delete rule and child types for type changes ignore trashed rows; cycle checks keep
+  counting trashed items' links, so a restore can never close a cycle; card positions, ancestor titles and the
+  restore's parent check need no filter. Bucket deletion moves trashed items along (to the chosen bucket, or
+  the first remaining one when only trashed items were left), so a restore always finds a bucket; sprint close,
+  sprint and team deletion counts and the due-date job skip trashed items.
+- Delete answers 200 with `{ batchId, count }` instead of 204, so the toast's Undo can restore the batch.
+- Restore: PMs and Leads restore any batch; others a single item they deleted or whose team they lead
+  (cascades, the only batches of several items, are for PMs and Leads). A batch whose deleted item the caller
+  cannot see is 404. Purging a batch first clears the parent of items of earlier batches that sat under it.
+- ADO links of trashed items stay active, so a restore keeps the link; while an item is in the trash, ADO
+  treats it like a tombstone (no import can recreate it). The purge tombstones the links as delete did before.
+- Trash retention is a field of the existing admin storage settings (`trashRetentionDays`, 1–365, default 30)
+  rather than a new settings route; the purge runs at 03:45 server time, one transaction and one
+  `ITEM_PURGED` entry per batch, attributed to nobody (`automatic: true`).
+- Sprints: a type change to Epic or Feature clears the sprint (recorded in the change) instead of refusing it.
+  A Story's followers are its Tasks and Bugs in the old sprint or none; Undo patches the Story back, so the
+  children now in the new sprint follow back (children that had no sprint end in the Story's old sprint).
+  Followers move whoever sees them, like a cascade, and each gets its own `SPRINT_FOLLOWED` entry.
+- Upgrade (owner decision 8.1): the migration records each cleared Epic/Feature sprint as an unattributed
+  `ITEM_UPDATED` entry with `"upgrade": "M12"` in the item's history, then clears it; the per-project counts
+  for the release notes come from the query in docs/UPGRADE.md, since a migration cannot report them.
+- Ad hoc: only links the caller can see block making an item ad hoc; hidden links stay and are ignored while
+  the item is out of the plan, so nothing hidden is hinted at and nobody's link is removed silently. Imported
+  ADO rows of Epics and Features do not apply an iteration path.
+- References: the mark stores the canonical key (`<span data-ref="KLO-12">`), not the item id, so it adds
+  nothing to the text the writer typed; the API still turns marks of items the reader cannot see back into
+  plain text on every read (descriptions in item responses, note bodies). "Referenced in" uses the small
+  `ItemReference` table, rebuilt from the description and notes on each save, rather than a query over HTML.
+  Autocomplete offers the open project's visible items; references to other projects are typed by key and
+  previewed through `GET /references`. In the editor, references show as marks with the preview card; links
+  open items from displayed text (read-only descriptions and notes).
+- Independent review (fresh context) found two must-fix issues, both fixed: the storage settings body now
+  accepts a missing `trashRetentionDays` (kept as stored), so callers from before M12 keep working; and a
+  restore drops the parent when its type no longer allows the item (the parent may have changed type while
+  the item was in the trash). Also fixed: offline snapshots redact references in notes; redaction now
+  removes the mark's opening tag only, so a mark holding other markup can never slip through; an editor
+  who sees less keeps the marks they received as plain text; restored links to an item made ad hoc
+  meanwhile are dropped; done children and children in a closed sprint do not follow their Story; the
+  "Not in its story's sprint" marker shows only for a child with its own sprint; previews of other
+  projects are reused for a minute and failures are not remembered; one failing purge batch no longer
+  stops the rest. Left as they are, on purpose: closing a sprint still moves every unfinished item, so
+  a Done Story's unfinished Tasks move without it (the Story itself is finished; nothing is lost from
+  the sprint's view); restore stays with the deleter, team Leads and PMs/Leads rather than "whoever could
+  delete" (the creator of an item a PM deleted asks a PM); the oldest batch of a very long trash list may
+  be shown cut short until newer batches are gone.
+- Web: Trash is a Project settings tab for anyone who may delete. The new trash and reference API calls live in
+  `core/trash-api.service.ts` and the reference styles in their own lazy stylesheet, so the first page stays
+  under the unchanged 500 kB budget.
+
 ## M11 technical documentation and API reference (2026-11-02)
 
 - Built as planned in docs/M11-PLAN.md. Choices made while building, closest to the plan:

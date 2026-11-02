@@ -40,6 +40,8 @@ Every route of the Kloister API, generated from the code. The machine-readable d
 - [Admin holidays](#admin-holidays)
 - [Backups](#backups)
 - [Audit log](#audit-log)
+- [References](#references)
+- [Trash](#trash)
 - [Live update events](#live-update-events)
 - [Schemas](#schemas)
 
@@ -1219,6 +1221,7 @@ Lists visible items. Permissions: any member and admin, within scope.
           "total": 0
         },
         "childCount": 0,
+        "adHoc": false,
         "completedAt": null,
         "createdAt": "2026-11-02T09:15:00.000Z",
         "updatedAt": "2026-11-02T09:15:00.000Z",
@@ -1310,6 +1313,7 @@ Example:
       "total": 0
     },
     "childCount": 0,
+    "adHoc": false,
     "completedAt": null,
     "createdAt": "2026-11-02T09:15:00.000Z",
     "updatedAt": "2026-11-02T09:15:00.000Z",
@@ -1381,7 +1385,7 @@ Example:
 
 ### DELETE /api/v1/projects/{id}/items/{item}
 
-Deletes an item (`?cascade=true` for its subtree). Permissions: `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items while the project lets Members change the plan (M9.2), or leading the item's team (no cascade).
+Moves an item to the project's trash (`?cascade=true` with its subtree, M12); restoring the returned batch is the Undo. Permissions: `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items while the project lets Members change the plan (M9.2), or leading the item's team (no cascade).
 
 **Permission:** Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.
 
@@ -1392,7 +1396,10 @@ Deletes an item (`?cascade=true` for its subtree). Permissions: `DELETE_ANY_ITEM
 
 **Responses**
 
-- **204** Done; no body.
+- **200** Success.
+
+  Type: [DeleteItemResult](#deleteitemresult)
+
 - Errors: 400, 401, 403, 404, 409 ([ApiError](#apierror))
 
 ### POST /api/v1/projects/{id}/items/{item}/move
@@ -3107,6 +3114,97 @@ Lists audit entries newest first, with optional filters.
 
 - Errors: 400, 401, 403 ([ApiError](#apierror))
 
+## References
+
+Item references in rich text (M12): previews for hover cards and the "Referenced in" list of an item.
+
+### GET /api/v1/references
+
+Previews referenced items by key (`KLO-12`). Permissions: signed in; unknown, hidden and trashed items are left out.
+
+**Permission:** Any signed-in user.
+
+| Parameter | In    | Type     | Required | Description                                                |
+| --------- | ----- | -------- | -------- | ---------------------------------------------------------- |
+| `keys`    | query | string[] | yes      | Canonical item keys, comma-separated, e.g. `KLO-12,OPS-3`. |
+
+**Responses**
+
+- **200** Success.
+
+  Type: [ItemPreviewDto](#itempreviewdto)[]
+
+- Errors: 400, 401, 403 ([ApiError](#apierror))
+
+### GET /api/v1/projects/{id}/items/{item}/referenced-in
+
+Lists the visible items whose description or notes name this item. Permissions: any member and admin, within scope; 404 unless the item is visible.
+
+**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.
+
+| Parameter | In   | Type   | Required | Description          |
+| --------- | ---- | ------ | -------- | -------------------- |
+| `item`    | path | string | yes      | Item uuid or number. |
+
+**Responses**
+
+- **200** Success.
+
+  Type: [ItemReferrerDto](#itemreferrerdto)[]
+
+- Errors: 400, 401, 403, 404 ([ApiError](#apierror))
+
+## Trash
+
+A project's trash under `/api/v1/projects/:id/trash` (M12): deleted items by delete batch, restore and permanent delete.
+
+### GET /api/v1/projects/{id}/trash
+
+Lists the delete batches, newest first, with the caller's visible items. Permissions: `DELETE_ANY_ITEM` or `DELETE_OWN_ITEMS`.
+
+**Permission:** Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.
+
+**Responses**
+
+- **200** Success.
+
+  Type: [TrashBatchDto](#trashbatchdto)[]
+
+- Errors: 401, 403, 404 ([ApiError](#apierror))
+
+### POST /api/v1/projects/{id}/trash/{batchId}/restore
+
+Restores a delete batch. Permissions: `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` for a single item the caller deleted or whose team they lead; 404 unless its deleted item is visible.
+
+**Permission:** Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.
+
+| Parameter | In   | Type   | Required | Description       |
+| --------- | ---- | ------ | -------- | ----------------- |
+| `batchId` | path | string | yes      | The delete batch. |
+
+**Responses**
+
+- **200** Success.
+
+  Type: [RestoreBatchResult](#restorebatchresult)
+
+- Errors: 400, 401, 403, 404, 409 ([ApiError](#apierror))
+
+### DELETE /api/v1/projects/{id}/trash/{batchId}
+
+Deletes a batch for good. Permissions: `MANAGE_PROJECT` (PMs).
+
+**Permission:** Project member with `MANAGE_PROJECT` (PM). Non-members get 404.
+
+| Parameter | In   | Type   | Required | Description       |
+| --------- | ---- | ------ | -------- | ----------------- |
+| `batchId` | path | string | yes      | The delete batch. |
+
+**Responses**
+
+- **204** Done; no body.
+- Errors: 400, 401, 403, 404, 409 ([ApiError](#apierror))
+
 ## Live update events
 
 Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.md).
@@ -3182,14 +3280,15 @@ Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.m
 
 ### ProjectSettingsChangeDto
 
-| Field                    | Type                             | Required | Description                                                            |
-| ------------------------ | -------------------------------- | -------- | ---------------------------------------------------------------------- |
-| `membersCanAssignOthers` | boolean                          | no       | Lets Members assign items to others.                                   |
-| `statusToBucket`         | object                           | no       | Replaces the status → bucket map (SPEC §4.2); `{}` clears it.          |
-| `labelStyle`             | `"SOLID"`, `"TINTED"`, `"COVER"` | no       | Label style for the whole project (SPEC §4, §6).                       |
-| `autoMoveDependents`     | boolean                          | no       | Timeline date changes move dependent items without asking (SPEC §6.4). |
-| `useInstanceHolidays`    | boolean                          | no       | The timeline uses the instance-wide holidays (M9.1).                   |
-| `planLeadsOnly`          | boolean                          | no       | Only PMs and Leads change the plan of existing items (M9.2).           |
+| Field                    | Type                             | Required | Description                                                                 |
+| ------------------------ | -------------------------------- | -------- | --------------------------------------------------------------------------- |
+| `membersCanAssignOthers` | boolean                          | no       | Lets Members assign items to others.                                        |
+| `statusToBucket`         | object                           | no       | Replaces the status → bucket map (SPEC §4.2); `{}` clears it.               |
+| `labelStyle`             | `"SOLID"`, `"TINTED"`, `"COVER"` | no       | Label style for the whole project (SPEC §4, §6).                            |
+| `autoMoveDependents`     | boolean                          | no       | Timeline date changes move dependent items without asking (SPEC §6.4).      |
+| `useInstanceHolidays`    | boolean                          | no       | The timeline uses the instance-wide holidays (M9.1).                        |
+| `planLeadsOnly`          | boolean                          | no       | Only PMs and Leads change the plan of existing items (M9.2).                |
+| `newItemBucketId`        | string (uuid) or null            | no       | "New items start in" (M12): a bucket of the project, or null for the first. |
 
 ### UpdateProjectDto
 
@@ -3298,44 +3397,46 @@ Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.m
 
 ### CreateItemDto
 
-| Field             | Type                                                    | Required | Description                                       |
-| ----------------- | ------------------------------------------------------- | -------- | ------------------------------------------------- |
-| `type`            | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`     | yes      | Item type.                                        |
-| `title`           | string                                                  | yes      | Title.                                            |
-| `description`     | string                                                  | no       | HTML description; sanitized before storing.       |
-| `parentId`        | string (uuid) or null                                   | no       | Parent item.                                      |
-| `status`          | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"` | no       | Initial status.                                   |
-| `priority`        | number                                                  | no       | Priority.                                         |
-| `bucketId`        | string (uuid) or null                                   | no       | Bucket.                                           |
-| `sprintId`        | string (uuid) or null                                   | no       | Sprint.                                           |
-| `teamId`          | string (uuid) or null                                   | no       | Team.                                             |
-| `startDate`       | string or null                                          | no       | Start date.                                       |
-| `startSecondHalf` | boolean                                                 | no       | Starts in the 2nd half of the start date (M9).    |
-| `dueDate`         | string or null                                          | no       | Due date.                                         |
-| `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9). |
-| `dueTime`         | string or null                                          | no       | Due time `HH:MM` on the due date.                 |
-| `assigneeIds`     | string (uuid)[]                                         | no       | Assignees.                                        |
-| `labelIds`        | string (uuid)[]                                         | no       | Labels.                                           |
+| Field             | Type                                                    | Required | Description                                                                                   |
+| ----------------- | ------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `type`            | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`     | yes      | Item type.                                                                                    |
+| `title`           | string                                                  | yes      | Title.                                                                                        |
+| `description`     | string                                                  | no       | HTML description; sanitized before storing.                                                   |
+| `parentId`        | string (uuid) or null                                   | no       | Parent item.                                                                                  |
+| `status`          | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"` | no       | Initial status.                                                                               |
+| `priority`        | number                                                  | no       | Priority.                                                                                     |
+| `bucketId`        | string (uuid) or null                                   | no       | Bucket.                                                                                       |
+| `sprintId`        | string (uuid) or null                                   | no       | Sprint; never on Epics and Features. A Story's child starts in its sprint when omitted (M12). |
+| `adHoc`           | boolean                                                 | no       | Ad hoc: not part of the plan; Tasks and Bugs without parent only (M12).                       |
+| `teamId`          | string (uuid) or null                                   | no       | Team.                                                                                         |
+| `startDate`       | string or null                                          | no       | Start date.                                                                                   |
+| `startSecondHalf` | boolean                                                 | no       | Starts in the 2nd half of the start date (M9).                                                |
+| `dueDate`         | string or null                                          | no       | Due date.                                                                                     |
+| `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9).                                             |
+| `dueTime`         | string or null                                          | no       | Due time `HH:MM` on the due date.                                                             |
+| `assigneeIds`     | string (uuid)[]                                         | no       | Assignees.                                                                                    |
+| `labelIds`        | string (uuid)[]                                         | no       | Labels.                                                                                       |
 
 ### UpdateItemDto
 
-| Field             | Type                                                    | Required | Description                                       |
-| ----------------- | ------------------------------------------------------- | -------- | ------------------------------------------------- |
-| `type`            | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`     | no       | New type.                                         |
-| `title`           | string                                                  | no       | New title.                                        |
-| `description`     | string                                                  | no       | New description.                                  |
-| `parentId`        | string (uuid) or null                                   | no       | New parent, or null.                              |
-| `status`          | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"` | no       | New status.                                       |
-| `priority`        | number                                                  | no       | New priority.                                     |
-| `sprintId`        | string (uuid) or null                                   | no       | New sprint, or null.                              |
-| `teamId`          | string (uuid) or null                                   | no       | New team, or null.                                |
-| `startDate`       | string or null                                          | no       | New start date, or null.                          |
-| `startSecondHalf` | boolean                                                 | no       | Starts in the 2nd half of the start date (M9).    |
-| `dueDate`         | string or null                                          | no       | New due date, or null.                            |
-| `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9). |
-| `dueTime`         | string or null                                          | no       | New due time `HH:MM`, or null; needs a due date.  |
-| `assigneeIds`     | string (uuid)[]                                         | no       | Full assignee list.                               |
-| `labelIds`        | string (uuid)[]                                         | no       | Full label list.                                  |
+| Field             | Type                                                    | Required | Description                                                                                |
+| ----------------- | ------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `type`            | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`     | no       | New type.                                                                                  |
+| `title`           | string                                                  | no       | New title.                                                                                 |
+| `description`     | string                                                  | no       | New description.                                                                           |
+| `parentId`        | string (uuid) or null                                   | no       | New parent, or null.                                                                       |
+| `status`          | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"` | no       | New status.                                                                                |
+| `priority`        | number                                                  | no       | New priority.                                                                              |
+| `sprintId`        | string (uuid) or null                                   | no       | New sprint, or null; never on Epics and Features. The Story's Tasks and Bugs follow (M12). |
+| `adHoc`           | boolean                                                 | no       | Make the item ad hoc, or plan it again (M12).                                              |
+| `teamId`          | string (uuid) or null                                   | no       | New team, or null.                                                                         |
+| `startDate`       | string or null                                          | no       | New start date, or null.                                                                   |
+| `startSecondHalf` | boolean                                                 | no       | Starts in the 2nd half of the start date (M9).                                             |
+| `dueDate`         | string or null                                          | no       | New due date, or null.                                                                     |
+| `dueFirstHalf`    | boolean                                                 | no       | Finishes after the 1st half of the due date (M9).                                          |
+| `dueTime`         | string or null                                          | no       | New due time `HH:MM`, or null; needs a due date.                                           |
+| `assigneeIds`     | string (uuid)[]                                         | no       | Full assignee list.                                                                        |
+| `labelIds`        | string (uuid)[]                                         | no       | Full label list.                                                                           |
 
 ### MoveItemDto
 
@@ -3464,11 +3565,12 @@ Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.m
 
 ### StorageSettingsBody
 
-| Field             | Type   | Required | Description                                                                     |
-| ----------------- | ------ | -------- | ------------------------------------------------------------------------------- |
-| `maxFileSizeMb`   | number | yes      | Largest file in MB.                                                             |
-| `projectQuotaMb`  | number | yes      | Per-project space in MB; at least the file size limit (checked by the service). |
-| `personalQuotaMb` | number | yes      | Per-user personal quota, in MB.                                                 |
+| Field                | Type   | Required | Description                                                                        |
+| -------------------- | ------ | -------- | ---------------------------------------------------------------------------------- |
+| `maxFileSizeMb`      | number | yes      | Largest file in MB.                                                                |
+| `projectQuotaMb`     | number | yes      | Per-project space in MB; at least the file size limit (checked by the service).    |
+| `personalQuotaMb`    | number | yes      | Per-user personal quota, in MB.                                                    |
+| `trashRetentionDays` | number | no       | Days deleted items stay in the trash (M12); the stored value is kept when omitted. |
 
 ### LogSettingsBody
 
@@ -3520,16 +3622,17 @@ Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.m
 
 ### SelectionDto
 
-| Field         | Type                                             | Required | Description                       |
-| ------------- | ------------------------------------------------ | -------- | --------------------------------- |
-| `scope`       | `"project"`, `"sprint"`, `"subtree"`, `"manual"` | yes      | Selection basis.                  |
-| `rootId`      | string (uuid)                                    | no       | Sprint or subtree root.           |
-| `itemIds`     | string (uuid)[]                                  | no       | Exact manual identities.          |
-| `labelIds`    | string (uuid)[]                                  | yes      | Label filter IDs.                 |
-| `labelMode`   | `"any"`, `"all"`                                 | yes      | Any/all label semantics.          |
-| `ancestors`   | boolean                                          | yes      | Explicit ancestor choice.         |
-| `excludeDone` | boolean                                          | yes      | Explicit completion filter.       |
-| `notes`       | boolean                                          | yes      | Optional labelled note rendering. |
+| Field          | Type                                             | Required | Description                                      |
+| -------------- | ------------------------------------------------ | -------- | ------------------------------------------------ |
+| `scope`        | `"project"`, `"sprint"`, `"subtree"`, `"manual"` | yes      | Selection basis.                                 |
+| `rootId`       | string (uuid)                                    | no       | Sprint or subtree root.                          |
+| `itemIds`      | string (uuid)[]                                  | no       | Exact manual identities.                         |
+| `labelIds`     | string (uuid)[]                                  | yes      | Label filter IDs.                                |
+| `labelMode`    | `"any"`, `"all"`                                 | yes      | Any/all label semantics.                         |
+| `ancestors`    | boolean                                          | yes      | Explicit ancestor choice.                        |
+| `excludeDone`  | boolean                                          | yes      | Explicit completion filter.                      |
+| `includeAdHoc` | boolean                                          | no       | Ad-hoc items are left out unless included (M12). |
+| `notes`        | boolean                                          | yes      | Optional labelled note rendering.                |
 
 ### ExportDto
 
@@ -3709,6 +3812,7 @@ Project settings stored in `Project.settings` (SPEC §4). M8 adds the ADO export
 | `useInstanceHolidays`        | boolean                   | yes      | The project's timeline uses the instance-wide holidays (M9.1; default on).                                                                                                                                                                |
 | `holidaysReviewedAt`         | string or null            | yes      | When the project's PMs or Leads last reviewed instance holiday changes, or null (M9.1).                                                                                                                                                   |
 | `planLeadsOnly`              | boolean                   | yes      | Only PMs, Leads and the item's team Leads change an existing item's plan: title, type, parent, sprint, dates, half days, pin and dependencies (M9.2; default on, also for projects from before it). Members still set them when creating. |
+| `newItemBucketId`            | string or null            | yes      | "New items start in" (M12): the bucket for Stories, Tasks and Bugs created without one; null for the first bucket.                                                                                                                        |
 
 ### LabelStyle
 
@@ -3860,41 +3964,42 @@ Result of closing a sprint.
 
 A work item as returned by list endpoints.
 
-| Field                       | Type                                        | Required | Description                                                          |
-| --------------------------- | ------------------------------------------- | -------- | -------------------------------------------------------------------- |
-| `id`                        | string                                      | yes      | Item id (uuid).                                                      |
-| `number`                    | number                                      | yes      | Per-project number.                                                  |
-| `key`                       | string                                      | yes      | Display key, e.g. `KLO-42`.                                          |
-| `type`                      | [ItemType](#itemtype)                       | yes      | Item type.                                                           |
-| `parentId`                  | string or null                              | yes      | Parent item id, or null.                                             |
-| `ancestors`                 | [ItemRefDto](#itemrefdto)[]                 | yes      | Ancestors from the root down to the parent, as read-only titles.     |
-| `title`                     | string                                      | yes      | Title.                                                               |
-| `description`               | string                                      | yes      | Sanitized HTML.                                                      |
-| `status`                    | [ItemStatus](#itemstatus)                   | yes      | Status.                                                              |
-| `priority`                  | number                                      | yes      | 1 (highest) to 4.                                                    |
-| `bucketId`                  | string or null                              | yes      | Bucket id; null only for Epics and Features off the board.           |
-| `sprintId`                  | string or null                              | yes      | Sprint id, or null.                                                  |
-| `teamId`                    | string or null                              | yes      | Team id, or null.                                                    |
-| `startDate`                 | string or null                              | yes      | `YYYY-MM-DD`, or null.                                               |
-| `startSecondHalf`           | boolean                                     | yes      | The item starts in the 2nd half of its start date (timeline, M9).    |
-| `dueDate`                   | string or null                              | yes      | `YYYY-MM-DD`, or null.                                               |
-| `dueFirstHalf`              | boolean                                     | yes      | The item finishes after the 1st half of its due date (timeline, M9). |
-| `dueTime`                   | string or null                              | yes      | Optional due time `HH:MM` on the due date, or null (M8.5).           |
-| `startNoEarlierThan`        | object                                      | yes      | "Start no earlier than" pin set on the timeline, or null (M9).       |
-| `startNoEarlierThan.date`   | string                                      | yes      |                                                                      |
-| `startNoEarlierThan.second` | boolean                                     | yes      |                                                                      |
-| `position`                  | number                                      | yes      | Order within the bucket, ascending.                                  |
-| `createdById`               | string                                      | yes      | Creator's user id.                                                   |
-| `assigneeIds`               | string[]                                    | yes      | Assignee user ids.                                                   |
-| `labelIds`                  | string[]                                    | yes      | Label ids.                                                           |
-| `checklist`                 | object                                      | yes      | Checklist progress, e.g. 3 of 7.                                     |
-| `checklist.done`            | number                                      | yes      |                                                                      |
-| `checklist.total`           | number                                      | yes      |                                                                      |
-| `childCount`                | number                                      | yes      | Number of child items (in any scope).                                |
-| `completedAt`               | string or null                              | yes      | ISO timestamp when the status became DONE, or null.                  |
-| `createdAt`                 | string                                      | yes      | ISO timestamp of creation.                                           |
-| `updatedAt`                 | string                                      | yes      | ISO timestamp of the last change.                                    |
-| `can`                       | [ItemCapabilitiesDto](#itemcapabilitiesdto) | yes      | What the caller may do with this item.                               |
+| Field                       | Type                                        | Required | Description                                                                                |
+| --------------------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `id`                        | string                                      | yes      | Item id (uuid).                                                                            |
+| `number`                    | number                                      | yes      | Per-project number.                                                                        |
+| `key`                       | string                                      | yes      | Display key, e.g. `KLO-42`.                                                                |
+| `type`                      | [ItemType](#itemtype)                       | yes      | Item type.                                                                                 |
+| `parentId`                  | string or null                              | yes      | Parent item id, or null.                                                                   |
+| `ancestors`                 | [ItemRefDto](#itemrefdto)[]                 | yes      | Ancestors from the root down to the parent, as read-only titles.                           |
+| `title`                     | string                                      | yes      | Title.                                                                                     |
+| `description`               | string                                      | yes      | Sanitized HTML.                                                                            |
+| `status`                    | [ItemStatus](#itemstatus)                   | yes      | Status.                                                                                    |
+| `priority`                  | number                                      | yes      | 1 (highest) to 4.                                                                          |
+| `bucketId`                  | string or null                              | yes      | Bucket id; null only for Epics and Features off the board.                                 |
+| `sprintId`                  | string or null                              | yes      | Sprint id, or null.                                                                        |
+| `teamId`                    | string or null                              | yes      | Team id, or null.                                                                          |
+| `startDate`                 | string or null                              | yes      | `YYYY-MM-DD`, or null.                                                                     |
+| `startSecondHalf`           | boolean                                     | yes      | The item starts in the 2nd half of its start date (timeline, M9).                          |
+| `dueDate`                   | string or null                              | yes      | `YYYY-MM-DD`, or null.                                                                     |
+| `dueFirstHalf`              | boolean                                     | yes      | The item finishes after the 1st half of its due date (timeline, M9).                       |
+| `dueTime`                   | string or null                              | yes      | Optional due time `HH:MM` on the due date, or null (M8.5).                                 |
+| `startNoEarlierThan`        | object                                      | yes      | "Start no earlier than" pin set on the timeline, or null (M9).                             |
+| `startNoEarlierThan.date`   | string                                      | yes      |                                                                                            |
+| `startNoEarlierThan.second` | boolean                                     | yes      |                                                                                            |
+| `position`                  | number                                      | yes      | Order within the bucket, ascending.                                                        |
+| `createdById`               | string                                      | yes      | Creator's user id.                                                                         |
+| `assigneeIds`               | string[]                                    | yes      | Assignee user ids.                                                                         |
+| `labelIds`                  | string[]                                    | yes      | Label ids.                                                                                 |
+| `checklist`                 | object                                      | yes      | Checklist progress, e.g. 3 of 7.                                                           |
+| `checklist.done`            | number                                      | yes      |                                                                                            |
+| `checklist.total`           | number                                      | yes      |                                                                                            |
+| `childCount`                | number                                      | yes      | Number of child items (in any scope).                                                      |
+| `adHoc`                     | boolean                                     | yes      | Tracked but not part of the plan: no parent, children or links, not on the timeline (M12). |
+| `completedAt`               | string or null                              | yes      | ISO timestamp when the status became DONE, or null.                                        |
+| `createdAt`                 | string                                      | yes      | ISO timestamp of creation.                                                                 |
+| `updatedAt`                 | string                                      | yes      | ISO timestamp of the last change.                                                          |
+| `can`                       | [ItemCapabilitiesDto](#itemcapabilitiesdto) | yes      | What the caller may do with this item.                                                     |
 
 ### ItemType
 
@@ -3937,44 +4042,45 @@ What the caller may do with an item; the UI uses this only to hide controls.
 
 A work item with its checklist and dependencies, from `GET …/items/:item`.
 
-| Field                       | Type                                        | Required | Description                                                          |
-| --------------------------- | ------------------------------------------- | -------- | -------------------------------------------------------------------- |
-| `checklistItems`            | [ChecklistItemDto](#checklistitemdto)[]     | yes      | Checklist lines in order.                                            |
-| `blockedBy`                 | [ItemRefDto](#itemrefdto)[]                 | yes      | Visible items this one is blocked by.                                |
-| `blocks`                    | [ItemRefDto](#itemrefdto)[]                 | yes      | Visible items this one blocks.                                       |
-| `id`                        | string                                      | yes      | Item id (uuid).                                                      |
-| `number`                    | number                                      | yes      | Per-project number.                                                  |
-| `key`                       | string                                      | yes      | Display key, e.g. `KLO-42`.                                          |
-| `type`                      | [ItemType](#itemtype)                       | yes      | Item type.                                                           |
-| `parentId`                  | string or null                              | yes      | Parent item id, or null.                                             |
-| `ancestors`                 | [ItemRefDto](#itemrefdto)[]                 | yes      | Ancestors from the root down to the parent, as read-only titles.     |
-| `title`                     | string                                      | yes      | Title.                                                               |
-| `description`               | string                                      | yes      | Sanitized HTML.                                                      |
-| `status`                    | [ItemStatus](#itemstatus)                   | yes      | Status.                                                              |
-| `priority`                  | number                                      | yes      | 1 (highest) to 4.                                                    |
-| `bucketId`                  | string or null                              | yes      | Bucket id; null only for Epics and Features off the board.           |
-| `sprintId`                  | string or null                              | yes      | Sprint id, or null.                                                  |
-| `teamId`                    | string or null                              | yes      | Team id, or null.                                                    |
-| `startDate`                 | string or null                              | yes      | `YYYY-MM-DD`, or null.                                               |
-| `startSecondHalf`           | boolean                                     | yes      | The item starts in the 2nd half of its start date (timeline, M9).    |
-| `dueDate`                   | string or null                              | yes      | `YYYY-MM-DD`, or null.                                               |
-| `dueFirstHalf`              | boolean                                     | yes      | The item finishes after the 1st half of its due date (timeline, M9). |
-| `dueTime`                   | string or null                              | yes      | Optional due time `HH:MM` on the due date, or null (M8.5).           |
-| `startNoEarlierThan`        | object                                      | yes      | "Start no earlier than" pin set on the timeline, or null (M9).       |
-| `startNoEarlierThan.date`   | string                                      | yes      |                                                                      |
-| `startNoEarlierThan.second` | boolean                                     | yes      |                                                                      |
-| `position`                  | number                                      | yes      | Order within the bucket, ascending.                                  |
-| `createdById`               | string                                      | yes      | Creator's user id.                                                   |
-| `assigneeIds`               | string[]                                    | yes      | Assignee user ids.                                                   |
-| `labelIds`                  | string[]                                    | yes      | Label ids.                                                           |
-| `checklist`                 | object                                      | yes      | Checklist progress, e.g. 3 of 7.                                     |
-| `checklist.done`            | number                                      | yes      |                                                                      |
-| `checklist.total`           | number                                      | yes      |                                                                      |
-| `childCount`                | number                                      | yes      | Number of child items (in any scope).                                |
-| `completedAt`               | string or null                              | yes      | ISO timestamp when the status became DONE, or null.                  |
-| `createdAt`                 | string                                      | yes      | ISO timestamp of creation.                                           |
-| `updatedAt`                 | string                                      | yes      | ISO timestamp of the last change.                                    |
-| `can`                       | [ItemCapabilitiesDto](#itemcapabilitiesdto) | yes      | What the caller may do with this item.                               |
+| Field                       | Type                                        | Required | Description                                                                                |
+| --------------------------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `checklistItems`            | [ChecklistItemDto](#checklistitemdto)[]     | yes      | Checklist lines in order.                                                                  |
+| `blockedBy`                 | [ItemRefDto](#itemrefdto)[]                 | yes      | Visible items this one is blocked by.                                                      |
+| `blocks`                    | [ItemRefDto](#itemrefdto)[]                 | yes      | Visible items this one blocks.                                                             |
+| `id`                        | string                                      | yes      | Item id (uuid).                                                                            |
+| `number`                    | number                                      | yes      | Per-project number.                                                                        |
+| `key`                       | string                                      | yes      | Display key, e.g. `KLO-42`.                                                                |
+| `type`                      | [ItemType](#itemtype)                       | yes      | Item type.                                                                                 |
+| `parentId`                  | string or null                              | yes      | Parent item id, or null.                                                                   |
+| `ancestors`                 | [ItemRefDto](#itemrefdto)[]                 | yes      | Ancestors from the root down to the parent, as read-only titles.                           |
+| `title`                     | string                                      | yes      | Title.                                                                                     |
+| `description`               | string                                      | yes      | Sanitized HTML.                                                                            |
+| `status`                    | [ItemStatus](#itemstatus)                   | yes      | Status.                                                                                    |
+| `priority`                  | number                                      | yes      | 1 (highest) to 4.                                                                          |
+| `bucketId`                  | string or null                              | yes      | Bucket id; null only for Epics and Features off the board.                                 |
+| `sprintId`                  | string or null                              | yes      | Sprint id, or null.                                                                        |
+| `teamId`                    | string or null                              | yes      | Team id, or null.                                                                          |
+| `startDate`                 | string or null                              | yes      | `YYYY-MM-DD`, or null.                                                                     |
+| `startSecondHalf`           | boolean                                     | yes      | The item starts in the 2nd half of its start date (timeline, M9).                          |
+| `dueDate`                   | string or null                              | yes      | `YYYY-MM-DD`, or null.                                                                     |
+| `dueFirstHalf`              | boolean                                     | yes      | The item finishes after the 1st half of its due date (timeline, M9).                       |
+| `dueTime`                   | string or null                              | yes      | Optional due time `HH:MM` on the due date, or null (M8.5).                                 |
+| `startNoEarlierThan`        | object                                      | yes      | "Start no earlier than" pin set on the timeline, or null (M9).                             |
+| `startNoEarlierThan.date`   | string                                      | yes      |                                                                                            |
+| `startNoEarlierThan.second` | boolean                                     | yes      |                                                                                            |
+| `position`                  | number                                      | yes      | Order within the bucket, ascending.                                                        |
+| `createdById`               | string                                      | yes      | Creator's user id.                                                                         |
+| `assigneeIds`               | string[]                                    | yes      | Assignee user ids.                                                                         |
+| `labelIds`                  | string[]                                    | yes      | Label ids.                                                                                 |
+| `checklist`                 | object                                      | yes      | Checklist progress, e.g. 3 of 7.                                                           |
+| `checklist.done`            | number                                      | yes      |                                                                                            |
+| `checklist.total`           | number                                      | yes      |                                                                                            |
+| `childCount`                | number                                      | yes      | Number of child items (in any scope).                                                      |
+| `adHoc`                     | boolean                                     | yes      | Tracked but not part of the plan: no parent, children or links, not on the timeline (M12). |
+| `completedAt`               | string or null                              | yes      | ISO timestamp when the status became DONE, or null.                                        |
+| `createdAt`                 | string                                      | yes      | ISO timestamp of creation.                                                                 |
+| `updatedAt`                 | string                                      | yes      | ISO timestamp of the last change.                                                          |
+| `can`                       | [ItemCapabilitiesDto](#itemcapabilitiesdto) | yes      | What the caller may do with this item.                                                     |
 
 ### ChecklistItemDto
 
@@ -3986,6 +4092,15 @@ One checklist line.
 | `text`     | string  | yes      | Text.                     |
 | `done`     | boolean | yes      | Ticked.                   |
 | `position` | number  | yes      | Order, ascending.         |
+
+### DeleteItemResult
+
+Answer of `DELETE /projects/:id/items/:item` since M12: the trash batch, for Undo.
+
+| Field     | Type   | Required | Description                                          |
+| --------- | ------ | -------- | ---------------------------------------------------- |
+| `batchId` | string | yes      | The delete batch; restoring it is the Undo.          |
+| `count`   | number | yes      | Items moved to the trash, the deleted item included. |
 
 ### UserWorkDto
 
@@ -4032,6 +4147,73 @@ One item in a person's "all their work" list (SPEC §6): enough to show it in a 
 | `priority`    | number                    | yes      | Priority, 1 (highest) to 4.                                            |
 | `dueDate`     | string or null            | yes      | Due date as `YYYY-MM-DD`, or null.                                     |
 | `dueTime`     | string or null            | yes      | Due time as `HH:MM`, or null.                                          |
+
+### TrashBatchDto
+
+One delete batch in a project's trash, newest first (M12).
+
+| Field                   | Type                            | Required | Description                                                      |
+| ----------------------- | ------------------------------- | -------- | ---------------------------------------------------------------- |
+| `id`                    | string                          | yes      | Batch id (uuid).                                                 |
+| `deletedAt`             | string                          | yes      | ISO timestamp of the delete.                                     |
+| `deletedBy`             | object                          | yes      | Who deleted it, or null when that account is gone.               |
+| `deletedBy.id`          | string                          | yes      |                                                                  |
+| `deletedBy.displayName` | string                          | yes      |                                                                  |
+| `purgeAfter`            | string                          | yes      | ISO timestamp after which the nightly purge removes it for good. |
+| `items`                 | [TrashItemDto](#trashitemdto)[] | yes      | The visible items of the batch, the deleted item first.          |
+| `canRestore`            | boolean                         | yes      | The caller may restore the batch.                                |
+| `canPurge`              | boolean                         | yes      | The caller may delete the batch permanently (PMs).               |
+
+### TrashItemDto
+
+One trashed item as listed in a delete batch (M12).
+
+| Field      | Type                  | Required | Description                      |
+| ---------- | --------------------- | -------- | -------------------------------- |
+| `parentId` | string or null        | yes      | Parent id when trashed, or null. |
+| `id`       | string                | yes      | Item id (uuid).                  |
+| `number`   | number                | yes      | Per-project number.              |
+| `key`      | string                | yes      | Display key, e.g. `KLO-42`.      |
+| `type`     | [ItemType](#itemtype) | yes      | Item type.                       |
+| `title`    | string                | yes      | Title.                           |
+
+### RestoreBatchResult
+
+Answer of `POST /projects/:id/trash/:batchId/restore` (M12).
+
+| Field           | Type    | Required | Description                                                                  |
+| --------------- | ------- | -------- | ---------------------------------------------------------------------------- |
+| `restored`      | number  | yes      | Items restored.                                                              |
+| `parentDropped` | boolean | yes      | The restored item went back without its parent, which is still in the trash. |
+
+### ItemPreviewDto
+
+A visible item named in rich text (`KLO-12`, M12): enough for the hover card. Items the caller cannot see are never returned.
+
+| Field         | Type                      | Required | Description                 |
+| ------------- | ------------------------- | -------- | --------------------------- |
+| `projectId`   | string                    | yes      | Project id.                 |
+| `status`      | [ItemStatus](#itemstatus) | yes      | Status.                     |
+| `assigneeIds` | string[]                  | yes      | Assignee user ids.          |
+| `dueDate`     | string or null            | yes      | `YYYY-MM-DD`, or null.      |
+| `id`          | string                    | yes      | Item id (uuid).             |
+| `number`      | number                    | yes      | Per-project number.         |
+| `key`         | string                    | yes      | Display key, e.g. `KLO-42`. |
+| `type`        | [ItemType](#itemtype)     | yes      | Item type.                  |
+| `title`       | string                    | yes      | Title.                      |
+
+### ItemReferrerDto
+
+An item whose description or notes name another item (M12 "Referenced in").
+
+| Field       | Type                  | Required | Description                 |
+| ----------- | --------------------- | -------- | --------------------------- |
+| `projectId` | string                | yes      | Project id.                 |
+| `id`        | string                | yes      | Item id (uuid).             |
+| `number`    | number                | yes      | Per-project number.         |
+| `key`       | string                | yes      | Display key, e.g. `KLO-42`. |
+| `type`      | [ItemType](#itemtype) | yes      | Item type.                  |
+| `title`     | string                | yes      | Title.                      |
 
 ### NotificationDto
 
@@ -4242,11 +4424,12 @@ Session and lockout settings (SPEC §5), `GET`/`PUT /admin/settings/security`.
 
 Attachment limits (SPEC §5), `GET`/`PUT /admin/settings/storage`.
 
-| Field             | Type   | Required | Description                                                               |
-| ----------------- | ------ | -------- | ------------------------------------------------------------------------- |
-| `maxFileSizeMb`   | number | yes      | Largest file accepted, in MB. Default 25.                                 |
-| `projectQuotaMb`  | number | yes      | Space per project for attachments and inline images, in MB. Default 2048. |
-| `personalQuotaMb` | number | yes      | Per-user personal attachment quota in MB; default 1024.                   |
+| Field                | Type   | Required | Description                                                                      |
+| -------------------- | ------ | -------- | -------------------------------------------------------------------------------- |
+| `maxFileSizeMb`      | number | yes      | Largest file accepted, in MB. Default 25.                                        |
+| `projectQuotaMb`     | number | yes      | Space per project for attachments and inline images, in MB. Default 2048.        |
+| `personalQuotaMb`    | number | yes      | Per-user personal attachment quota in MB; default 1024.                          |
+| `trashRetentionDays` | number | yes      | Days deleted items stay in the trash before the nightly purge; default 30 (M12). |
 
 ### DiskUsageDto
 

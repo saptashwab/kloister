@@ -372,14 +372,33 @@ export class ProjectAccessService {
   }
 
   /**
-   * Builds the visibility filter for work item queries (SPEC §3.3), widened
-   * by the items of teams the caller leads (SPEC §3.5).
+   * Builds the filter for work item queries: the caller's visibility
+   * ({@link itemVisibilityFilter}) on items that are not in the trash (M12).
+   * Every query that returns items to the caller uses it, so trashed items
+   * disappear from every screen, list, count and export.
+   *
+   * @param access The caller's access.
+   * @returns `deletedAt: null`, combined with the scope's condition when the
+   *   scope is restricted.
+   */
+  itemScopeFilter(access: ProjectAccess): ItemScopeFilter {
+    const visible = this.itemVisibilityFilter(access);
+    return Object.keys(visible).length === 0
+      ? { deletedAt: null }
+      : { AND: [{ deletedAt: null }, visible] };
+  }
+
+  /**
+   * Builds the visibility filter alone (SPEC §3.3), widened by the items of
+   * teams the caller leads (SPEC §3.5), whether or not the items are in the
+   * trash. Only the trash itself uses it directly; everything else uses
+   * {@link itemScopeFilter}.
    *
    * @param access The caller's access.
    * @returns An empty filter for `ALL`; otherwise the scope's condition,
    *   OR-ed with the led teams' items when there are any.
    */
-  itemScopeFilter(access: ProjectAccess): ItemScopeFilter {
+  itemVisibilityFilter(access: ProjectAccess): ItemScopeFilter {
     const condition = this.scopeCondition(access);
     if (condition === null) return {};
     const led = ledTeamIds(access);
@@ -489,6 +508,34 @@ export class ProjectAccessService {
       (!access.settings.planLeadsOnly || item.scheduled === false) &&
       !item.hasChildren &&
       item.createdById === access.userId
+    );
+  }
+
+  /**
+   * Restore rule for a delete batch in the trash (M12): project PMs and Leads
+   * (`DELETE_ANY_ITEM`) restore any batch; otherwise a single trashed item
+   * the caller can see, which they deleted themselves or which belongs to a
+   * team they lead. Batches of several items come only from cascades, which
+   * only PMs and Leads may do.
+   *
+   * @param access The caller's access.
+   * @param item The facts of the batch's deleted item.
+   * @param deletedById Who deleted the batch.
+   * @param size Number of items in the batch.
+   * @returns True if the caller may restore the batch.
+   */
+  canRestoreBatch(
+    access: ProjectAccess,
+    item: ItemFacts,
+    deletedById: string | null,
+    size: number,
+  ): boolean {
+    if (!this.canViewItem(access, item)) return false;
+    if (this.has(access, P.DELETE_ANY_ITEM)) return true;
+    return (
+      size === 1 &&
+      this.has(access, P.DELETE_OWN_ITEMS) &&
+      (deletedById === access.userId || leadsItemTeam(access, item))
     );
   }
 

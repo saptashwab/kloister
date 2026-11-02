@@ -1,0 +1,43 @@
+/*
+ * Item references in rich text (M12): links and the hover card. Loaded with
+ * the drawer; global selectors, since the card is appended to the page body.
+ */
+
+/* An item reference (M12): the key with a tile in its type colour. */
+.k-ref {
+  font-family: var(--k-font-mono);
+  font-size: var(--k-mono);
+  white-space: nowrap;
+  color: var(--k-primary-ink);
+  &::before {
+    content: '';
+    display: inline-block;
+    width: var(--k-space-2);
+    height: var(--k-space-2);
+    margin-inline-end: var(--k-space-1);
+    border-radius: var(--k-radius-sm);
+    background: var(--k-primary);
+    vertical-align: middle;
+  }
+}
+
+/* The small card shown on hovering or focusing a reference. */
+.k-ref-card {
+  z-index: 1100;
+  gap: var(--k-space-1);
+  width: var(--k-size-280px);
+  padding: var(--k-space-2) var(--k-space-3);
+  pointer-events: none;
+  .k-ref-card-key {
+    font-family: var(--k-font-mono);
+    font-size: var(--k-small);
+    color: var(--k-muted);
+  }
+  .k-ref-card-title {
+    font-weight: 600;
+  }
+  .k-ref-card-meta {
+    font-size: var(--k-small);
+    color: var(--k-muted);
+  }
+}

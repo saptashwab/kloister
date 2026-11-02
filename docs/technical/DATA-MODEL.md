@@ -106,6 +106,12 @@ erDiagram
     uuid sprintId FK
     uuid teamId FK
     uuid createdById FK
+    uuid deletedById FK
+  }
+  ItemReference {
+    uuid id PK
+    uuid sourceItemId FK
+    uuid targetItemId FK
   }
   WorkItemAssignee {
     uuid id PK
@@ -172,6 +178,9 @@ erDiagram
   Sprint |o--o{ WorkItem : "sprint"
   Team |o--o{ WorkItem : "team"
   User ||--o{ WorkItem : "createdBy"
+  User |o--o{ WorkItem : "deletedBy"
+  WorkItem ||--o{ ItemReference : "source"
+  WorkItem ||--o{ ItemReference : "target"
   WorkItem ||--o{ WorkItemAssignee : "workItem"
   ProjectMember ||--o{ WorkItemAssignee : "projectMember"
   WorkItem ||--o{ WorkItemDependency : "blockedItem"
@@ -238,7 +247,7 @@ built-in default, so a missing or malformed key never breaks the app:
 | Key             | Contents                                                                             | Default                           |
 | --------------- | ------------------------------------------------------------------------------------ | --------------------------------- |
 | `security`      | `idleTimeoutMinutes`, `absoluteTimeoutMinutes`, `lockoutThreshold`, `lockoutMinutes` | 480, 10080, 5, 15                 |
-| `storage`       | `maxFileSizeMb`, `projectQuotaMb`, `personalQuotaMb`                                 | 25, 2048, 1024                    |
+| `storage`       | `maxFileSizeMb`, `projectQuotaMb`, `personalQuotaMb`, `trashRetentionDays`           | 25, 2048, 1024, 30                |
 | `logs`          | `retentionDays`                                                                      | 30                                |
 | `backups`       | `enabled`, `time` (`HH:MM` server time), `retentionDays`                             | on, `02:00`, 14                   |
 | `live`          | `enabled` (live updates)                                                             | on                                |
@@ -321,13 +330,18 @@ the same project.
   Feature under Epic; Story under Feature; Task and Bug under Story or Feature. The rules and the
   absence of cycles are checked in code (`apps/api/src/items/hierarchy.ts`); the composite key keeps
   the parent in the same project. An item with children is deleted only together with its subtree
-  (`?cascade=true`, PMs and Leads).
+  (`?cascade=true`, PMs and Leads). An active item never has a trashed parent: a restore whose
+  parent is still in the trash clears `parentId`.
+- `adHoc` (M12): tracked but not part of the plan. Only Tasks and Bugs without a parent; they take
+  no dependency links and are left out of the timeline, its planner and the Excel Timeline sheet.
 - `title`, `description` (sanitized HTML), `status` (`ItemStatus`: `NOT_STARTED`, `IN_PROGRESS`,
   `BLOCKED`, `DONE`), `priority` (1 highest to 4).
 - `bucketId`: required for Stories, Tasks and Bugs, optional for Epics and Features. Status and
   bucket are independent; bucket rules and `statusToBucket` link them on purpose.
 - `sprintId`, `teamId`: cleared when the sprint or team is deleted. They are checked against the
-  item's project in code, because their deletion must clear only that column.
+  item's project in code, because their deletion must clear only that column. Epics and Features
+  have no sprint of their own (M12); when a Story's sprint changes, its Tasks and Bugs in the old
+  sprint (or none) follow it.
 - Scheduling (see [SCHEDULING.md](SCHEDULING.md)): `startDate` with `startSecondHalf`, `dueDate`
   with `dueFirstHalf`, the pin `startNoEarlierThan` with `startNoEarlierThanSecondHalf`, and
   `dueTime` (stored as minutes after midnight, `HH:MM` in the API; wall-clock with no time zone, only with a due date).
@@ -335,8 +349,14 @@ the same project.
 - `createdById`, `completedAt` (set when the status becomes `DONE`, cleared when it leaves it).
 - `updatedAt` doubles as the item's version: the timeline's reschedule compares it to detect edits
   made meanwhile.
+- Trash (M12): `deletedAt`, `deletedById` and `deleteBatchId` are set when an item is deleted; a
+  cascade gives its whole subtree one batch id. Trashed rows keep their notes, files, links,
+  references and ADO links; every query that returns items filters `deletedAt: null` (see
+  [SECURITY.md](SECURITY.md)). Restoring clears the three columns; the purge removes the rows for
+  good after the `trashRetentionDays` admin setting (or at once, by a PM).
 
-Indexes cover the board order (`projectId, bucketId, position`), children, sprint and team lookups.
+Indexes cover the board order (`projectId, bucketId, position`), children, sprint and team lookups,
+the trash (`projectId, deletedAt`) and delete batches (`deleteBatchId`).
 
 ### `WorkItemAssignee`
 
@@ -352,6 +372,14 @@ timeline.
 ### `ChecklistItem`
 
 `text`, `done` and `position`. Checklists show progress and never change status.
+
+### `ItemReference`
+
+An item named in another item's description or notes (`KLO-12`, M12): `sourceItemId` is the item
+whose text names `targetItemId`, which may be in another project. The rows are rebuilt from the
+text's reference marks (`<span data-ref="KLO-12">`) whenever the description or a note changes,
+and feed the drawer's "Referenced in" list, which shows only the referring items the reader can
+see. Both relations cascade, so purged items take their rows with them.
 
 ## Notes, files and notifications
 
@@ -436,7 +464,10 @@ and unapplied incoming previews after 7 days, leaving a compact receipt (`conten
   (`npm run migrate:deploy -w @kloister/api`), which the install and upgrade scripts run.
 - Every migration since the first release (v1.0.0) is additive: new tables, nullable columns or
   columns with defaults, new indexes. Existing data keeps its meaning, so an upgrade needs no data
-  rewrite. Rolling back restores the pre-upgrade database dump (see [UPGRADE.md](../UPGRADE.md)).
+  rewrite, with one deliberate exception: `20261103120000_trash_adhoc_references` (M12) clears the
+  sprints of Epics and Features, which no longer have one, recording each cleared sprint in the
+  item's history (`"upgrade": "M12"`). Rolling back restores the pre-upgrade database dump (see
+  [UPGRADE.md](../UPGRADE.md)).
 - A new migration is generated offline by diffing the last committed schema against the edited
   one:
 

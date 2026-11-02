@@ -88,18 +88,38 @@ describe('AdminSettingsService', () => {
   it('refuses a project quota smaller than the file size limit', async () => {
     const { service } = build();
     await expectInvalid(
-      service.saveStorage(admin, { maxFileSizeMb: 100, projectQuotaMb: 50, personalQuotaMb: 1024 }),
+      service.saveStorage(admin, {
+        maxFileSizeMb: 100,
+        projectQuotaMb: 50,
+        personalQuotaMb: 1024,
+        trashRetentionDays: 30,
+      }),
       'projectQuotaMb',
     );
     await expect(
-      service.saveStorage(admin, { maxFileSizeMb: 10, projectQuotaMb: 10, personalQuotaMb: 1024 }),
-    ).resolves.toEqual({ maxFileSizeMb: 10, projectQuotaMb: 10, personalQuotaMb: 1024 });
+      service.saveStorage(admin, {
+        maxFileSizeMb: 10,
+        projectQuotaMb: 10,
+        personalQuotaMb: 1024,
+        trashRetentionDays: 30,
+      }),
+    ).resolves.toEqual({
+      maxFileSizeMb: 10,
+      projectQuotaMb: 10,
+      personalQuotaMb: 1024,
+      trashRetentionDays: 30,
+    });
   });
 
   it('refuses a personal quota smaller than the file limit without saving any settings', async () => {
     const { service, fake } = build();
     await expectInvalid(
-      service.saveStorage(admin, { maxFileSizeMb: 25, projectQuotaMb: 2048, personalQuotaMb: 24 }),
+      service.saveStorage(admin, {
+        maxFileSizeMb: 25,
+        projectQuotaMb: 2048,
+        personalQuotaMb: 24,
+        trashRetentionDays: 30,
+      }),
       'personalQuotaMb',
     );
     expect(fake.appSetting.upsert).not.toHaveBeenCalled();

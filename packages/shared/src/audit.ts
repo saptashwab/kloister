@@ -37,7 +37,16 @@ export const AuditAction = {
   ITEM_UPDATED: 'ITEM_UPDATED',
   /** The card changed bucket; reordering inside a bucket is not audited. */
   ITEM_MOVED: 'ITEM_MOVED',
+  /** Removed for good before M12; since M12 a delete moves the item to the trash. */
   ITEM_DELETED: 'ITEM_DELETED',
+  /** Moved to the project's trash, with its subtree for a cascade (M12). */
+  ITEM_TRASHED: 'ITEM_TRASHED',
+  /** A trashed item (or delete batch) brought back (M12). */
+  ITEM_RESTORED: 'ITEM_RESTORED',
+  /** A delete batch removed for good: by a PM or after the retention (M12). */
+  ITEM_PURGED: 'ITEM_PURGED',
+  /** A Task or Bug followed its Story into another sprint (M12). */
+  SPRINT_FOLLOWED: 'SPRINT_FOLLOWED',
   CHECKLIST_ITEM_ADDED: 'CHECKLIST_ITEM_ADDED',
   CHECKLIST_ITEM_UPDATED: 'CHECKLIST_ITEM_UPDATED',
   CHECKLIST_ITEM_REMOVED: 'CHECKLIST_ITEM_REMOVED',

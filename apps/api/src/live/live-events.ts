@@ -89,6 +89,11 @@ export const AUDIT_LIVE_KIND: Record<AuditAction, LiveKind> = {
   [AuditAction.ITEM_UPDATED]: 'item',
   [AuditAction.ITEM_MOVED]: 'item',
   [AuditAction.ITEM_DELETED]: 'item',
+  [AuditAction.ITEM_TRASHED]: 'item',
+  [AuditAction.ITEM_RESTORED]: 'item',
+  // Purged items were already gone; trash pages refresh their list.
+  [AuditAction.ITEM_PURGED]: 'board',
+  [AuditAction.SPRINT_FOLLOWED]: 'item',
   [AuditAction.CHECKLIST_ITEM_ADDED]: 'item',
   [AuditAction.CHECKLIST_ITEM_UPDATED]: 'item',
   [AuditAction.CHECKLIST_ITEM_REMOVED]: 'item',
@@ -212,8 +217,13 @@ export async function auditMessage(
     case 'links': {
       const projectId = record.projectId;
       if (!projectId || !record.entityId) return null;
-      // A cascade removes a whole subtree with one entry; reload instead.
-      if (record.action === AuditAction.ITEM_DELETED && meta['cascade'] === true)
+      // A cascade trashes or restores a whole subtree with one entry; reload instead.
+      if (
+        (record.action === AuditAction.ITEM_DELETED ||
+          record.action === AuditAction.ITEM_TRASHED ||
+          record.action === AuditAction.ITEM_RESTORED) &&
+        meta['cascade'] === true
+      )
         return { k: 'resync', p: projectId };
       const other = kind === 'links' ? meta['blockingItemId'] : undefined;
       const ids = [record.entityId, ...(typeof other === 'string' ? [other] : [])];
@@ -224,10 +234,12 @@ export async function auditMessage(
           createdById: true,
           bucketId: true,
           teamId: true,
+          deletedAt: true,
           assignees: { select: { userId: true } },
         },
       });
-      const found = new Map(rows.map((r) => [r.id, r]));
+      // A trashed item is gone for every viewer (M12).
+      const found = new Map(rows.filter((r) => r.deletedAt === null).map((r) => [r.id, r]));
       const before = record.live?.before;
       const items: WireItem[] = ids.map((id) => {
         const row = found.get(id);

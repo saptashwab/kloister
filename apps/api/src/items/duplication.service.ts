@@ -12,6 +12,7 @@ import { isInlineImageType, sniffType } from '../storage/file-types.js';
 import type { DuplicateDto } from './duplication.dto.js';
 import { sanitizeItemText } from './item-rich-text.js';
 import { ItemsService } from './items.service.js';
+import { ReferencesService } from './references.service.js';
 
 /** Atomic same-space duplication through the ordinary scoped creation path. */
 @Injectable()
@@ -22,12 +23,14 @@ export class DuplicationService {
    * @param items Ordinary creation and source visibility.
    * @param files Content-checked independent file storage.
    * @param settings Current size and storage limits.
+   * @param references Item references kept in copied descriptions (M12).
    */
   constructor(
     private readonly prisma: PrismaService,
     private readonly items: ItemsService,
     private readonly files: FileStoreService,
     private readonly settings: SettingsService,
+    private readonly references: ReferencesService,
   ) {}
 
   /**
@@ -172,8 +175,16 @@ export class DuplicationService {
                 throw invalidField('description', 'A description image could not be copied');
               return copied;
             });
-            const safe = await sanitizeItemText(tx, access.project.id, item.id, description);
+            const safe = await sanitizeItemText(
+              tx,
+              access.project.id,
+              item.id,
+              description,
+              undefined,
+              await this.references.markable(tx, access, description),
+            );
             await tx.workItem.update({ where: { id: item.id }, data: { description: safe.html } });
+            if (safe.references.length > 0) await this.references.sync(tx, item.id);
             const row = await this.items.findVisible(tx, access, item.id);
             result.push(await this.items.detail(tx, access, row));
           }

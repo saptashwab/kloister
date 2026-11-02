@@ -1925,6 +1925,7 @@
                       "labelIds": [],
                       "checklist": { "done": 0, "total": 0 },
                       "childCount": 0,
+                      "adHoc": false,
                       "completedAt": null,
                       "createdAt": "2026-11-02T09:15:00.000Z",
                       "updatedAt": "2026-11-02T09:15:00.000Z",
@@ -2016,6 +2017,7 @@
                   "labelIds": [],
                   "checklist": { "done": 0, "total": 0 },
                   "childCount": 0,
+                  "adHoc": false,
                   "completedAt": null,
                   "createdAt": "2026-11-02T09:15:00.000Z",
                   "updatedAt": "2026-11-02T09:15:00.000Z",
@@ -2135,14 +2137,19 @@
           }
         ],
         "responses": {
-          "204": { "description": "Done; no body." },
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/DeleteItemResult" } }
+            }
+          },
           "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthenticated" },
           "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" }
         },
-        "summary": "Deletes an item (`?cascade=true` for its subtree). Permissions: `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items while the project lets Members change the plan (M9.2), or leading the item's team (no cascade).",
+        "summary": "Moves an item to the project's trash (`?cascade=true` with its subtree, M12); restoring the returned batch is the Undo. Permissions: `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items while the project lets Members change the plan (M9.2), or leading the item's team (no cascade).",
         "tags": ["Items"],
         "x-permission": "Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
         "description": "**Permission:** Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
@@ -3668,6 +3675,168 @@
         "tags": ["Work snapshots"],
         "x-permission": "Any signed-in user.",
         "description": "**Permission:** Any signed-in user.",
+        "security": [{ "session": [] }]
+      }
+    },
+    "/api/v1/projects/{id}/trash": {
+      "get": {
+        "operationId": "TrashController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/TrashBatchDto" }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        },
+        "summary": "Lists the delete batches, newest first, with the caller's visible items. Permissions: `DELETE_ANY_ITEM` or `DELETE_OWN_ITEMS`.",
+        "tags": ["Trash"],
+        "x-permission": "Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
+        "description": "**Permission:** Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
+        "security": [{ "session": [] }]
+      }
+    },
+    "/api/v1/projects/{id}/trash/{batchId}/restore": {
+      "post": {
+        "operationId": "TrashController_restore",
+        "parameters": [
+          {
+            "name": "batchId",
+            "required": true,
+            "in": "path",
+            "description": "The delete batch.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RestoreBatchResult" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        },
+        "summary": "Restores a delete batch. Permissions: `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` for a single item the caller deleted or whose team they lead; 404 unless its deleted item is visible.",
+        "tags": ["Trash"],
+        "x-permission": "Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
+        "description": "**Permission:** Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
+        "security": [{ "session": [], "csrf": [] }]
+      }
+    },
+    "/api/v1/projects/{id}/trash/{batchId}": {
+      "delete": {
+        "operationId": "TrashController_purge",
+        "parameters": [
+          {
+            "name": "batchId",
+            "required": true,
+            "in": "path",
+            "description": "The delete batch.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "204": { "description": "Done; no body." },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        },
+        "summary": "Deletes a batch for good. Permissions: `MANAGE_PROJECT` (PMs).",
+        "tags": ["Trash"],
+        "x-permission": "Project member with `MANAGE_PROJECT` (PM). Non-members get 404.",
+        "description": "**Permission:** Project member with `MANAGE_PROJECT` (PM). Non-members get 404.",
+        "security": [{ "session": [], "csrf": [] }]
+      }
+    },
+    "/api/v1/references": {
+      "get": {
+        "operationId": "ReferencesController_previews",
+        "parameters": [
+          {
+            "name": "keys",
+            "required": true,
+            "in": "query",
+            "description": "Canonical item keys, comma-separated, e.g. `KLO-12,OPS-3`.",
+            "schema": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[A-Z]{2,6}-\\d{1,9}$" }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ItemPreviewDto" }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        },
+        "summary": "Previews referenced items by key (`KLO-12`). Permissions: signed in; unknown, hidden and trashed items are left out.",
+        "tags": ["References"],
+        "x-permission": "Any signed-in user.",
+        "description": "**Permission:** Any signed-in user.",
+        "security": [{ "session": [] }]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/referenced-in": {
+      "get": {
+        "operationId": "ReferencesController_referencedIn",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ItemReferrerDto" }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        },
+        "summary": "Lists the visible items whose description or notes name this item. Permissions: any member and admin, within scope; 404 unless the item is visible.",
+        "tags": ["References"],
+        "x-permission": "Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "description": "**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
         "security": [{ "session": [] }]
       }
     },
@@ -5834,6 +6003,14 @@
     {
       "name": "Audit log",
       "description": "Audit log viewer API (SPEC §6 Admin, §8 `admin/audit`)."
+    },
+    {
+      "name": "References",
+      "description": "Item references in rich text (M12): previews for hover cards and the \"Referenced in\" list of an item."
+    },
+    {
+      "name": "Trash",
+      "description": "A project's trash under `/api/v1/projects/:id/trash` (M12): deleted items by delete batch, restore and permanent delete."
     }
   ],
   "servers": [],
@@ -5997,6 +6174,12 @@
           "planLeadsOnly": {
             "type": "boolean",
             "description": "Only PMs and Leads change the plan of existing items (M9.2)."
+          },
+          "newItemBucketId": {
+            "type": "string",
+            "nullable": true,
+            "description": "\"New items start in\" (M12): a bucket of the project, or null for the first.",
+            "format": "uuid"
           }
         }
       },
@@ -6251,8 +6434,12 @@
           "sprintId": {
             "type": "string",
             "nullable": true,
-            "description": "Sprint.",
+            "description": "Sprint; never on Epics and Features. A Story's child starts in its sprint when omitted (M12).",
             "format": "uuid"
+          },
+          "adHoc": {
+            "type": "boolean",
+            "description": "Ad hoc: not part of the plan; Tasks and Bugs without parent only (M12)."
           },
           "teamId": {
             "type": "string",
@@ -6329,8 +6516,12 @@
           "sprintId": {
             "type": "string",
             "nullable": true,
-            "description": "New sprint, or null.",
+            "description": "New sprint, or null; never on Epics and Features. The Story's Tasks and Bugs follow (M12).",
             "format": "uuid"
+          },
+          "adHoc": {
+            "type": "boolean",
+            "description": "Make the item ad hoc, or plan it again (M12)."
           },
           "teamId": {
             "type": "string",
@@ -6647,7 +6838,11 @@
             "type": "number",
             "description": "Per-project space in MB; at least the file size limit (checked by the service)."
           },
-          "personalQuotaMb": { "type": "number", "description": "Per-user personal quota, in MB." }
+          "personalQuotaMb": { "type": "number", "description": "Per-user personal quota, in MB." },
+          "trashRetentionDays": {
+            "type": "number",
+            "description": "Days deleted items stay in the trash (M12); the stored value is kept when omitted."
+          }
         },
         "required": ["maxFileSizeMb", "projectQuotaMb", "personalQuotaMb"]
       },
@@ -6781,6 +6976,10 @@
           },
           "ancestors": { "type": "boolean", "description": "Explicit ancestor choice." },
           "excludeDone": { "type": "boolean", "description": "Explicit completion filter." },
+          "includeAdHoc": {
+            "type": "boolean",
+            "description": "Ad-hoc items are left out unless included (M12)."
+          },
           "notes": { "type": "boolean", "description": "Optional labelled note rendering." }
         },
         "required": ["scope", "labelIds", "labelMode", "ancestors", "excludeDone", "notes"]
@@ -7290,6 +7489,11 @@
           "planLeadsOnly": {
             "type": "boolean",
             "description": "Only PMs, Leads and the item's team Leads change an existing item's plan: title, type, parent, sprint, dates, half days, pin and dependencies (M9.2; default on, also for projects from before it). Members still set them when creating."
+          },
+          "newItemBucketId": {
+            "type": "string",
+            "nullable": true,
+            "description": "\"New items start in\" (M12): the bucket for Stories, Tasks and Bugs created without one; null for the first bucket."
           }
         },
         "required": [
@@ -7299,7 +7503,8 @@
           "autoMoveDependents",
           "useInstanceHolidays",
           "holidaysReviewedAt",
-          "planLeadsOnly"
+          "planLeadsOnly",
+          "newItemBucketId"
         ]
       },
       "LabelStyle": {
@@ -7606,6 +7811,10 @@
             "type": "number",
             "description": "Number of child items (in any scope)."
           },
+          "adHoc": {
+            "type": "boolean",
+            "description": "Tracked but not part of the plan: no parent, children or links, not on the timeline (M12)."
+          },
           "completedAt": {
             "type": "string",
             "nullable": true,
@@ -7644,6 +7853,7 @@
           "labelIds",
           "checklist",
           "childCount",
+          "adHoc",
           "completedAt",
           "createdAt",
           "updatedAt",
@@ -7796,6 +8006,10 @@
             "type": "number",
             "description": "Number of child items (in any scope)."
           },
+          "adHoc": {
+            "type": "boolean",
+            "description": "Tracked but not part of the plan: no parent, children or links, not on the timeline (M12)."
+          },
           "completedAt": {
             "type": "string",
             "nullable": true,
@@ -7837,6 +8051,7 @@
           "labelIds",
           "checklist",
           "childCount",
+          "adHoc",
           "completedAt",
           "createdAt",
           "updatedAt",
@@ -7853,6 +8068,21 @@
           "position": { "type": "number", "description": "Order, ascending." }
         },
         "required": ["id", "text", "done", "position"]
+      },
+      "DeleteItemResult": {
+        "description": "Answer of `DELETE /projects/:id/items/:item` since M12: the trash batch, for Undo.",
+        "type": "object",
+        "properties": {
+          "batchId": {
+            "type": "string",
+            "description": "The delete batch; restoring it is the Undo."
+          },
+          "count": {
+            "type": "number",
+            "description": "Items moved to the trash, the deleted item included."
+          }
+        },
+        "required": ["batchId", "count"]
       },
       "UserWorkDto": {
         "description": "Answer of `GET /users/:userId/work`: the person and one page of the items assigned to them that the caller can see.",
@@ -7963,6 +8193,132 @@
           "dueDate",
           "dueTime"
         ]
+      },
+      "TrashBatchDto": {
+        "description": "One delete batch in a project's trash, newest first (M12).",
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Batch id (uuid)." },
+          "deletedAt": { "type": "string", "description": "ISO timestamp of the delete." },
+          "deletedBy": {
+            "type": "object",
+            "properties": { "id": { "type": "string" }, "displayName": { "type": "string" } },
+            "required": ["id", "displayName"],
+            "nullable": true,
+            "description": "Who deleted it, or null when that account is gone."
+          },
+          "purgeAfter": {
+            "type": "string",
+            "description": "ISO timestamp after which the nightly purge removes it for good."
+          },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TrashItemDto" },
+            "description": "The visible items of the batch, the deleted item first."
+          },
+          "canRestore": { "type": "boolean", "description": "The caller may restore the batch." },
+          "canPurge": {
+            "type": "boolean",
+            "description": "The caller may delete the batch permanently (PMs)."
+          }
+        },
+        "required": [
+          "id",
+          "deletedAt",
+          "deletedBy",
+          "purgeAfter",
+          "items",
+          "canRestore",
+          "canPurge"
+        ]
+      },
+      "TrashItemDto": {
+        "description": "One trashed item as listed in a delete batch (M12).",
+        "type": "object",
+        "properties": {
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Parent id when trashed, or null."
+          },
+          "id": { "type": "string", "description": "Item id (uuid)." },
+          "number": { "type": "number", "description": "Per-project number." },
+          "key": { "type": "string", "description": "Display key, e.g. `KLO-42`." },
+          "type": {
+            "allOf": [{ "$ref": "#/components/schemas/ItemType" }],
+            "description": "Item type."
+          },
+          "title": { "type": "string", "description": "Title." }
+        },
+        "required": ["parentId", "id", "number", "key", "type", "title"]
+      },
+      "RestoreBatchResult": {
+        "description": "Answer of `POST /projects/:id/trash/:batchId/restore` (M12).",
+        "type": "object",
+        "properties": {
+          "restored": { "type": "number", "description": "Items restored." },
+          "parentDropped": {
+            "type": "boolean",
+            "description": "The restored item went back without its parent, which is still in the trash."
+          }
+        },
+        "required": ["restored", "parentDropped"]
+      },
+      "ItemPreviewDto": {
+        "description": "A visible item named in rich text (`KLO-12`, M12): enough for the hover card. Items the caller cannot see are never returned.",
+        "type": "object",
+        "properties": {
+          "projectId": { "type": "string", "description": "Project id." },
+          "status": {
+            "allOf": [{ "$ref": "#/components/schemas/ItemStatus" }],
+            "description": "Status."
+          },
+          "assigneeIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Assignee user ids."
+          },
+          "dueDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "`YYYY-MM-DD`, or null."
+          },
+          "id": { "type": "string", "description": "Item id (uuid)." },
+          "number": { "type": "number", "description": "Per-project number." },
+          "key": { "type": "string", "description": "Display key, e.g. `KLO-42`." },
+          "type": {
+            "allOf": [{ "$ref": "#/components/schemas/ItemType" }],
+            "description": "Item type."
+          },
+          "title": { "type": "string", "description": "Title." }
+        },
+        "required": [
+          "projectId",
+          "status",
+          "assigneeIds",
+          "dueDate",
+          "id",
+          "number",
+          "key",
+          "type",
+          "title"
+        ]
+      },
+      "ItemReferrerDto": {
+        "description": "An item whose description or notes name another item (M12 \"Referenced in\").",
+        "type": "object",
+        "properties": {
+          "projectId": { "type": "string", "description": "Project id." },
+          "id": { "type": "string", "description": "Item id (uuid)." },
+          "number": { "type": "number", "description": "Per-project number." },
+          "key": { "type": "string", "description": "Display key, e.g. `KLO-42`." },
+          "type": {
+            "allOf": [{ "$ref": "#/components/schemas/ItemType" }],
+            "description": "Item type."
+          },
+          "title": { "type": "string", "description": "Title." }
+        },
+        "required": ["projectId", "id", "number", "key", "type", "title"]
       },
       "NotificationDto": {
         "description": "A notification, from `GET /notifications`.",
@@ -8353,9 +8709,13 @@
           "personalQuotaMb": {
             "type": "number",
             "description": "Per-user personal attachment quota in MB; default 1024."
+          },
+          "trashRetentionDays": {
+            "type": "number",
+            "description": "Days deleted items stay in the trash before the nightly purge; default 30 (M12)."
           }
         },
-        "required": ["maxFileSizeMb", "projectQuotaMb", "personalQuotaMb"]
+        "required": ["maxFileSizeMb", "projectQuotaMb", "personalQuotaMb", "trashRetentionDays"]
       },
       "DiskUsageDto": {
         "description": "Response of `GET /admin/settings/storage/usage` (SPEC §6 storage).",

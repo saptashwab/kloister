@@ -44,6 +44,7 @@ describe('SettingsService.getStorage', () => {
       maxFileSizeMb: 25,
       projectQuotaMb: 2048,
       personalQuotaMb: 1024,
+      trashRetentionDays: 30,
     });
   });
 

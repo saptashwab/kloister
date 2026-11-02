@@ -35,7 +35,7 @@ import {
   type PresenceField,
   ProjectPermission,
   type ProjectHolidaysDto,
-  requiresBucket,
+  hasOwnSprint,
   type RescheduleChangeRequest,
   type ScheduleDates,
   slotHalfDay,
@@ -51,6 +51,7 @@ import { buildTree, NONE, pruneTree } from '../../core/board-logic';
 import { type BulkField, planBulk, runBulk } from '../../core/bulk';
 import { dayOf } from '../../core/format';
 import { ItemsApiService } from '../../core/items-api.service';
+import { TrashApiService } from '../../core/trash-api.service';
 import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
 import { PageActions } from '../../core/page-actions';
 import { changedFields, CONFLICT_FIELDS, personName, personWithRole } from '../../core/live-logic';
@@ -550,6 +551,13 @@ interface BarDraft {
             · {{ conflictMap().size }} {{ conflictMap().size === 1 ? 'conflict' : 'conflicts' }}
           }
         </span>
+        @if (adHocCount() > 0) {
+          <span class="muted" data-testid="ad-hoc-note"
+            >{{ adHocCount() }} ad-hoc {{ adHocCount() === 1 ? 'item is' : 'items are' }} not in the
+            plan (<a [routerLink]="['/p', ctx.project()?.key ?? 'personal']">show on board</a
+            >)</span
+          >
+        }
       </div>
       <div class="scroller" #scroller (wheel)="gridWheel($event)">
         <div
@@ -983,9 +991,21 @@ interface BarDraft {
           }}
         }
         @case ('sprint') {
-          {{
-            r.node.item?.sprintId ? (ctx.sprintsById().get(r.node.item.sprintId)?.name ?? '') : ''
-          }}
+          @if (r.node.item; as it) {
+            @if (ownSprint(it)) {
+              {{ it.sprintId ? (ctx.sprintsById().get(it.sprintId)?.name ?? '') : '' }}
+              @if (storySprintDiffers(it)) {
+                <span
+                  class="k-pill warn"
+                  title="Not in its story's sprint"
+                  aria-label="Not in its story's sprint"
+                  >≠</span
+                >
+              }
+            } @else {
+              <span class="muted" title="From its stories">{{ childSprints(r) }}</span>
+            }
+          }
         }
         @case ('priority') {
           {{ r.node.item?.priority ?? '' }}
@@ -1098,6 +1118,7 @@ export class TimelinePage implements OnInit {
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
   private readonly api = inject(ItemsApiService);
+  private readonly trashApi = inject(TrashApiService);
   private readonly flow = inject(RescheduleFlow);
   private readonly toast = inject(ToastService);
   private readonly dialogs = inject(Dialogs);
@@ -1269,7 +1290,7 @@ export class TimelinePage implements OnInit {
       !this.showDone(),
   );
   private readonly tree = computed(() => {
-    const roots = buildTree(this.ctx.items());
+    const roots = buildTree(this.planned());
     if (!this.filtered()) return roots;
     const text = this.text().trim().toLowerCase();
     return pruneTree(
@@ -1294,7 +1315,7 @@ export class TimelinePage implements OnInit {
     planSpan(
       this.filtered()
         ? this.rows().flatMap((r) => (r.node.item ? [r.node.item] : []))
-        : this.ctx.items(),
+        : this.planned(),
       this.calendar(),
     ),
   );
@@ -1306,17 +1327,21 @@ export class TimelinePage implements OnInit {
           .map((r) => r.node.id),
       ),
   );
-  protected readonly scale = computed(() =>
-    timelineScale(this.ctx.items(), this.today, this.zoom()),
-  );
+  protected readonly scale = computed(() => timelineScale(this.planned(), this.today, this.zoom()));
   protected readonly barsWidth = computed(() => this.scale().days * this.scale().dayWidth);
   protected readonly ticks = computed(() => scaleTicks(this.scale(), this.zoom()));
   protected readonly todayX = computed(
     () => (this.todayDay - this.scale().origin + 0.5) * this.scale().dayWidth,
   );
   protected readonly conflictMap = computed(() =>
-    conflicts(this.ctx.items(), this.edges(), this.calendar()),
+    conflicts(this.planned(), this.edges(), this.calendar()),
   );
+  /** Items on the timeline: everything but ad-hoc items, which are not in the plan (M12). */
+  protected readonly planned = computed(() => this.ctx.items().filter((i) => !i.adHoc));
+  /** Ad-hoc items left out, for the quiet note. */
+  protected readonly adHocCount = computed(() => this.ctx.items().length - this.planned().length);
+  /** Visible items by id. */
+  private readonly byId = computed(() => new Map(this.ctx.items().map((i) => [i.id, i])));
   protected readonly openSprints = computed(() =>
     this.ctx.sprints().filter((s) => s.state !== 'CLOSED'),
   );
@@ -1445,7 +1470,7 @@ export class TimelinePage implements OnInit {
     ranges: readonly { startDate: string; endDate: string }[],
     before: WorkCalendar,
   ): RescheduleChangeRequest[] {
-    return keepDurations(this.ctx.items(), ranges, before, this.calendar());
+    return keepDurations(this.planned(), ranges, before, this.calendar());
   }
 
   /**
@@ -1756,6 +1781,8 @@ export class TimelinePage implements OnInit {
   protected editable(row: TimelineRow, column: Column): boolean {
     const item = row.node.item;
     if (item === null || column.edit === null || !this.ctx.canEdit(item)) return false;
+    // Epics and Features show their stories' sprints, read-only (M12).
+    if (column.id === 'sprint' && !hasOwnSprint(item.type)) return false;
     if (PLAN_COLUMNS.includes(column.id) && !this.ctx.canPlan(item)) return false;
     if (row.summary !== null && ['start', 'days', 'due'].includes(column.id)) return false;
     return true;
@@ -2506,6 +2533,51 @@ export class TimelinePage implements OnInit {
   }
 
   /**
+   * Reports whether a row's item has a sprint of its own (M12).
+   *
+   * @param item The item.
+   * @returns False for Epics and Features.
+   */
+  protected ownSprint(item: WorkItemDto): boolean {
+    return hasOwnSprint(item.type);
+  }
+
+  /**
+   * Reports whether a Task or Bug sits in another sprint than its Story (M12).
+   *
+   * @param item The item.
+   * @returns True when its Story's sprint differs.
+   */
+  protected storySprintDiffers(item: WorkItemDto): boolean {
+    const parent = item.parentId === null ? undefined : this.byId().get(item.parentId);
+    return (
+      item.sprintId !== null && parent?.type === ItemType.STORY && parent.sprintId !== item.sprintId
+    );
+  }
+
+  /**
+   * The sprints of an Epic's or Feature's visible descendants (M12).
+   *
+   * @param row The row.
+   * @returns Sprint names, comma-separated.
+   */
+  protected childSprints(row: TimelineRow): string {
+    const ids = new Set<string>();
+    const walk = (nodes: readonly TimelineRow['node'][]): void => {
+      for (const node of nodes) {
+        if (node.item?.sprintId) ids.add(node.item.sprintId);
+        walk(node.children);
+      }
+    };
+    walk(row.node.children);
+    return this.ctx
+      .sprints()
+      .filter((s) => ids.has(s.id))
+      .map((s) => s.name)
+      .join(', ');
+  }
+
+  /**
    * Sets an item's sprint from its menu.
    *
    * @param item The item.
@@ -2578,22 +2650,6 @@ export class TimelinePage implements OnInit {
   }
 
   /**
-   * The bucket new rows get: the first bucket, by position, whose items the
-   * caller can see (BUCKETS scope sees only its buckets), else the first.
-   *
-   * @returns Bucket id, or null without buckets.
-   */
-  private defaultBucket(): string | null {
-    const buckets = this.ctx.buckets();
-    if (this.ctx.project()?.myVisibility === 'BUCKETS') {
-      const seen = new Set(this.ctx.items().map((i) => i.bucketId));
-      const allowed = buckets.find((b) => seen.has(b.id));
-      if (allowed !== undefined) return allowed.id;
-    }
-    return buckets[0]?.id ?? null;
-  }
-
-  /**
    * Creates one item from the add-row field.
    *
    * @param input The field.
@@ -2636,7 +2692,8 @@ export class TimelinePage implements OnInit {
           type,
           title: row.title,
           ...(above === null ? {} : { parentId: above.id }),
-          ...(requiresBucket(type) ? { bucketId: this.defaultBucket() } : {}),
+          // No bucket: the project's "New items start in" bucket, or the
+          // first the caller can see items in (M12).
           ...(teamId === null ? {} : { teamId }),
         });
         this.ctx.upsert(item);
@@ -3028,16 +3085,17 @@ export class TimelinePage implements OnInit {
           .map((i) => i.key)
           .join(', ')}${allowed.length > 10 ? ` and ${allowed.length - 10} more` : ''}` +
         (withChildren > 0 ? `, and the children of ${withChildren} of them` : '') +
-        `. This cannot be undone.${skipped.length > 0 ? ` ${skipped.length} you cannot delete stay.` : ''}`,
+        `. They move to the trash.${skipped.length > 0 ? ` ${skipped.length} you cannot delete stay.` : ''}`,
       confirm: 'Delete',
       danger: true,
     });
     if (!ok) return;
     const problems: string[] = skipped.map((i) => `${i.key}: you cannot delete this item`);
+    const batches: string[] = [];
     this.busy.set(true);
     for (const item of allowed) {
       try {
-        await this.api.remove(project.id, item.id, item.childCount > 0);
+        batches.push((await this.api.remove(project.id, item.id, item.childCount > 0)).batchId);
       } catch (error) {
         problems.push(`${item.key}: ${errorMessage(error)}`);
       }
@@ -3046,10 +3104,22 @@ export class TimelinePage implements OnInit {
     this.selected.set(this.emptySet);
     await this.ctx.refresh();
     await this.loadEdges();
-    this.report.set({
-      summary: `${allowed.length - (problems.length - skipped.length)} deleted.`,
-      problems,
-    });
+    if (problems.length > 0)
+      this.report.set({
+        summary: `${batches.length} moved to the trash.`,
+        problems,
+      });
+    if (batches.length > 0)
+      this.toast.show(
+        `${batches.length} moved to the trash`,
+        async () => {
+          for (const batch of [...batches].reverse())
+            await this.trashApi.restore(project.id, batch);
+          await this.ctx.refresh();
+          await this.loadEdges();
+        },
+        { action: 'Undo', done: 'Restored' },
+      );
   }
 
   // --- Columns and rows ----------------------------------------------------

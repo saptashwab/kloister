@@ -26,6 +26,10 @@ import {
   mentionAt,
   mentionElement,
   mentionSuggestions,
+  type Referable,
+  referenceAt,
+  referenceElement,
+  referenceSuggestions,
 } from '../../core/rich-text';
 import { Dialogs } from '../../ui/dialogs';
 import { Icon } from '../../ui/icon';
@@ -44,13 +48,18 @@ export interface ImageUploader {
 }
 
 /** A mention being typed: the text node, where its `@` is, and the suggestions. */
+/** One suggestion while typing: a person to mention or an item to reference (M12). */
+type Suggestion =
+  | { kind: 'person'; id: string; label: string; person: Mentionable }
+  | { kind: 'item'; id: string; label: string; item: Referable };
+
 interface MentionState {
   /** The text node holding the `@`. */
   node: Text;
   /** Offset of the `@` in the node. */
   start: number;
   /** Suggested people. */
-  options: Mentionable[];
+  options: Suggestion[];
   /** Index of the highlighted suggestion. */
   active: number;
 }
@@ -161,7 +170,12 @@ let nextId = 0;
         [cdkConnectedOverlayViewportMargin]="8"
       >
         @if (mention(); as m) {
-          <ul class="k-popover mention-list" role="listbox" [id]="ids.list" aria-label="People">
+          <ul
+            class="k-popover mention-list"
+            role="listbox"
+            [id]="ids.list"
+            [attr.aria-label]="m.options[0]?.kind === 'item' ? 'Items' : 'People'"
+          >
             @for (p of m.options; track p.id; let i = $index) {
               <li
                 role="option"
@@ -169,7 +183,7 @@ let nextId = 0;
                 [attr.aria-selected]="i === m.active"
                 (mousedown)="$event.preventDefault(); choose(p)"
               >
-                {{ p.name }}
+                {{ p.label }}
               </li>
             }
           </ul>
@@ -221,6 +235,10 @@ export class RichTextEditor {
   readonly uploadImage = input<ImageUploader | null>(null);
   /** People who can be mentioned with `@`; empty to turn mentions off. */
   readonly mentionables = input<readonly Mentionable[]>([]);
+  /** Items that can be referenced with `#` or the project key (M12); empty to turn it off. */
+  readonly referables = input<readonly Referable[]>([]);
+  /** The project key typed before a number, or null in a personal space. */
+  readonly projectKey = input<string | null>(null);
   /** Emits the edited HTML when the user saves. */
   readonly save = output<string>();
   /** Emits when the user cancels. */
@@ -341,8 +359,8 @@ export class RichTextEditor {
       if (event.key === 'Enter' || event.key === 'Tab') {
         event.preventDefault();
         event.stopPropagation();
-        const person = m.options[m.active];
-        if (person !== undefined) this.choose(person);
+        const option = m.options[m.active];
+        if (option !== undefined) this.choose(option);
         return;
       }
       if (event.key === 'Escape') {
@@ -379,10 +397,11 @@ export class RichTextEditor {
       return;
     }
     const people = this.mentionables();
+    const items = this.referables();
     const selection = window.getSelection();
     const node = selection?.anchorNode;
     if (
-      people.length === 0 ||
+      (people.length === 0 && items.length === 0) ||
       selection === null ||
       !selection.isCollapsed ||
       !(node instanceof Text) ||
@@ -391,8 +410,26 @@ export class RichTextEditor {
       this.closeMention();
       return;
     }
-    const found = mentionAt(node.data.slice(0, selection.anchorOffset));
-    const options = found === null ? [] : mentionSuggestions(people, found.query);
+    const before = node.data.slice(0, selection.anchorOffset);
+    const person = people.length === 0 ? null : mentionAt(before);
+    const reference = person !== null ? null : referenceAt(before, this.projectKey());
+    const found = person ?? reference;
+    const options: Suggestion[] =
+      person !== null
+        ? mentionSuggestions(people, person.query).map((p) => ({
+            kind: 'person' as const,
+            id: p.id,
+            label: p.name,
+            person: p,
+          }))
+        : reference !== null
+          ? referenceSuggestions(items, reference.query).map((i) => ({
+              kind: 'item' as const,
+              id: i.key,
+              label: `${i.key} ${i.title}`,
+              item: i,
+            }))
+          : [];
     if (found === null || options.length === 0) {
       this.closeMention();
       return;
@@ -409,11 +446,12 @@ export class RichTextEditor {
   }
 
   /**
-   * Replaces the typed `@name` with a mention of the chosen person.
+   * Replaces the typed `@name` with a mention of the chosen person, or the
+   * typed `#…` with a reference to the chosen item (M12).
    *
-   * @param person Who to mention.
+   * @param option Who to mention or what to reference.
    */
-  protected choose(person: Mentionable): void {
+  protected choose(option: Suggestion): void {
     const m = this.mention();
     const selection = window.getSelection();
     if (m === null || selection === null) return;
@@ -425,7 +463,9 @@ export class RichTextEditor {
     range.deleteContents();
     const space = document.createTextNode(' ');
     range.insertNode(space);
-    range.insertNode(mentionElement(person));
+    range.insertNode(
+      option.kind === 'person' ? mentionElement(option.person) : referenceElement(option.item),
+    );
     range.setStartAfter(space);
     range.collapse(true);
     selection.removeAllRanges();
