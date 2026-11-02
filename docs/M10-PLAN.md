@@ -1,8 +1,8 @@
 # M10: live updates
 
-Planning baseline: 2026-11-02. Status: proposal for the owner's approval. Implementation starts when the
-owner says go; the open questions in section 11 need answers first. Section 7 avoids any httpd change if the
-server streams as expected and names the one-line fallback, which needs the owner's approval.
+Planning baseline: 2026-11-02. Status: the owner answered the open questions on 2026-11-02 (section 11).
+Implementation starts when the owner says go. Section 7 avoids any httpd change if the server streams as
+expected and names the one-line fallback the owner approved.
 
 ## 1. Goals and constraints
 
@@ -68,8 +68,27 @@ Presence (who else is looking at or editing an item) is part of M10 at the owner
 - While a person drags a card or bar, types in a grid cell or drawer field, or has a menu or dialog open for
   an item, updates to that item wait and apply when they finish. Updates to other items apply around it.
 - If the waiting update changed the very field being edited, a small inline notice appears when they finish:
-  "Ann changed this while you were editing", with **Keep mine** (save as usual) and **Use theirs** (discard the
-  draft). Nothing typed is discarded silently.
+  "Pat (PM) changed this while you were editing", with **Keep mine** (save as usual) and **Use theirs** (discard
+  the draft). Nothing typed is discarded silently. The notice names the other person's project role so the
+  choice is made knowingly.
+- No role outranks another in a conflict (owner decision): anyone allowed to make a change may make it, and the
+  person who knowingly saves last decides, as with any shared document. Ranking would silently drop changes
+  that the role rules allow, and the item history shows who changed what, with Undo where it already exists.
+  Authority over the plan is set by permissions instead (SPEC §3.2, the plan setting).
+
+### 4.3.1 Two people moving the same card or bar
+
+- Anne moves a card to Review while I am dragging the same card. Anne's move waits on my screen until I drop
+  (my card does not jump out from under the pointer).
+- When I drop on Done, my move is saved: it is the later deliberate action. Because Anne's move arrived during my
+  drag, I get a toast: "Anne had moved this card to Review. It is now in Done." with **Put back in Review**. On
+  Anne's screen the card then moves to Done with the usual highlight and "Moved by me just now".
+- If Anne's move reaches the server after my drop instead, the same happens the other way round. Bucket rules
+  (status mapping, entry rules) apply to each move as today, and both moves are in the item history.
+- Timeline bars already carry version checks (SPEC §6.4). With live updates, a bar dragged while someone else
+  changed that item's dates no longer retries silently: when I release it I see "Anne changed the dates of this
+  item while you were moving it", with **Keep mine** (apply my dates, dependent moves as usual) and **Use
+  theirs**.
 - If the open item is deleted, the drawer shows "Ann deleted this item" with a close button instead of failing
   on the next action. If the viewer can no longer see it (moved out of their scope), it shows "This item is no
   longer available to you".
@@ -111,8 +130,9 @@ Presence (who else is looking at or editing an item) is part of M10 at the owner
 - Only people and items the viewer could already see are shown: presence for an item reaches only viewers who
   can see that item, and only project members appear. Personal spaces have no presence. Administrators on a
   cross-project visit neither see nor show presence.
-- People can hide their own presence in their account settings ("Show others when I am viewing an item",
-  default on); the admin "Live updates" switch turns presence off with everything else.
+- Presence cannot be hidden per person (owner decision): in a shared work tool, seeing who is changing
+  something is the point, as with cursors in a shared document. Only the admin "Live updates" switch turns it
+  off, together with everything else.
 
 ## 5. Technical design
 
@@ -245,19 +265,17 @@ No change. Settings use the existing `AppSetting` store.
 - Live updates for admin pages, the audit log, ADO transfer pages and exports.
 - Live updates during an admin's cross-project visit.
 
-## 11. Open questions for the owner
+## 11. Owner decisions (2026-11-02)
 
-1. Deployment: start without any httpd change and check streaming on the RHEL server; if it delays events,
-   add the one fallback line to the Kloister conf file by hand per UPGRADE.md (and to the template for new
-   installs)? (Recommended: yes. Upgrades keep their promise never to change httpd configuration.)
-2. Editing conflicts: show the "Keep mine / Use theirs" notice (recommended), or keep today's silent
-   last-save-wins and only refresh after saving?
-3. Admin switch "Live updates": default on (recommended), or off until the owner has checked it on the RHEL
-   server?
-4. Highlight: soft highlight with "Changed by Ann just now" on hover (recommended), or highlight only without a
-   name?
-5. Presence: show who is viewing and who is editing which field (recommended), or viewing only? And may people
-   hide their own presence in account settings (recommended: yes, default shown)?
+1. Deployment: start without any httpd change and check streaming on the RHEL server; if it delays events, add
+   the one fallback line to the Kloister conf file by hand per UPGRADE.md, and to the template for new
+   installs. Upgrades keep their promise never to change httpd configuration.
+2. Editing conflicts: the "Keep mine / Use theirs" notice, naming the other person's role; no role outranks
+   another (section 4.3); simultaneous card and bar moves as in section 4.3.1.
+3. Admin switch "Live updates": one global switch, default on.
+4. Highlight: soft highlight with "Changed by Ann just now" on hover.
+5. Presence: shows the action (viewing, editing a named field, moving, writing a note); people cannot hide their
+   own presence; the admin switch is the only way to turn it off.
 
 ## 12. Verification
 

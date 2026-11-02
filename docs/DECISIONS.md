@@ -7,8 +7,11 @@
   proxying, no extra Apache module); PostgreSQL LISTEN/NOTIFY published from the audited write so only committed
   changes are announced; events carry ids and visibility facts only, and the client refetches through the scoped
   API. Presence (who is viewing or editing an item) moved into M10 at the owner's request; it is kept in API
-  memory only and filtered per item. Open questions (httpd fallback line, conflict notice, admin switch
-  default, highlight text, presence detail) await the owner; no implementation yet.
+  memory only and filtered per item. Owner answers (2026-11-02): no httpd change unless needed, then one
+  hand-added line; "Keep mine / Use theirs" naming the other person's role, with no role outranking another;
+  one global admin switch, default on; "Changed by …" highlights; presence names the action and cannot be
+  hidden per person, as with cursors in a shared document. Simultaneous card moves: the later drop wins, with a
+  toast and "Put back" for the person who dropped. No implementation yet.
 
 ## M9.3 own items until scheduled, suggested changes (2026-11-02)
 
