@@ -20,6 +20,7 @@ import {
 } from '../projects/project-access.service.js';
 import { dueWindows } from './due-dates.js';
 import type { NotificationsQueryDto } from './notifications.dto.js';
+import { publishNotifications } from '../live/live-events.js';
 
 /** Something that happened to an item, and who should hear about it. */
 export interface NotifyEvent {
@@ -68,8 +69,9 @@ export class NotificationsService {
 
   /**
    * Creates notifications for an event, inside the transaction of the change
-   * that caused it. The actor, inactive accounts, non-members, archived
-   * projects and recipients who cannot see the item are skipped.
+   * that caused it, and tells the recipients' live streams (M10). The actor,
+   * inactive accounts, non-members, archived projects and recipients who
+   * cannot see the item are skipped.
    *
    * @param db Transaction client of the change.
    * @param event What happened and to whom.
@@ -96,6 +98,7 @@ export class NotificationsService {
         actorId: event.actorId,
       })),
     });
+    await publishNotifications(db, recipients);
     return recipients.length;
   }
 

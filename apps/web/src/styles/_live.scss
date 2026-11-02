@@ -1,0 +1,52 @@
+/* Live updates and presence (M10), loaded with the project pages. */
+
+/* A soft highlight after someone else changed a card, row or bar. A
+   background image, so it never fights a component's own background; it
+   fades out, or just ends with reduced motion. */
+@property --k-flash-bg {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+.k-live-flash {
+  --k-flash-bg: var(--k-primary-soft);
+  background-image: linear-gradient(var(--k-flash-bg), var(--k-flash-bg));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .k-live-flash {
+    animation: k-live-flash 1.2s ease-out forwards;
+  }
+}
+
+@keyframes k-live-flash {
+  from {
+    --k-flash-bg: var(--k-primary-soft);
+  }
+  to {
+    --k-flash-bg: transparent;
+  }
+}
+
+/* A cell or bar someone else is editing or dragging: a thin neutral
+   outline with their initials. */
+.k-live-other {
+  position: relative;
+  outline: var(--k-line) dashed var(--k-muted);
+  outline-offset: calc(-1 * var(--k-line));
+}
+
+.k-live-other[data-initials]::after {
+  content: attr(data-initials);
+  position: absolute;
+  top: calc(-1 * var(--k-size-6px));
+  right: 0;
+  padding: 0 var(--k-space-1);
+  border-radius: var(--k-radius-sm);
+  background: var(--k-muted);
+  color: var(--k-surface);
+  font-size: var(--k-size-10px);
+  line-height: 1.4;
+  pointer-events: none;
+}

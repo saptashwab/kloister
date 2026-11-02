@@ -26,6 +26,7 @@ import { isForeignKeyViolation } from '../common/prisma-errors.js';
 import { sanitizeRichText } from '../common/sanitize-html.js';
 import { serializable } from '../common/transactions.js';
 import type { Bucket, Prisma } from '../generated/prisma/client.js';
+import { publishAudit } from '../live/live-events.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
@@ -632,11 +633,15 @@ export class ItemsService {
         where: { id: current.id },
         data: { ...data, updatedAt: new Date() },
       });
-      await this.record(tx, auth, access, AuditAction.ITEM_UPDATED, current.id, {
-        number: current.number,
-        changes,
-        ...options.auditMeta,
-      });
+      await this.record(
+        tx,
+        auth,
+        access,
+        AuditAction.ITEM_UPDATED,
+        current.id,
+        { number: current.number, changes, ...options.auditMeta },
+        itemFacts(current),
+      );
       const updated = await tx.workItem.findUniqueOrThrow({
         where: { id: current.id },
         include: this.include(access),
@@ -735,11 +740,28 @@ export class ItemsService {
         },
       });
       if (bucketChanged) {
-        await this.record(tx, auth, access, AuditAction.ITEM_MOVED, current.id, {
-          number: current.number,
-          from: current.bucketId,
-          to: bucketId,
-          ...(status === current.status ? {} : { status: { from: current.status, to: status } }),
+        await this.record(
+          tx,
+          auth,
+          access,
+          AuditAction.ITEM_MOVED,
+          current.id,
+          {
+            number: current.number,
+            from: current.bucketId,
+            to: bucketId,
+            ...(status === current.status ? {} : { status: { from: current.status, to: status } }),
+          },
+          itemFacts(current),
+        );
+      } else {
+        // Reordering is not audited, but other boards still show the new order (M10).
+        await publishAudit(tx, {
+          actorId: auth.user.id,
+          action: AuditAction.ITEM_MOVED,
+          entityType: 'WorkItem',
+          entityId: current.id,
+          projectId,
         });
       }
       const moved = await tx.workItem.findUniqueOrThrow({
@@ -811,12 +833,20 @@ export class ItemsService {
         data: { tombstonedAt: new Date() },
       });
       await tx.workItem.deleteMany({ where: { projectId, id: { in: ids } } });
-      await this.record(tx, auth, access, AuditAction.ITEM_DELETED, current.id, {
-        number: current.number,
-        type: current.type,
-        title: current.title,
-        ...(cascade ? { cascade: true, descendants: ids.length - 1 } : {}),
-      });
+      await this.record(
+        tx,
+        auth,
+        access,
+        AuditAction.ITEM_DELETED,
+        current.id,
+        {
+          number: current.number,
+          type: current.type,
+          title: current.title,
+          ...(cascade ? { cascade: true, descendants: ids.length - 1 } : {}),
+        },
+        facts,
+      );
       return files;
     });
     // Only once the rows are gone for good; a rolled-back delete keeps its files.
@@ -931,6 +961,8 @@ export class ItemsService {
    * @param action What happened.
    * @param itemId Item id.
    * @param meta Extra detail.
+   * @param before The item's facts before a change that can alter who sees
+   *   it (move, edit, delete), so live updates can tell viewers it left.
    * @returns Resolves once written.
    */
   record(
@@ -940,6 +972,7 @@ export class ItemsService {
     action: AuditAction,
     itemId: string,
     meta: Prisma.InputJsonObject,
+    before?: ItemFacts,
   ): Promise<void> {
     return this.audit.record(
       {
@@ -949,6 +982,7 @@ export class ItemsService {
         entityId: itemId,
         projectId: access.project.id,
         meta,
+        ...(before === undefined ? {} : { live: { before } }),
       },
       db,
     );
@@ -1221,6 +1255,7 @@ function listFilter(query: ListItemsQueryDto): Prisma.WorkItemWhereInput {
     sprintId: orNone(query.sprintId),
     teamId: orNone(query.teamId),
     parentId: orNone(query.parentId),
+    ...(query.ids === undefined ? {} : { id: { in: query.ids } }),
   };
   if (query.assigneeId !== undefined) where.assignees = { some: { userId: query.assigneeId } };
   if (query.labelId !== undefined) where.labels = { some: { labelId: query.labelId } };

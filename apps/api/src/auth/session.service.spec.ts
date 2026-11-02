@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { fakePrisma, fakeSettings, makeConfig, makeUser } from '../../test/support/fakes.js';
 import { hashToken, SessionService } from './session.service.js';
 
@@ -74,6 +75,49 @@ describe('SessionService', () => {
     });
     await service.validate('t');
     expect(fake.session.update).not.toHaveBeenCalled();
+  });
+
+  it('never refreshes lastSeenAt for requests that keep the session idle (M10)', async () => {
+    const { fake, service } = setup();
+    fake.session.findUnique.mockResolvedValue({
+      id: 's1',
+      expiresAt: inMinutes(100),
+      lastSeenAt: minutesAgo(5),
+      user: makeUser(),
+    });
+    await expect(service.validate('t', false)).resolves.not.toBeNull();
+    expect(fake.session.update).not.toHaveBeenCalled();
+  });
+
+  it('reports live sessions without touching them (M10)', async () => {
+    const { fake, service } = setup();
+    const findMany = jest.fn<(...args: unknown[]) => Promise<unknown>>().mockResolvedValue([
+      {
+        id: 'live',
+        expiresAt: inMinutes(100),
+        lastSeenAt: minutesAgo(5),
+        user: { isActive: true },
+      },
+      {
+        id: 'idle',
+        expiresAt: inMinutes(100),
+        lastSeenAt: minutesAgo(61),
+        user: { isActive: true },
+      },
+      { id: 'over', expiresAt: minutesAgo(1), lastSeenAt: minutesAgo(1), user: { isActive: true } },
+      {
+        id: 'off',
+        expiresAt: inMinutes(100),
+        lastSeenAt: minutesAgo(1),
+        user: { isActive: false },
+      },
+    ]);
+    (fake.session as unknown as { findMany: typeof findMany }).findMany = findMany;
+    await expect(service.liveSessionIds(['live', 'idle', 'over', 'off', 'gone'])).resolves.toEqual(
+      new Set(['live']),
+    );
+    expect(fake.session.update).not.toHaveBeenCalled();
+    expect(fake.session.deleteMany).not.toHaveBeenCalled();
   });
 
   it('revokes all sessions except the current one', async () => {

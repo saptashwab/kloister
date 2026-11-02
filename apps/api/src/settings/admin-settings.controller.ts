@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Put } from '@nestjs/common';
 import type {
   DiskUsageDto,
+  LiveSettingsDto,
   LogSettingsDto,
   SecuritySettingsDto,
   StorageSettingsDto,
@@ -10,6 +11,7 @@ import type { AuthContext } from '../auth/auth-context.js';
 import { AdminOnly, CurrentAuth } from '../auth/decorators.js';
 import { AdminSettingsService } from './admin-settings.service.js';
 import {
+  LiveSettingsBody,
   LogSettingsBody,
   SecuritySettingsBody,
   StorageSettingsBody,
@@ -19,7 +21,8 @@ import { SettingsService } from './settings.service.js';
 
 /**
  * App settings under `/api/v1/admin/settings` (SPEC §6 Admin, §8):
- * security, storage and disk usage, log retention and the default theme.
+ * security, storage and disk usage, log retention, the default theme and
+ * the live updates switch.
  * Branding has its own controller; backups live under `admin/backups`.
  *
  * Permissions: every route is admin-only (others get 403); every change is
@@ -123,6 +126,32 @@ export class AdminSettingsController {
     @Body() body: LogSettingsBody,
   ): Promise<LogSettingsDto> {
     return this.admin.saveLogs(auth, body);
+  }
+
+  /**
+   * Returns whether live updates are on (M10).
+   *
+   * @returns The setting.
+   */
+  @Get('live')
+  getLive(): Promise<LiveSettingsDto> {
+    return this.settings.getLive();
+  }
+
+  /**
+   * Switches live updates and presence on or off for everyone (M10). Off
+   * closes every open stream.
+   *
+   * @param auth The admin.
+   * @param body The switch.
+   * @returns The saved setting.
+   */
+  @Put('live')
+  putLive(
+    @CurrentAuth() auth: AuthContext,
+    @Body() body: LiveSettingsBody,
+  ): Promise<LiveSettingsDto> {
+    return this.admin.saveLive(auth, body);
   }
 
   /**

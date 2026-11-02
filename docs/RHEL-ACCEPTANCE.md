@@ -35,5 +35,12 @@ versions, chosen ports and evidence privately; never include passwords.
    code replacement, migration/start/health failure and documented manual rollback
    of database/code/frontend/files/config. Previous rollback copies must never be
    silently overwritten. Confirm unrelated clusters and policy remain unchanged.
-10. Report any failures with sanitized logs. Publish/tag only as a separate explicit
+10. Live updates (M10): with two browsers signed in as different members, move a card
+    and change a bar in one; the other follows within a second or two and highlights
+    the change; open the same item in both and check the presence avatar and "is
+    editing" text. Run the `curl -N` stream check from ADMIN and confirm a heartbeat
+    every 25 seconds. If events are delayed, add the documented fallback line by hand,
+    run `apachectl configtest`, reload httpd and check again. Switch Live updates off
+    and on under Admin settings › General and confirm the app keeps working.
+11. Report any failures with sanitized logs. Publish/tag only as a separate explicit
     owner action after deciding that acceptance is sufficient. M8 remains separate.

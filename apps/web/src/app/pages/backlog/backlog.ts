@@ -23,6 +23,7 @@ import { ItemsApiService } from '../../core/items-api.service';
 import { TYPE_LABELS } from '../../core/labels';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
+import { PresenceAvatars } from '../../ui/live-ui';
 import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ProjectContext } from '../../core/project-context';
 import { SessionStore } from '../../core/session.store';
@@ -44,6 +45,7 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
 @Component({
   selector: 'app-backlog',
   imports: [
+    PresenceAvatars,
     NgTemplateOutlet,
     RowCardStyles,
     RouterOutlet,
@@ -268,7 +270,12 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
       <ul class="k-row-cards" aria-label="Backlog">
         @for (row of rows(); track row.node.id) {
           @let item = row.node.item;
-          <li class="k-row-card" [style.margin-inline-start.px]="row.depth * 16">
+          <li
+            class="k-row-card"
+            [class.k-live-flash]="ctx.flashing().has(row.node.id)"
+            [attr.title]="changedBy(row.node.id)"
+            [style.margin-inline-start.px]="row.depth * 16"
+          >
             <div class="k-row-card-title">
               @if (item) {
                 <mat-checkbox
@@ -318,7 +325,10 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
           <tbody>
             @for (row of rows(); track row.node.id) {
               @let item = row.node.item;
-              <tr>
+              <tr
+                [class.k-live-flash]="ctx.flashing().has(row.node.id)"
+                [attr.title]="changedBy(row.node.id)"
+              >
                 <td>
                   @if (item) {
                     <mat-checkbox
@@ -338,7 +348,12 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
                 </td>
                 <td>{{ item ? sprintName(item) : '' }}</td>
                 <td>{{ item ? bucketName(item) : '' }}</td>
-                <td>{{ item ? assigneeNames(item) : '' }}</td>
+                <td>
+                  {{ item ? assigneeNames(item) : '' }}
+                  @if (ctx.presenceByItem().get(row.node.id); as people) {
+                    <app-presence [people]="people" [members]="ctx.membersById()" [size]="16" />
+                  }
+                </td>
               </tr>
             } @empty {
               <tr>
@@ -397,6 +412,17 @@ export class BacklogPage implements OnInit {
   }
   /** Shared project state. */
   protected readonly ctx = inject(ProjectContext);
+
+  /**
+   * "Changed by … just now" of a recently changed row (M10).
+   *
+   * @param id Item id.
+   * @returns The text, or null.
+   */
+  protected changedBy(id: string): string | null {
+    this.ctx.recent();
+    return this.ctx.changedBy(id);
+  }
   /** Shows this view's Export… in the project header's page actions. */
   private readonly pageActions = inject(PageActions).register(() => ({
     source: this.ctx.project()?.id ?? '',

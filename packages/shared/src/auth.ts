@@ -20,6 +20,15 @@ export const CSRF_HEADER = 'x-requested-with';
 /** Required value of {@link CSRF_HEADER}. */
 export const CSRF_HEADER_VALUE = 'kloister';
 
+/**
+ * Request header carrying the tab's random id, so live updates skip the
+ * tab's own echoes (M10). It steers echoes only and grants nothing.
+ */
+export const CLIENT_ID_HEADER = 'x-client-id';
+
+/** Accepted client ids: 8 to 64 letters, digits and dashes. */
+export const CLIENT_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
+
 /** Minimum password length; no other composition rules apply (SPEC §5). */
 export const PASSWORD_MIN_LENGTH = 12;
 

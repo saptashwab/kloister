@@ -3,7 +3,12 @@ import { Reflector } from '@nestjs/core';
 import { ErrorCode, SystemRole } from '@kloister/shared';
 import type { FastifyRequest } from 'fastify';
 import { ApiException } from '../common/api-exception.js';
-import { ADMIN_ONLY_KEY, ALLOW_PENDING_PASSWORD_CHANGE_KEY, IS_PUBLIC_KEY } from './decorators.js';
+import {
+  ADMIN_ONLY_KEY,
+  ALLOW_PENDING_PASSWORD_CHANGE_KEY,
+  IS_PUBLIC_KEY,
+  KEEP_SESSION_IDLE_KEY,
+} from './decorators.js';
 import { SESSION_COOKIE, SessionService } from './session.service.js';
 
 /**
@@ -12,6 +17,7 @@ import { SESSION_COOKIE, SessionService } from './session.service.js';
  * Permissions, in order:
  * 1. Routes marked `@Public()` pass without a session.
  * 2. Otherwise a live session cookie is required (401 `UNAUTHENTICATED`).
+ *    Routes marked `@KeepSessionIdle()` do not refresh the session.
  * 3. Users with `mustChangePassword` may only reach routes marked
  *    `@AllowPendingPasswordChange()` (403 `PASSWORD_CHANGE_REQUIRED`).
  * 4. Routes marked `@AdminOnly()` require the `ADMIN` system role (403 `FORBIDDEN`).
@@ -43,7 +49,9 @@ export class SessionGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const token = request.cookies[SESSION_COOKIE];
-    const auth = token === undefined || token === '' ? null : await this.sessions.validate(token);
+    const touch = !this.reflector.getAllAndOverride<boolean>(KEEP_SESSION_IDLE_KEY, targets);
+    const auth =
+      token === undefined || token === '' ? null : await this.sessions.validate(token, touch);
     if (auth === null) {
       throw new ApiException(HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHENTICATED, 'Not signed in');
     }

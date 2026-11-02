@@ -22,6 +22,8 @@ export interface ConfirmOptions {
   confirm: string;
   /** Destructive actions get the danger colour. */
   danger?: boolean;
+  /** Label of the other button; "Cancel" by default. */
+  cancel?: string;
 }
 
 /** What a prompt dialog asks. */
@@ -51,7 +53,9 @@ export interface PromptOptions {
     <h2 mat-dialog-title>{{ data.title }}</h2>
     <mat-dialog-content>{{ data.message }}</mat-dialog-content>
     <mat-dialog-actions align="end">
-      <button mat-button type="button" [mat-dialog-close]="false" cdkFocusInitial>Cancel</button>
+      <button mat-button type="button" [mat-dialog-close]="false" cdkFocusInitial>
+        {{ data.cancel ?? 'Cancel' }}
+      </button>
       <button
         mat-flat-button
         type="button"

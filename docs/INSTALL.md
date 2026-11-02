@@ -118,6 +118,8 @@ require operator repair; no other cluster is modified to make the install succee
 
 Run [RHEL acceptance](RHEL-ACCEPTANCE.md) before use. Check loopback health and then
 the HTTPS prefixed health endpoint; only the latter verifies httpd/SELinux routing.
+Check that live updates stream through httpd as described in
+[ADMIN](ADMIN.md#live-updates); the installer adds no httpd line for them.
 Validate real `pg_dump` and restore, native password hashing, non-root execution,
 existing cluster/Node preservation, permissions and rerun/upgrade failure handling.
 Read [ADMIN](ADMIN.md) for complete backup coverage and [UPGRADE](UPGRADE.md) before

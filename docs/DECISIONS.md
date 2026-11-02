@@ -1,5 +1,46 @@
 # Decisions
 
+## M10 live updates and presence (2026-11-02)
+
+- Built as planned in docs/M10-PLAN.md (owner decisions in its section 11). Choices made while building,
+  closest to the plan:
+- Echoes are skipped on the server: every request carries the tab's `X-Client-Id`, the stream passes the same
+  id as a query parameter (the browser's EventSource cannot send headers), and a stream never receives the
+  item, link or board events its own tab caused. The id steers echoes only and grants nothing.
+- Coalescing happens per delivery burst (messages arriving within 50 ms, which includes every message of one
+  transaction) instead of per transaction id; above 200 items in a burst a project resync is sent. Cascade
+  deletes and oversized messages also become a project resync.
+- `GET /events/status` (session required, never refreshes it) tells the web app whether to open a stream.
+  With the admin switch off `GET /events` answers 204, which browsers do not retry; switching off sends
+  `disabled` and ends every stream. Open tabs notice a later switch-on when they reload.
+- Reordering a card inside its bucket stays unaudited but is now announced, so other boards show the order.
+- My work: item events also reach a user's streams that follow another project when the user created or is
+  assigned to the item, with the same visibility check (access cached per stream and project, dropped on
+  access changes). The page then refetches quietly.
+- Restricted viewers' title-only ancestors are not refreshed live (they are not visible items); they refresh
+  with the next reload.
+- The "Keep mine / Use theirs" notice is a small dialog that takes focus; closing it keeps the caller's
+  change, so nothing typed is discarded silently. The drawer waits while focus is in a text field or editor,
+  or a list, menu or date picker is open; timeline cells and bars and board cards hold their item.
+- Presence: an explicit leave or a closed tab removes it at once; entries from an API process that stopped
+  confirming them expire after 60 seconds. Control routes (`project`, `presence`) must reach the process that
+  holds the stream (the deployment runs one process); presence itself travels on the PostgreSQL channel.
+  Personal spaces have none; administrators on a cross-project visit get 404 when subscribing and leave no
+  audit entry.
+- The connection chip and the people on the project show in the project header. Admin settings gained a
+  General tab (first and default) for the switch. Live styles load with the project pages, the stream code
+  after sign-in, so the first page stays under the unchanged budget.
+- No httpd change: the guides describe the `curl -N` check and the one hand-added fallback line.
+- Sessions: the stream, its subscription and presence reports never refresh a session. The refetches that
+  follow other people's changes are ordinary requests and count as activity, as the 60-second bell poll
+  already did; with the stream connected that poll pauses, so a tab on a quiet project now reaches its idle
+  timeout.
+- Accepted limits, left for later: "all their work" of another person is not live (the stream follows the
+  viewer's own items); keyboard bar moves take no hold or "moving" presence; new and deleted items appear and
+  vanish without a fade; an open drawer on a descendant of a cascade-deleted item reloads with the project
+  instead of saying "deleted"; a connection that drops without closing (sleep, lost network) keeps its
+  presence until TCP notices, usually a few minutes, instead of about 30 seconds.
+
 ## Planning: M10 live updates (2026-11-02)
 
 - Proposed in docs/M10-PLAN.md at the owner's request: live board, backlog, timeline, drawer, notifications,

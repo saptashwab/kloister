@@ -18,11 +18,14 @@ import { dialogMotion } from '../../ui/motion';
 import { NewItemDialog, type NewItemData } from './new-item-dialog';
 import { PageActions } from '../../core/page-actions';
 import { SnapshotAction } from '../../ui/snapshot-action';
+import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
 
 /**
  * Frame of one project (`/p/:key/…`, DESIGN §7): breadcrumb, project name,
  * "New item", tabs for the board, backlog, timeline (projects only), sprints
- * and settings, and the page itself.
+ * and settings, and the page itself. The header also shows who else is on
+ * the project's pages and the live updates connection chip (M10); a member
+ * removed while looking sees "project not found".
  *
  * It provides the {@link ProjectContext} its pages share. Every member (and
  * every admin) can open each tab; the pages hide controls the caller lacks
@@ -31,6 +34,9 @@ import { SnapshotAction } from '../../ui/snapshot-action';
 @Component({
   selector: 'app-project-shell',
   imports: [
+    LiveStatusChip,
+    LiveStyles,
+    PresenceAvatars,
     SnapshotAction,
     RouterOutlet,
     RouterLink,
@@ -69,6 +75,7 @@ import { SnapshotAction } from '../../ui/snapshot-action';
     }
   `,
   template: `
+    <app-live-styles />
     @if (ctx.project(); as project) {
       <div class="k-page-head head">
         <div>
@@ -78,6 +85,8 @@ import { SnapshotAction } from '../../ui/snapshot-action';
           <h1>{{ project.name }}</h1>
         </div>
         <span class="spacer"></span>
+        <app-live-status />
+        <app-presence [people]="ctx.presence()" [members]="ctx.membersById()" [actions]="false" />
         <button type="button" class="k-chip" (click)="shortcuts.open()" aria-label="Search or jump">
           <app-icon name="search" />Search or jump <kbd>/</kbd>
         </button>
@@ -117,9 +126,9 @@ import { SnapshotAction } from '../../ui/snapshot-action';
       <mat-tab-nav-panel #panel>
         <router-outlet />
       </mat-tab-nav-panel>
-    } @else if (error()) {
+    } @else if (error() || ctx.lost()) {
       <div class="missing">
-        <p class="k-alert" role="alert">{{ error() }}</p>
+        <p class="k-alert" role="alert">{{ error() || ctx.lost() }}</p>
         <a routerLink="/">Back to your projects</a>
       </div>
     } @else {

@@ -209,7 +209,13 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     id: 'notifications',
     title: 'Notifications and due reminders',
     role: 'Every signed-in user; only currently readable items.',
-    text: 'The sidebar bell opens All or Unread notifications and refreshes the count every minute. Opening a notification marks it read and opens its item. Notifications cover assignments, mentions, due tomorrow, overdue and status changes to work you created. Due reminders run at 09:00 server time; personal reminders go to the owner. Lost project/item access removes those notifications from your readable list. No email service is required.',
+    text: 'The sidebar bell opens All or Unread notifications; with live updates the count changes as soon as something arrives, otherwise it refreshes every minute. Opening a notification marks it read and opens its item. Notifications cover assignments, mentions, due tomorrow, overdue and status changes to work you created. Due reminders run at 09:00 server time; personal reminders go to the owner. Lost project/item access removes those notifications from your readable list. No email service is required.',
+  },
+  {
+    id: 'live',
+    title: 'Live updates and who else is here',
+    role: 'Everyone on a project, within what they may see; administrators switch it off or on for all.',
+    text: 'Boards, backlogs, the timeline, item details, Sprints, My work and the bell follow other people’s changes without a reload. A changed card, row or bar lights up briefly; hover it to read who changed or moved it. Nothing moves under your pointer: while you drag a card or bar, edit a cell or field, or have a list open, changes to that item wait until you finish. If someone changed the very thing you were editing, you choose Keep mine (save yours over theirs) or Use theirs; the notice names their role, and no role outranks another. If two people move the same card, the later drop wins and the earlier mover’s choice is offered as Put back. If an open item is deleted or leaves your view, its details say so. Avatars show who else is on the project, who has an item open, and what they do: viewing, editing a named field, moving a card or bar, or writing a note. Presence is a hint, never a lock, and only shows people and items you may already see. A Reconnecting… or Offline chip appears in the project header when the connection drops; screens keep working and catch up when it returns. Administrators can switch live updates off under Admin settings › General.',
   },
   {
     id: 'themes',

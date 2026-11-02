@@ -23,6 +23,7 @@ import {
   BucketRule,
   ItemType,
   ITEM_TITLE_MAX,
+  PresenceAction,
   ProjectPermission,
   requiresBucket,
   SprintState,
@@ -44,7 +45,8 @@ import {
 import { revertFields, revertMove, undoFields } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
 import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
-import { ProjectContext } from '../../core/project-context';
+import { personName } from '../../core/live-logic';
+import { type ItemHold, ProjectContext } from '../../core/project-context';
 import { SessionStore } from '../../core/session.store';
 import { Shortcuts } from '../../core/shortcuts';
 import { Avatar, PERSON_FILTER, type PersonFilter } from '../../ui/avatar';
@@ -565,6 +567,8 @@ const QUICK_PEOPLE = 6;
                   [cdkDragDisabled]="!canDrag(item)"
                   [item]="item"
                   [today]="today"
+                  (cdkDragStarted)="dragStarted(item)"
+                  (cdkDragEnded)="dragEnded(item)"
                   (click)="open($event, item)"
                 />
               } @empty {
@@ -625,6 +629,12 @@ export class BoardPage implements OnInit, PersonFilter {
   private readonly session = inject(SessionStore);
   private readonly toast = inject(ToastService);
   private readonly dialogs = inject(Dialogs);
+  /** Holds of cards being dragged (M10); ended when the board closes. */
+  private readonly dragHolds = new Map<string, ItemHold>();
+  private readonly holdsEnd = inject(DestroyRef).onDestroy(() => {
+    for (const hold of this.dragHolds.values()) void hold.release();
+    this.dragHolds.clear();
+  });
   /** Serializes bucket mutations so reorder requests cannot overtake one another. */
   protected readonly bucketBusy = signal(false);
   /** Only project board managers and personal owners in Bucket grouping see these controls. */
@@ -1031,7 +1041,14 @@ export class BoardPage implements OnInit, PersonFilter {
     const to = event.container.data;
     const change = dropRequest(this.groupBy(), item, from.id, to.id, to.items, event.currentIndex);
     const project = this.ctx.project();
-    if (change === null || project === null) return;
+    // Someone else's change that waited during the drag (M10 plan section 4.3.1).
+    const hold = this.dragHolds.get(item.id);
+    this.dragHolds.delete(item.id);
+    const missed = (await hold?.release(false)) ?? null;
+    if (change === null || project === null) {
+      if (missed !== null) this.ctx.applyRemote(missed);
+      return;
+    }
     // The card it followed before, so Undo can put it back in place.
     const fromIndex = from.items.findIndex((i) => i.id === item.id);
     const previousAfterId = fromIndex > 0 ? (from.items[fromIndex - 1]?.id ?? null) : null;
@@ -1048,14 +1065,58 @@ export class BoardPage implements OnInit, PersonFilter {
           ? await this.api.move(project.id, item.id, change.request)
           : await this.api.update(project.id, item.id, change.request);
       this.ctx.upsert(updated);
+      const theirs = missed?.item ?? null;
+      if (
+        theirs?.bucketId &&
+        theirs.bucketId !== item.bucketId &&
+        theirs.bucketId !== updated.bucketId
+      ) {
+        // The later deliberate drop wins; the earlier mover's choice is one click away.
+        const name = personName(this.ctx.membersById(), missed?.actorId ?? null);
+        const back = theirs.bucketId;
+        const bucket = this.ctx.bucketsById().get(back)?.name ?? 'another bucket';
+        const now = this.ctx.bucketsById().get(updated.bucketId ?? '')?.name ?? 'its new place';
+        this.toast.show(
+          `${name} had moved this card to ${bucket}. It is now in ${now}.`,
+          async () => this.ctx.upsert(await this.api.move(project.id, item.id, { bucketId: back })),
+          { action: `Put back in ${bucket}`, done: `Put back in ${bucket}` },
+        );
+        return;
+      }
       if (change.kind === 'move' && from.id === to.id) return;
       this.toast.show(this.describe(item, updated), () =>
         this.undo(project.id, item, updated, previousAfterId),
       );
     } catch (error) {
-      this.ctx.upsert(item);
+      if (missed !== null && missed.item === null) this.ctx.applyRemote(missed);
+      else this.ctx.upsert(missed?.item ?? item);
       this.toast.error(error);
     }
+  }
+
+  /**
+   * Holds a card while it is dragged: changes from others wait until the
+   * drop, so the card never jumps from under the pointer (M10).
+   *
+   * @param item The card.
+   */
+  protected dragStarted(item: WorkItemDto): void {
+    void this.dragHolds.get(item.id)?.release();
+    this.dragHolds.set(item.id, this.ctx.hold(item.id, PresenceAction.MOVING));
+  }
+
+  /**
+   * Ends a drag that was not dropped on a list: waiting changes apply. A
+   * drop ends the hold itself first.
+   *
+   * @param item The card.
+   */
+  protected dragEnded(item: WorkItemDto): void {
+    setTimeout(() => {
+      const hold = this.dragHolds.get(item.id);
+      this.dragHolds.delete(item.id);
+      void hold?.release();
+    });
   }
 
   /**

@@ -104,6 +104,8 @@ describe('admin settings, branding, themes and backups (db)', () => {
       ['GET', '/api/v1/admin/settings/storage/usage', undefined],
       ['GET', '/api/v1/admin/settings/logs', undefined],
       ['PUT', '/api/v1/admin/settings/logs', { retentionDays: 1 }],
+      ['GET', '/api/v1/admin/settings/live', undefined],
+      ['PUT', '/api/v1/admin/settings/live', { enabled: false }],
       ['GET', '/api/v1/admin/settings/theme', undefined],
       [
         'PUT',

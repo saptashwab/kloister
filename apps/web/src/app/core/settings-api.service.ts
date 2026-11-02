@@ -7,6 +7,7 @@ import {
   type DiskUsageDto,
   FILE_NAME_HEADER,
   type FontWeight,
+  type LiveSettingsDto,
   type LogSettingsDto,
   type MyThemeDto,
   type PublicBrandingDto,
@@ -119,6 +120,25 @@ export class SettingsApiService {
    */
   diskUsage(): Promise<DiskUsageDto> {
     return this.get('admin/settings/storage/usage');
+  }
+
+  /**
+   * Whether live updates are on (M10).
+   *
+   * @returns The switch.
+   */
+  live(): Promise<LiveSettingsDto> {
+    return this.get('admin/settings/live');
+  }
+
+  /**
+   * Switches live updates on or off for everyone (M10).
+   *
+   * @param value The switch.
+   * @returns The saved switch.
+   */
+  saveLive(value: LiveSettingsDto): Promise<LiveSettingsDto> {
+    return this.put('admin/settings/live', value);
   }
 
   /**

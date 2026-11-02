@@ -5,7 +5,7 @@ import type { FastifyRequest } from 'fastify';
 import { makeUser } from '../../test/support/fakes.js';
 import type { ApiException } from '../common/api-exception.js';
 import type { AuthContext } from './auth-context.js';
-import { AdminOnly, AllowPendingPasswordChange, Public } from './decorators.js';
+import { AdminOnly, AllowPendingPasswordChange, KeepSessionIdle, Public } from './decorators.js';
 import { SessionGuard } from './session.guard.js';
 import type { SessionService } from './session.service.js';
 
@@ -15,6 +15,7 @@ class Routes {
   plain(): void {}
   @AllowPendingPasswordChange() pendingOk(): void {}
   @AdminOnly() adminOnly(): void {}
+  @KeepSessionIdle() idle(): void {}
 }
 const handler = (name: keyof Routes) =>
   Object.getOwnPropertyDescriptor(Routes.prototype, name)?.value as object;
@@ -75,6 +76,21 @@ describe('SessionGuard', () => {
     await expect(guardFor(auth).canActivate(context('pendingOk', withCookie()))).resolves.toBe(
       true,
     );
+  });
+
+  it('never refreshes the session on @KeepSessionIdle routes (live updates, M10)', async () => {
+    const touches: boolean[] = [];
+    const auth = { user: makeUser(), sessionId: 's1' };
+    const sessions = {
+      validate: (_token: string, touch: boolean) => {
+        touches.push(touch);
+        return Promise.resolve(auth);
+      },
+    } as unknown as SessionService;
+    const guard = new SessionGuard(new Reflector(), sessions);
+    await guard.canActivate(context('idle', withCookie()));
+    await guard.canActivate(context('plain', withCookie()));
+    expect(touches).toEqual([false, true]);
   });
 
   it('enforces @AdminOnly', async () => {

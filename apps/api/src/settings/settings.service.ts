@@ -6,6 +6,7 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_THEME,
   HEX_COLOUR_PATTERN,
+  type LiveSettingsDto,
   type LogSettingsDto,
   type SecuritySettingsDto,
   type StorageSettingsDto,
@@ -64,6 +65,12 @@ export const DEFAULT_BACKUP_SETTINGS: BackupSettingsDto = {
 
 /** `AppSetting.key` holding {@link BackupSettingsDto}. */
 export const BACKUP_SETTINGS_KEY = 'backups';
+
+/** Live updates are on unless an admin switches them off (M10). */
+export const DEFAULT_LIVE_SETTINGS: LiveSettingsDto = { enabled: true };
+
+/** `AppSetting.key` holding {@link LiveSettingsDto}. */
+export const LIVE_SETTINGS_KEY = 'live';
 
 /** `AppSetting.key` holding the admin's default {@link ThemeDto}. */
 export const THEME_SETTINGS_KEY = 'theme';
@@ -247,6 +254,21 @@ export class SettingsService {
       retentionDays: isPositiveInteger(stored['retentionDays'])
         ? stored['retentionDays']
         : d.retentionDays,
+    };
+  }
+
+  /**
+   * Returns whether live updates are on; a missing or malformed value reads
+   * as on (the default, M10).
+   *
+   * @param db Database client.
+   * @returns The setting.
+   */
+  async getLive(db: Db = this.prisma): Promise<LiveSettingsDto> {
+    const stored = await this.read(LIVE_SETTINGS_KEY, db);
+    return {
+      enabled:
+        typeof stored['enabled'] === 'boolean' ? stored['enabled'] : DEFAULT_LIVE_SETTINGS.enabled,
     };
   }
 

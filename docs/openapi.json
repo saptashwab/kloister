@@ -1252,6 +1252,13 @@
             "schema": { "type": "string" }
           },
           {
+            "name": "ids",
+            "required": false,
+            "in": "query",
+            "description": "Only these items: comma-separated uuids, at most\n{@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).",
+            "schema": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+          },
+          {
             "name": "q",
             "required": false,
             "in": "query",
@@ -1959,6 +1966,13 @@
             "schema": { "type": "string" }
           },
           {
+            "name": "ids",
+            "required": false,
+            "in": "query",
+            "description": "Only these items: comma-separated uuids, at most\n{@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).",
+            "schema": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+          },
+          {
             "name": "q",
             "required": false,
             "in": "query",
@@ -2127,6 +2141,13 @@
             "in": "query",
             "description": "Due on or before this date.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "ids",
+            "required": false,
+            "in": "query",
+            "description": "Only these items: comma-separated uuids, at most\n{@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).",
+            "schema": { "type": "array", "items": { "type": "string", "format": "uuid" } }
           },
           {
             "name": "q",
@@ -2299,6 +2320,13 @@
             "schema": { "type": "string" }
           },
           {
+            "name": "ids",
+            "required": false,
+            "in": "query",
+            "description": "Only these items: comma-separated uuids, at most\n{@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).",
+            "schema": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+          },
+          {
             "name": "q",
             "required": false,
             "in": "query",
@@ -2467,6 +2495,13 @@
             "in": "query",
             "description": "Due on or before this date.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "ids",
+            "required": false,
+            "in": "query",
+            "description": "Only these items: comma-separated uuids, at most\n{@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).",
+            "schema": { "type": "array", "items": { "type": "string", "format": "uuid" } }
           },
           {
             "name": "q",
@@ -3235,6 +3270,46 @@
         "tags": ["AdminSettings"]
       }
     },
+    "/api/v1/admin/settings/live": {
+      "get": {
+        "operationId": "AdminSettingsController_getLive",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Returns whether live updates are on (M10).",
+        "tags": ["AdminSettings"]
+      },
+      "put": {
+        "operationId": "AdminSettingsController_putLive",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/LiveSettingsBody" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Switches live updates and presence on or off for everyone (M10). Off\ncloses every open stream.",
+        "tags": ["AdminSettings"]
+      }
+    },
     "/api/v1/admin/settings/theme": {
       "get": {
         "operationId": "AdminSettingsController_getTheme",
@@ -3845,6 +3920,97 @@
         },
         "summary": "Cancels a pending create after explicit duplicate-risk acknowledgement, PM only.",
         "tags": ["Ado"]
+      }
+    },
+    "/api/v1/events/status": {
+      "get": {
+        "operationId": "LiveController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Reports whether live updates are on, so the web app knows whether to\nopen a stream.",
+        "tags": ["Live"]
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "operationId": "LiveController_open",
+        "parameters": [
+          {
+            "name": "client",
+            "required": false,
+            "in": "query",
+            "description": "The tab's client id (EventSource cannot send headers).",
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": { "200": { "description": "" } },
+        "summary": "Opens the event stream; the first event is `hello` with the stream id.\nAnswers 204 (which browsers do not retry) while live updates are off.\nThe response is never compressed or cached and asks proxies not to\nbuffer it (M10 plan section 7).",
+        "tags": ["Live"]
+      }
+    },
+    "/api/v1/events/{streamId}/project": {
+      "put": {
+        "operationId": "LiveController_subscribe",
+        "parameters": [
+          {
+            "name": "streamId",
+            "required": true,
+            "in": "path",
+            "description": "The stream.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/LiveSubscribeDto" } }
+          }
+        },
+        "responses": { "204": { "description": "" } },
+        "summary": "Follows a project with the stream, or none.\n\nPermissions: own stream only; members of the project only (personal\nspaces: the owner). 404 otherwise, also for administrators who are not\nmembers.",
+        "tags": ["Live"]
+      }
+    },
+    "/api/v1/events/{streamId}/presence": {
+      "put": {
+        "operationId": "LiveController_presence",
+        "parameters": [
+          {
+            "name": "streamId",
+            "required": true,
+            "in": "path",
+            "description": "The stream.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/LivePresenceDto" } }
+          }
+        },
+        "responses": { "204": { "description": "" } },
+        "summary": "Reports what the tab is doing (presence); kept in memory only.\n\nPermissions: own stream only, following a project; the item must be\nvisible to the caller (404 otherwise).",
+        "tags": ["Live"]
       }
     }
   },
@@ -4669,6 +4835,16 @@
         },
         "required": ["retentionDays"]
       },
+      "LiveSettingsBody": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether live updates and presence are on."
+          }
+        },
+        "required": ["enabled"]
+      },
       "BrandingBody": {
         "type": "object",
         "properties": {
@@ -4925,6 +5101,60 @@
           }
         },
         "required": ["duplicateRiskAcknowledged"]
+      },
+      "LiveSubscribeDto": {
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Project id or key, or null to follow none.",
+            "maxLength": 64
+          }
+        },
+        "required": ["projectId"]
+      },
+      "LivePresenceDto": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Item open, or null.",
+            "format": "uuid"
+          },
+          "action": {
+            "type": "string",
+            "nullable": true,
+            "description": "What the tab does on it.",
+            "enum": ["viewing", "editing", "moving", "noting"]
+          },
+          "field": {
+            "type": "string",
+            "nullable": true,
+            "description": "Field being edited; only known field keys, so no free text travels.",
+            "enum": [
+              "title",
+              "description",
+              "type",
+              "status",
+              "priority",
+              "bucket",
+              "sprint",
+              "team",
+              "parent",
+              "assignees",
+              "labels",
+              "startDate",
+              "dueDate",
+              "dueTime",
+              "duration",
+              "checklist",
+              "dependencies"
+            ]
+          }
+        },
+        "required": ["itemId", "action", "field"]
       }
     }
   },

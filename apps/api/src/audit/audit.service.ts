@@ -3,8 +3,9 @@ import type { AuditAction, AuditEntryDto, Page } from '@kloister/shared';
 import { type PageQueryDto, pageArgs, toPage } from '../common/pagination.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { ProjectAccess } from '../projects/project-access.service.js';
+import type { ItemFacts, ProjectAccess } from '../projects/project-access.service.js';
 import { notFound } from '../common/api-exception.js';
+import { publishAudit } from '../live/live-events.js';
 
 /** What to record in one audit entry. */
 export interface AuditRecord {
@@ -20,6 +21,11 @@ export interface AuditRecord {
   projectId?: string | null;
   /** Extra detail. Must never contain passwords, tokens or hashes. */
   meta?: Prisma.InputJsonObject;
+  /** Hints for the live update of this change (M10); never stored. */
+  live?: {
+    /** The item's facts before a change that can alter who sees it. */
+    before?: ItemFacts;
+  };
 }
 
 /** Filters accepted by {@link AuditService.list}. */
@@ -59,7 +65,9 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Appends one entry.
+   * Appends one entry and announces the change to live streams on the same
+   * client (M10), so the announcement is delivered only if the change
+   * commits.
    *
    * @param record What to record.
    * @param db Pass a transaction client to write atomically with the change
@@ -77,6 +85,7 @@ export class AuditService {
         meta: record.meta ?? {},
       },
     });
+    await publishAudit(db, record);
   }
 
   /**

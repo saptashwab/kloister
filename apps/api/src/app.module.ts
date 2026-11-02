@@ -12,6 +12,7 @@ import { HealthModule } from './health/health.module.js';
 import { ItemsModule } from './items/items.module.js';
 import { HolidaysModule } from './holidays/holidays.module.js';
 import { TimelineModule } from './timeline/timeline.module.js';
+import { LiveModule } from './live/live.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -25,7 +26,8 @@ import { UsersModule } from './users/users.module.js';
  * so every route requires a session unless marked `@Public()`.
  * `ScheduleModule` runs the daily jobs (due-date notifications, unused
  * inline images, backups, log clean-up) in this process; nothing calls out
- * to other hosts.
+ * to other hosts. `LiveModule` streams live updates (M10) from PostgreSQL
+ * notifications of the same database.
  */
 @Module({
   imports: [
@@ -48,6 +50,7 @@ import { UsersModule } from './users/users.module.js';
     BackupsModule,
     HealthModule,
     AdoModule,
+    LiveModule,
   ],
 })
 export class AppModule {}

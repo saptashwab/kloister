@@ -1,8 +1,8 @@
 # M10: live updates
 
-Planning baseline: 2026-11-02. Status: the owner answered the open questions on 2026-11-02 (section 11).
-Implementation starts when the owner says go. Section 7 avoids any httpd change if the server streams as
-expected and names the one-line fallback the owner approved.
+Planning baseline: 2026-11-02. Status: the owner answered the open questions on 2026-11-02 (section 11);
+implemented on 2026-11-02. Choices made while building are in docs/DECISIONS.md (M10). Section 7 avoids any
+httpd change if the server streams as expected and names the one-line fallback the owner approved.
 
 ## 1. Goals and constraints
 

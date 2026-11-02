@@ -26,9 +26,17 @@ export class ToastService {
    *
    * @param message What happened.
    * @param undo Reverses the change.
+   * @param labels Other words for the action and its confirmation, e.g.
+   *   "Put back in Review" (M10).
+   * @param labels.action The action button.
+   * @param labels.done The confirmation once it ran.
    */
-  show(message: string, undo?: () => Promise<void>): void {
-    const ref = this.snackBar.open(message, undo === undefined ? undefined : 'Undo', {
+  show(
+    message: string,
+    undo?: () => Promise<void>,
+    labels: { action: string; done: string } = { action: 'Undo', done: 'Change undone' },
+  ): void {
+    const ref = this.snackBar.open(message, undo === undefined ? undefined : labels.action, {
       panelClass: 'k-toast',
       horizontalPosition: 'start',
       politeness: 'polite',
@@ -37,7 +45,7 @@ export class ToastService {
     if (undo !== undefined) {
       ref.onAction().subscribe(() => {
         undo().then(
-          () => this.show('Change undone'),
+          () => this.show(labels.done),
           (error: unknown) => this.error(error),
         );
       });

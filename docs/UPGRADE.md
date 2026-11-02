@@ -71,6 +71,33 @@ stops with instructions instead of being rerun blindly.
 Keep users out until you have checked HTTPS, sign-in, boards, permissions and files in a
 browser, or rolled back.
 
+## Live updates after upgrading (M10)
+
+Live updates need no httpd change when httpd passes the stream on as it arrives, which
+httpd 2.4 normally does. After the upgrade, sign in and check the stream as described in
+[ADMIN](ADMIN.md#live-updates): the board of a second browser should follow a change
+within a second or two.
+
+Fallback, only when streaming is delayed: add one line to the Kloister conf file
+(`/etc/httpd/conf.d/<app_name>.conf`), before the general `ProxyPass .../api/` line, then
+check the configuration and reload httpd:
+
+```apache
+ProxyPass /<app_name>/api/v1/events http://127.0.0.1:<backend_port>/api/v1/events flushpackets=on timeout=3600
+```
+
+```bash
+sudo apachectl configtest
+```
+
+```bash
+sudo systemctl reload httpd
+```
+
+The upgrade helper and scripts never change httpd configuration, so this line is always
+added by hand. Until streaming works, an administrator can switch **Live updates** off under Admin settings ›
+General; the app then behaves as before (changes show after a reload).
+
 ## Manual upgrade
 
 The sections below describe the shipped `deploy/upgrade.sh` on its own, for operators who

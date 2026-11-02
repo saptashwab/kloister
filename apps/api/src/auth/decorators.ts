@@ -8,6 +8,8 @@ export const IS_PUBLIC_KEY = 'kloister:isPublic';
 export const ADMIN_ONLY_KEY = 'kloister:adminOnly';
 /** Metadata key set by {@link AllowPendingPasswordChange}. */
 export const ALLOW_PENDING_PASSWORD_CHANGE_KEY = 'kloister:allowPendingPasswordChange';
+/** Metadata key set by {@link KeepSessionIdle}. */
+export const KEEP_SESSION_IDLE_KEY = 'kloister:keepSessionIdle';
 
 /**
  * Marks a route or controller as reachable without a session.
@@ -36,6 +38,17 @@ export const AdminOnly = (): MethodDecorator & ClassDecorator => SetMetadata(ADM
  */
 export const AllowPendingPasswordChange = (): MethodDecorator & ClassDecorator =>
   SetMetadata(ALLOW_PENDING_PASSWORD_CHANGE_KEY, true);
+
+/**
+ * Marks routes whose requests do not count as activity: the session guard
+ * still requires a live session but never refreshes `lastSeenAt`, so an open
+ * live updates stream and its presence reports never extend a session
+ * (M10 plan section 5.6).
+ *
+ * @returns The metadata decorator.
+ */
+export const KeepSessionIdle = (): MethodDecorator & ClassDecorator =>
+  SetMetadata(KEEP_SESSION_IDLE_KEY, true);
 
 /**
  * Injects the {@link AuthContext} of the signed-in caller. Only valid on

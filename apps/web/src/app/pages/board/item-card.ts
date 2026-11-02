@@ -4,6 +4,7 @@ import { ItemStatus, LabelStyle, type WorkItemDto } from '@kloister/shared';
 import { dueState, dueText } from '../../core/item-changes';
 import { ProjectContext } from '../../core/project-context';
 import { ItemCopyAction } from '../../ui/item-copy-action';
+import { PresenceAvatars } from '../../ui/live-ui';
 import { Avatar } from '../../ui/avatar';
 import { Icon } from '../../ui/icon';
 import { LabelPill } from '../../ui/label-pill';
@@ -12,16 +13,32 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
 /**
  * One board card (SPEC §6, DESIGN §8): cover bar (cover-bar label style),
  * type, key, "Blocked", priority, title, labels, due date, checklist
- * progress and assignee avatars with their hover cards.
+ * progress and assignee avatars with their hover cards. Live updates (M10)
+ * highlight it briefly after someone else changed it ("Changed by Ann just
+ * now" on hover) and show who else has it open.
  *
  * The title is the card's link to the item drawer, so keyboard users reach
  * it with Tab; the board opens the drawer on clicks elsewhere on the card.
  */
 @Component({
   selector: 'app-item-card',
-  imports: [ItemCopyAction, RouterLink, Avatar, Icon, LabelPill, PriorityIcon, TypeIcon],
+  imports: [
+    ItemCopyAction,
+    PresenceAvatars,
+    RouterLink,
+    Avatar,
+    Icon,
+    LabelPill,
+    PriorityIcon,
+    TypeIcon,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'card', '[class.done]': 'done()' },
+  host: {
+    class: 'card',
+    '[class.done]': 'done()',
+    '[class.k-live-flash]': 'flash()',
+    '[attr.title]': 'changedBy()',
+  },
   styles: `
     :host {
       content-visibility: auto;
@@ -113,6 +130,9 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
           <span class="k-pill warn">Blocked</span>
         }
         <span class="spacer"></span>
+        @if (presence().length > 0) {
+          <app-presence [people]="presence()" [members]="members()" what="this card" [size]="18" />
+        }
         <app-priority-icon [priority]="i.priority" /><app-item-copy-action [item]="i" />
       </div>
       <a class="title" [routerLink]="['items', i.number]" queryParamsHandling="preserve">{{
@@ -208,6 +228,18 @@ export class ItemCard {
     const { done, total } = this.item().checklist;
     return total === 0 ? 0 : Math.round((done / total) * 100);
   });
+
+  /** True while the card is highlighted after someone else's change. */
+  protected readonly flash = computed(() => this.ctx.flashing().has(this.item().id));
+  /** "Changed by … just now", or null. */
+  protected readonly changedBy = computed(() => {
+    this.ctx.recent();
+    return this.ctx.changedBy(this.item().id);
+  });
+  /** Other people who have this item open. */
+  protected readonly presence = computed(() => this.ctx.presenceByItem().get(this.item().id) ?? []);
+  /** Members by user id, for presence names. */
+  protected readonly members = this.ctx.membersById;
 
   /** True for Done items, which are dimmed. */
   protected readonly done = computed(() => this.item().status === ItemStatus.DONE);

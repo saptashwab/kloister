@@ -4,6 +4,7 @@ import {
   type CreateChecklistItemRequest,
   type CreateItemRequest,
   ITEM_DESCRIPTION_MAX,
+  ITEM_IDS_FILTER_MAX,
   ITEM_TITLE_MAX,
   ItemStatus,
   ItemType,
@@ -112,6 +113,19 @@ export class ListItemsQueryDto extends PageQueryDto {
   @IsOptional()
   @IsCalendarDate()
   dueTo?: string;
+
+  /**
+   * Only these items: comma-separated uuids, at most
+   * {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).
+   */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.split(',').map((id) => id.trim().toLowerCase()) : value,
+  )
+  @IsArray()
+  @ArrayMaxSize(ITEM_IDS_FILTER_MAX)
+  @IsUUID('all', { each: true })
+  ids?: string[];
 
   /** Case-insensitive title search; a number also matches the item number. */
   @IsOptional()

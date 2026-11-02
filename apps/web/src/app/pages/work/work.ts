@@ -17,11 +17,19 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { RouterLink } from '@angular/router';
-import { ItemStatus, ItemType, type WorkPersonDto, type WorkSummaryDto } from '@kloister/shared';
+import {
+  ItemStatus,
+  ItemType,
+  LiveEvent,
+  type WorkPersonDto,
+  type WorkSummaryDto,
+} from '@kloister/shared';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { errorMessage } from '../../core/api';
 import { isoDate } from '../../core/board-logic';
 import { dueState, dueText } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
+import { LiveService } from '../../core/live.service';
 import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
 import { Shortcuts } from '../../core/shortcuts';
 import { SessionStore } from '../../core/session.store';
@@ -409,6 +417,24 @@ export class WorkPage {
       const created = this.includeCreated();
       if (id) untracked(() => void this.load(id, done, created));
     });
+    // Live updates (M10): the caller's own list refetches when their items change.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    destroy.onDestroy(() => clearTimeout(timer));
+    inject(LiveService)
+      .events.pipe(takeUntilDestroyed(destroy))
+      .subscribe((event) => {
+        const own = this.userId() === '' || this.userId() === this.session.user()?.id;
+        const relevant =
+          event.name === LiveEvent.ITEM_CHANGED ||
+          event.name === LiveEvent.ITEM_REMOVED ||
+          event.name === LiveEvent.RESYNC;
+        if (!own || !relevant) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          const id = this.session.user()?.id;
+          if (id) void this.load(id, this.includeDone(), this.includeCreated(), true);
+        }, 600);
+      });
   }
 
   /**
@@ -552,14 +578,17 @@ export class WorkPage {
    * @param id Selected person.
    * @param done Include Done.
    * @param created Include created items.
+   * @param quiet Keep the shown rows until the new ones arrive (live updates).
    * @returns Resolves once loaded.
    */
-  private async load(id: string, done: boolean, created: boolean): Promise<void> {
+  private async load(id: string, done: boolean, created: boolean, quiet = false): Promise<void> {
     const run = ++this.run;
-    this.loading.set(true);
-    this.error.set('');
-    this.items.set([]);
-    if (this.person()?.id !== id) {
+    if (!quiet) {
+      this.loading.set(true);
+      this.error.set('');
+      this.items.set([]);
+    }
+    if (!quiet && this.person()?.id !== id) {
       this.person.set(null);
       this.clear();
     }

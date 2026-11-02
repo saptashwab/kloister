@@ -14,6 +14,8 @@ import {
   ViewEncapsulation,
 } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
+import { NgTemplateOutlet } from '@angular/common';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatMenuModule } from '@angular/material/menu';
@@ -27,6 +29,9 @@ import {
   ITEM_TITLE_MAX,
   LabelStyle,
   type MoveItemRequest,
+  PresenceAction,
+  type PresenceEntryDto,
+  type PresenceField,
   PRIORITY_MAX,
   ProjectRole,
   PRIORITY_MIN,
@@ -42,17 +47,20 @@ import { isoDate, NONE } from '../../core/board-logic';
 import { dueState, dueText, revertMove, shortDate, undoFields } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
 import { PRIORITY_LABELS, SPRINT_STATE_LABELS, TYPE_LABELS } from '../../core/labels';
-import { ProjectContext } from '../../core/project-context';
+import { changedFields, personName, personWithRole } from '../../core/live-logic';
+import { ProjectContext, type RemoteChange } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
 import { forDisplay, type Mentionable } from '../../core/rich-text';
 import { SessionStore } from '../../core/session.store';
 import { Shortcuts } from '../../core/shortcuts';
 import { Avatar, PERSON_FILTER, StaticAvatar } from '../../ui/avatar';
+import { keepMine } from '../../ui/conflict';
 import { Dialogs } from '../../ui/dialogs';
 import { Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { ViewImages } from '../../ui/image-viewer';
 import { LabelPill } from '../../ui/label-pill';
+import { PresenceAvatars } from '../../ui/live-ui';
 import { PriorityIcon, StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
 import { ItemCopyAction } from '../../ui/item-copy-action';
@@ -105,6 +113,8 @@ const FIELD_NAMES: Record<string, string> = {
   encapsulation: ViewEncapsulation.None,
   imports: [
     ItemCopyAction,
+    NgTemplateOutlet,
+    PresenceAvatars,
     CdkTrapFocus,
     DateField,
     TimeField,
@@ -143,6 +153,8 @@ const FIELD_NAMES: Record<string, string> = {
       tabindex="-1"
       cdkTrapFocus
       [cdkTrapFocusAutoCapture]="true"
+      (focusin)="trackFocus($event)"
+      (focusout)="trackBlur($event)"
     >
       <div class="d-top">
         <nav class="crumbs" aria-label="Parents">
@@ -166,6 +178,12 @@ const FIELD_NAMES: Record<string, string> = {
           }
         </nav>
         <span class="spacer"></span>
+        @if (detail(); as it) {
+          <app-presence
+            [people]="ctx.presenceByItem().get(it.id) ?? []"
+            [members]="ctx.membersById()"
+          />
+        }
         @if (isProject() && detail(); as it) {
           @if (onTimeline()) {
             @if (it.bucketId) {
@@ -240,6 +258,12 @@ const FIELD_NAMES: Record<string, string> = {
         @if (error()) {
           <p class="k-alert" role="alert">{{ error() }}</p>
         }
+        @if (gone()) {
+          <p class="k-alert" role="alert">
+            {{ gone() }}
+            <button type="button" class="k-action" (click)="close()">Close</button>
+          </p>
+        }
 
         <!-- Re-created after a refused change, so every control shows the stored value again. -->
         @for (view of views(); track view.key) {
@@ -249,7 +273,7 @@ const FIELD_NAMES: Record<string, string> = {
               <app-type-icon [type]="d.type" [large]="true" />
               <span class="k-key">{{ d.key }} · {{ typeLabels[d.type] }}</span>
             </div>
-            <h1 class="d-title">
+            <h1 class="d-title" data-presence="title">
               @if (editingTitle()) {
                 <input
                   #titleInput
@@ -278,6 +302,7 @@ const FIELD_NAMES: Record<string, string> = {
               @if (canEdit()) {
                 <mat-select
                   class="pill-select"
+                  data-presence="status"
                   aria-label="Status"
                   panelWidth="200"
                   [value]="d.status"
@@ -296,6 +321,7 @@ const FIELD_NAMES: Record<string, string> = {
               @if (canMove()) {
                 <mat-select
                   class="pill-select"
+                  data-presence="bucket"
                   aria-label="Bucket"
                   panelWidth="220"
                   [value]="d.bucketId ?? none"
@@ -320,8 +346,12 @@ const FIELD_NAMES: Record<string, string> = {
 
           <dl class="fields">
             @if (ctx.project()?.ownerId === null) {
-              <dt>Assignees</dt>
-              <dd>
+              <dt>
+                Assignees<ng-container
+                  *ngTemplateOutlet="editing; context: { $implicit: ['assignees'] }"
+                />
+              </dt>
+              <dd data-presence="assignees">
                 @if (canEdit()) {
                   <mat-select
                     class="k-inline"
@@ -362,8 +392,10 @@ const FIELD_NAMES: Record<string, string> = {
                 }
               </dd>
             }
-            <dt>Labels</dt>
-            <dd>
+            <dt>
+              Labels<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['labels'] }" />
+            </dt>
+            <dd data-presence="labels">
               @if (canEdit()) {
                 <mat-select
                   class="k-inline"
@@ -411,8 +443,10 @@ const FIELD_NAMES: Record<string, string> = {
               }
             </dd>
 
-            <dt>Sprint</dt>
-            <dd>
+            <dt>
+              Sprint<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['sprint'] }" />
+            </dt>
+            <dd data-presence="sprint">
               @if (canPlan()) {
                 <mat-select
                   class="k-inline"
@@ -435,8 +469,12 @@ const FIELD_NAMES: Record<string, string> = {
               }
             </dd>
 
-            <dt>Priority</dt>
-            <dd>
+            <dt>
+              Priority<ng-container
+                *ngTemplateOutlet="editing; context: { $implicit: ['priority'] }"
+              />
+            </dt>
+            <dd data-presence="priority">
               @if (canEdit()) {
                 <mat-select
                   class="k-inline"
@@ -467,11 +505,19 @@ const FIELD_NAMES: Record<string, string> = {
               }
             </dd>
 
-            <dt>Dates</dt>
+            <dt>
+              Dates<ng-container
+                *ngTemplateOutlet="
+                  editing;
+                  context: { $implicit: ['startDate', 'dueDate', 'dueTime', 'duration'] }
+                "
+              />
+            </dt>
             <dd>
               <div class="dates">
                 @if (canPlan()) {
                   <app-date-field
+                    data-presence="startDate"
                     label="Start date"
                     [value]="d.startDate"
                     (valueChange)="saveDates({ startDate: $event })"
@@ -490,6 +536,7 @@ const FIELD_NAMES: Record<string, string> = {
                   }
                   <span class="muted" aria-hidden="true">→</span>
                   <app-date-field
+                    data-presence="dueDate"
                     label="Due date"
                     [value]="d.dueDate"
                     [min]="d.startDate"
@@ -529,6 +576,7 @@ const FIELD_NAMES: Record<string, string> = {
                 @if (canEdit()) {
                   @if (d.dueDate && (d.dueTime || addingTime())) {
                     <app-time-field
+                      data-presence="dueTime"
                       label="Due time"
                       [value]="d.dueTime"
                       (valueChange)="saveTime($event)"
@@ -562,8 +610,10 @@ const FIELD_NAMES: Record<string, string> = {
             </dd>
 
             @if (ctx.teams().length > 0 || d.teamId) {
-              <dt>Team</dt>
-              <dd>
+              <dt>
+                Team<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['team'] }" />
+              </dt>
+              <dd data-presence="team">
                 @if (canEdit()) {
                   <mat-select
                     class="k-inline"
@@ -585,8 +635,10 @@ const FIELD_NAMES: Record<string, string> = {
               </dd>
             }
 
-            <dt>Type</dt>
-            <dd>
+            <dt>
+              Type<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['type'] }" />
+            </dt>
+            <dd data-presence="type">
               @if (canPlan()) {
                 <mat-select
                   class="k-inline"
@@ -604,8 +656,10 @@ const FIELD_NAMES: Record<string, string> = {
               }
             </dd>
 
-            <dt>Parent</dt>
-            <dd>
+            <dt>
+              Parent<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['parent'] }" />
+            </dt>
+            <dd data-presence="parent">
               @if (canPlan() && d.type !== epic) {
                 <mat-select
                   class="k-inline"
@@ -634,8 +688,12 @@ const FIELD_NAMES: Record<string, string> = {
             </dd>
           </dl>
 
-          <section aria-labelledby="d-desc">
-            <h2 id="d-desc">Description</h2>
+          <section aria-labelledby="d-desc" data-presence="description">
+            <h2 id="d-desc">
+              Description<ng-container
+                *ngTemplateOutlet="editing; context: { $implicit: ['description'] }"
+              />
+            </h2>
             @if (canEdit()) {
               <app-rich-text-editor
                 [html]="d.description"
@@ -649,7 +707,7 @@ const FIELD_NAMES: Record<string, string> = {
             }
           </section>
 
-          <section aria-label="Checklist">
+          <section aria-label="Checklist" data-presence="checklist">
             <app-item-checklist
               [projectId]="projectId()"
               [itemId]="d.id"
@@ -742,7 +800,7 @@ const FIELD_NAMES: Record<string, string> = {
             />
           </section>
 
-          <section aria-labelledby="d-activity">
+          <section aria-labelledby="d-activity" data-presence="note">
             <app-item-activity
               [projectId]="projectId()"
               [itemId]="d.id"
@@ -754,12 +812,25 @@ const FIELD_NAMES: Record<string, string> = {
             />
           </section>
         } @empty {
-          @if (!error()) {
+          @if (!error() && !gone()) {
             <app-skeleton label="Loading the item" [rows]="6" />
           }
         }
       </div>
     </div>
+    <!-- Who else is editing one of these fields (M10). -->
+    <ng-template #editing let-fields>
+      @if (editors(fields); as people) {
+        @if (people.length > 0) {
+          <app-presence
+            class="field-presence"
+            [people]="people"
+            [members]="ctx.membersById()"
+            [size]="16"
+          />
+        }
+      }
+    </ng-template>
   `,
 })
 export class ItemDrawer {
@@ -850,6 +921,11 @@ export class ItemDrawer {
   protected readonly error = signal('');
   /** True while the title is being edited. */
   protected readonly editingTitle = signal(false);
+  /** "Ann deleted this item" or "no longer available", once it is gone (M10). */
+  protected readonly gone = signal('');
+  /** A change from someone else that waits while the caller edits (M10). */
+  private pendingRemote: RemoteChange | null = null;
+  private deferTimer: ReturnType<typeof setInterval> | undefined;
   /** Counts item loads, so answers for an item no longer open are dropped. */
   private loadRun = 0;
   /** Bumped when a change is refused, to rebuild the controls. */
@@ -1041,6 +1117,166 @@ export class ItemDrawer {
       untracked(() => void this.load(projectId, number));
     });
     afterNextRender(() => this.panel().nativeElement.focus());
+    // Live updates (M10): presence of the open item, and others' changes.
+    effect(() => {
+      const id = this.detail()?.id ?? null;
+      untracked(() => this.ctx.view(id));
+    });
+    this.ctx.remote.pipe(takeUntilDestroyed()).subscribe((change) => this.onRemote(change));
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(this.deferTimer);
+      this.ctx.setPresence('drawer-edit', null);
+      this.ctx.view(null);
+    });
+  }
+
+  /**
+   * People editing one of the given fields of this item.
+   *
+   * @param fields Presence fields.
+   * @returns Their presence.
+   */
+  protected editors(fields: readonly PresenceField[]): PresenceEntryDto[] {
+    const id = this.detail()?.id;
+    if (id === undefined) return [];
+    return (this.ctx.presenceByItem().get(id) ?? []).filter(
+      (p) => p.action === PresenceAction.EDITING && p.field !== null && fields.includes(p.field),
+    );
+  }
+
+  /**
+   * Reports which field the caller works in (presence, M10).
+   *
+   * @param event The focus event.
+   */
+  protected trackFocus(event: FocusEvent): void {
+    const zone = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-presence]');
+    const d = this.detail();
+    if (!zone || d === null) return;
+    const field = zone.dataset['presence'];
+    this.ctx.setPresence(
+      'drawer-edit',
+      field === 'note'
+        ? { itemId: d.id, action: PresenceAction.NOTING, field: null }
+        : { itemId: d.id, action: PresenceAction.EDITING, field: (field ?? null) as PresenceField },
+    );
+  }
+
+  /**
+   * Ends the field presence when focus leaves the fields.
+   *
+   * @param event The focus event.
+   */
+  protected trackBlur(event: FocusEvent): void {
+    const next = event.relatedTarget as HTMLElement | null;
+    if (next?.closest('[data-presence]') && this.panel().nativeElement.contains(next)) return;
+    this.ctx.setPresence('drawer-edit', null);
+  }
+
+  /**
+   * Shows someone else's change of this item: at once, or once the caller
+   * stops editing; a deleted or hidden item says so (M10 plan section 4.3).
+   *
+   * @param change The change.
+   */
+  private onRemote(change: RemoteChange): void {
+    const d = this.detail();
+    if (d === null || change.id !== d.id) return;
+    if (change.item === null) {
+      this.pendingRemote = null;
+      this.gone.set(
+        change.deleted
+          ? `${personName(this.ctx.membersById(), change.actorId)} deleted this item`
+          : 'This item is no longer available to you',
+      );
+      this.detail.set(null);
+      return;
+    }
+    if (!this.busy()) {
+      void this.refreshQuietly();
+      return;
+    }
+    this.pendingRemote = change;
+    clearInterval(this.deferTimer);
+    this.deferTimer = setInterval(() => {
+      if (this.busy()) return;
+      clearInterval(this.deferTimer);
+      if (this.pendingRemote === null) return;
+      this.pendingRemote = null;
+      void this.refreshQuietly();
+    }, 500);
+  }
+
+  /**
+   * True while the caller types in a field of the drawer or has a list,
+   * menu or date picker open.
+   *
+   * @returns Whether updates should wait.
+   */
+  private busy(): boolean {
+    const active = document.activeElement;
+    const typing =
+      active instanceof HTMLElement &&
+      this.panel().nativeElement.contains(active) &&
+      active.matches('input, textarea, [contenteditable="true"], [contenteditable=""]');
+    return (
+      typing ||
+      this.editingTitle() ||
+      document.querySelector(
+        '.cdk-overlay-container .mat-mdc-select-panel, .cdk-overlay-container .mat-mdc-menu-panel, .cdk-overlay-container .mat-datepicker-content',
+      ) !== null
+    );
+  }
+
+  /**
+   * Loads the open item again after someone else changed it.
+   *
+   * @returns Resolves once shown.
+   */
+  private async refreshQuietly(): Promise<void> {
+    const d = this.detail();
+    if (d === null) return;
+    const run = this.loadRun;
+    try {
+      const fresh = await this.api.get(this.projectId(), d.id);
+      if (run !== this.loadRun) return;
+      this.detail.set(fresh);
+      this.version.update((v) => v + 1);
+    } catch {
+      // The next change or reopening shows it.
+    }
+  }
+
+  /**
+   * Before saving, checks whether someone else changed the same fields while
+   * the caller was editing; if so the caller chooses Keep mine or Use theirs
+   * (M10 plan section 4.3). No role outranks another; the notice names theirs.
+   *
+   * @param fields The fields the caller's change writes.
+   * @returns True to go on saving.
+   */
+  private async resolveConflict(fields: readonly (keyof WorkItemDto)[]): Promise<boolean> {
+    const change = this.pendingRemote;
+    const d = this.detail();
+    if (change === null || d === null) return true;
+    this.pendingRemote = null;
+    clearInterval(this.deferTimer);
+    let fresh: WorkItemDetailDto;
+    try {
+      fresh = await this.api.get(this.projectId(), d.id);
+    } catch {
+      return true;
+    }
+    this.detail.set(fresh);
+    this.version.update((v) => v + 1);
+    if (!changedFields(d, fresh, fields)) return true;
+    const keep = await keepMine(
+      this.matDialog,
+      `${personWithRole(this.ctx.membersById(), change.actorId)} changed this while you were editing`,
+    );
+    // Use theirs: rebuild the controls from their copy.
+    if (!keep) this.resets.update((n) => n + 1);
+    return keep;
   }
 
   /**
@@ -1175,6 +1411,7 @@ export class ItemDrawer {
    * @returns Resolves once saved.
    */
   protected async save(change: UpdateItemRequest): Promise<void> {
+    if (!(await this.resolveConflict(Object.keys(change) as (keyof WorkItemDto)[]))) return;
     const d = this.detail();
     if (d === null) return;
     const names = Object.keys(change).map((k) => FIELD_NAMES[k] ?? k);
@@ -1193,12 +1430,13 @@ export class ItemDrawer {
    * @returns Resolves once saved.
    */
   protected async saveDates(change: UpdateItemRequest): Promise<void> {
-    const d = this.detail();
-    if (d === null) return;
     if (!this.isProject()) {
       await this.save(change);
       return;
     }
+    if (!(await this.resolveConflict(Object.keys(change) as (keyof WorkItemDto)[]))) return;
+    const d = this.detail();
+    if (d === null) return;
     const result = await this.flow.change([{ item: d.id, ...change }]);
     if (result !== null) await this.reload();
   }
@@ -1223,6 +1461,7 @@ export class ItemDrawer {
    * @returns Resolves once moved.
    */
   protected async moveTo(value: string): Promise<void> {
+    if (!(await this.resolveConflict(['bucketId']))) return;
     const d = this.detail();
     if (d === null) return;
     const bucketId = this.orNull(value);
@@ -1454,6 +1693,8 @@ export class ItemDrawer {
     this.detail.set(null);
     this.children.set([]);
     this.error.set('');
+    this.gone.set('');
+    this.pendingRemote = null;
     this.editingTitle.set(false);
     try {
       const [detail, children] = await Promise.all([

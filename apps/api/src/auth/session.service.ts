@@ -103,9 +103,11 @@ export class SessionService {
    * a second line of defence).
    *
    * @param token Raw token from the cookie.
+   * @param touch Whether the request counts as activity and may refresh
+   *   `lastSeenAt`; live updates routes pass false (M10).
    * @returns The auth context, or null if the token is not a live session.
    */
-  async validate(token: string): Promise<AuthContext | null> {
+  async validate(token: string, touch = true): Promise<AuthContext | null> {
     const session = await this.prisma.session.findUnique({
       where: { tokenHash: hashToken(token) },
       include: { user: true },
@@ -120,13 +122,48 @@ export class SessionService {
       return null;
     }
 
-    if (now - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
+    if (touch && now - session.lastSeenAt.getTime() > TOUCH_INTERVAL_MS) {
       await this.prisma.session.update({
         where: { id: session.id },
         data: { lastSeenAt: new Date(now) },
       });
     }
     return { user: session.user, sessionId: session.id };
+  }
+
+  /**
+   * Reports which of the given sessions are still live, without touching
+   * them, so a live updates stream never extends a session (M10).
+   *
+   * @param sessionIds Session ids.
+   * @returns The ids of sessions within their idle and absolute deadlines
+   *   whose users are active.
+   */
+  async liveSessionIds(sessionIds: readonly string[]): Promise<Set<string>> {
+    if (sessionIds.length === 0) return new Set();
+    const [rows, { idleTimeoutMinutes }] = await Promise.all([
+      this.prisma.session.findMany({
+        where: { id: { in: [...sessionIds] } },
+        select: {
+          id: true,
+          expiresAt: true,
+          lastSeenAt: true,
+          user: { select: { isActive: true } },
+        },
+      }),
+      this.settings.getSecurity(),
+    ]);
+    const now = Date.now();
+    return new Set(
+      rows
+        .filter(
+          (s) =>
+            s.user.isActive &&
+            s.expiresAt.getTime() > now &&
+            s.lastSeenAt.getTime() + idleTimeoutMinutes * 60_000 > now,
+        )
+        .map((s) => s.id),
+    );
   }
 
   /**

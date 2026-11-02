@@ -45,6 +45,55 @@ new sign-ins. Password resets preserve introduction state; they are not a way to
 re-enroll users in the introduction. Temporary passwords are shown once. Check
 server time/timezone since backup, due-date and cleanup schedules use server time.
 
+## Live updates
+
+Boards, backlogs, timelines, item details, My work and the notification bell update
+while people look at them, and people see who else has an item open (presence). The
+browser keeps one Server-Sent Events stream per tab at `/<app_name>/api/v1/events`
+through the existing `ProxyPass` for `/api/`; PostgreSQL notifications on the same
+database carry ids only, and every event is filtered by the viewer's visibility before
+it is sent. Nothing calls an external service. The stream never extends a session: it
+ends when the session ends or expires, at sign-out, password change and deactivation.
+Presence is kept in API memory only; it is never stored, audited or exported, and it
+cannot be hidden per person.
+
+Admin settings › General › **Live updates** (on by default) switches streams and
+presence off for everyone at once. Open streams end immediately; tabs that are already
+open pick up a later switch-on when they reload. The API sends `Cache-Control:
+no-cache, no-transform` and `X-Accel-Buffering: no`, so httpd's `mod_deflate` leaves the
+stream alone.
+
+Check streaming through httpd with a signed-in session cookie (copy the `sid` cookie
+value from the browser's developer tools; never paste it into reports):
+
+```bash
+curl -N -H 'Cookie: sid=<session cookie>' https://<host>/<app_name>/api/v1/events
+```
+
+The stream answers at once with `retry:` and an `event: hello` line, then prints
+`: heartbeat` every 25 seconds. If the first lines arrive only after a long delay or in
+bursts, httpd is holding the stream back; add the fallback line below.
+
+Fallback, only when streaming is delayed: add one line to the Kloister conf file
+(`/etc/httpd/conf.d/<app_name>.conf`), before the general `ProxyPass .../api/` line, then
+check the configuration and reload httpd:
+
+```apache
+ProxyPass /<app_name>/api/v1/events http://127.0.0.1:<backend_port>/api/v1/events flushpackets=on timeout=3600
+```
+
+```bash
+sudo apachectl configtest
+```
+
+```bash
+sudo systemctl reload httpd
+```
+
+Upgrades never change httpd configuration, so this line is always added by hand. Until
+streaming works, an administrator can switch **Live updates** off under Admin settings ›
+General; the app then behaves as before (changes show after a reload).
+
 ## Backups and coverage
 
 Database backups default to enabled at **02:00 server time**, retained 14 days.

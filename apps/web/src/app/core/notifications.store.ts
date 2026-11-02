@@ -12,8 +12,10 @@ import { apiUrl } from './api';
 /**
  * The signed-in user's notifications (SPEC §6): the unread count shown on
  * the bell, polled every 60 seconds while someone is signed in, and the
- * calls of the notifications page. The API only ever returns the caller's
- * own notifications about items they can still see.
+ * calls of the notifications page. While live updates are connected (M10)
+ * the count changes at once on notification events and the poll pauses;
+ * it stays as the fallback while the stream is down. The API only ever
+ * returns the caller's own notifications about items they can still see.
  */
 @Injectable({ providedIn: 'root' })
 export class NotificationsStore {
@@ -21,6 +23,9 @@ export class NotificationsStore {
 
   /** Unread notifications, as last counted. */
   readonly unread = signal(0);
+
+  /** True while live updates are connected (M10); the poll then pauses. */
+  live = false;
 
   private timer: ReturnType<typeof setInterval> | undefined;
 
@@ -31,7 +36,9 @@ export class NotificationsStore {
   start(): void {
     this.stop();
     void this.refresh();
-    this.timer = setInterval(() => void this.refresh(), NOTIFICATION_POLL_MS);
+    this.timer = setInterval(() => {
+      if (!this.live) void this.refresh();
+    }, NOTIFICATION_POLL_MS);
   }
 
   /** Stops polling and forgets the count, e.g. after signing out. */

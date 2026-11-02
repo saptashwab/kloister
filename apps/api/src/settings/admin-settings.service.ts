@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import {
   AuditAction,
   type DiskUsageDto,
+  type LiveSettingsDto,
   type LogSettingsDto,
   type SecuritySettingsDto,
   type StorageSettingsDto,
@@ -16,6 +17,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { diskSpace, folderUsage } from './disk-usage.js';
 import {
+  LIVE_SETTINGS_KEY,
   LOG_SETTINGS_KEY,
   SECURITY_SETTINGS_KEY,
   SettingsService,
@@ -109,6 +111,20 @@ export class AdminSettingsService {
   async saveLogs(auth: AuthContext, value: LogSettingsDto): Promise<LogSettingsDto> {
     const saved: LogSettingsDto = { retentionDays: value.retentionDays };
     await this.store(auth, LOG_SETTINGS_KEY, { ...saved });
+    return saved;
+  }
+
+  /**
+   * Saves the live updates switch (M10). Its audit entry also tells every
+   * API process to close or accept streams.
+   *
+   * @param auth The admin.
+   * @param value The switch.
+   * @returns The saved setting.
+   */
+  async saveLive(auth: AuthContext, value: LiveSettingsDto): Promise<LiveSettingsDto> {
+    const saved: LiveSettingsDto = { enabled: value.enabled };
+    await this.store(auth, LIVE_SETTINGS_KEY, { ...saved });
     return saved;
   }
 

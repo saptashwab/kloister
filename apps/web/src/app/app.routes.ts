@@ -45,6 +45,12 @@ export const routes: Routes = [
       import('./pages/admin-settings/admin-settings').then((m) => m.AdminSettingsPage),
     children: [
       {
+        // The live updates switch (M10).
+        path: 'general',
+        loadComponent: () =>
+          import('./pages/admin-settings/admin-general').then((m) => m.AdminGeneralPage),
+      },
+      {
         path: 'branding',
         loadComponent: () =>
           import('./pages/admin-settings/admin-branding').then((m) => m.AdminBrandingPage),
@@ -75,7 +81,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/admin-settings/admin-holidays').then((m) => m.AdminHolidaysPage),
       },
-      { path: '', pathMatch: 'full', redirectTo: 'branding' },
+      { path: '', pathMatch: 'full', redirectTo: 'general' },
     ],
   },
   {

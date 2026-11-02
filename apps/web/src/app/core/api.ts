@@ -2,6 +2,12 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { API_PREFIX, type ErrorResponse } from '@kloister/shared';
 
 /**
+ * This tab's random id, sent with every request (`X-Client-Id`) and with
+ * the live stream, so the tab skips the echo of its own changes (M10).
+ */
+export const CLIENT_ID = `t${Math.random().toString(36).slice(2, 12)}${Date.now().toString(36)}`;
+
+/**
  * Builds an API URL relative to the document base href, so the app works
  * under whatever `/<app_name>/` path httpd serves it from (SPEC §9.2).
  *

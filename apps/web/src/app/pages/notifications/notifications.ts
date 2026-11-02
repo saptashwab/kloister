@@ -1,10 +1,11 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { RouterLink } from '@angular/router';
 import { type NotificationDto, NotificationType } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
 import { notificationIcon, notificationText } from '../../core/notification-text';
+import { LiveService } from '../../core/live.service';
 import { NotificationsStore } from '../../core/notifications.store';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
@@ -121,10 +122,21 @@ export class NotificationsPage {
   /** Counts first-page loads, so stale answers are dropped. */
   private loadRun = 0;
 
-  /** Loads the first page and refreshes the bell. */
+  /**
+   * Loads the first page and refreshes the bell; reloads the first page when
+   * a notification arrives live (M10).
+   */
   constructor() {
     void this.load(undefined);
     void this.store.refresh();
+    const live = inject(LiveService);
+    let seen = live.notificationArrived();
+    effect(() => {
+      const arrived = live.notificationArrived();
+      if (arrived === seen) return;
+      seen = arrived;
+      untracked(() => void this.load(undefined));
+    });
   }
 
   /**

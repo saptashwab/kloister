@@ -4,11 +4,14 @@ import {
   afterNextRender,
   Component,
   computed,
+  DestroyRef,
+  effect,
   type ElementRef,
   inject,
   Injector,
   type OnInit,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
@@ -28,6 +31,8 @@ import {
   ItemStatus,
   ItemType,
   type PlanEdge,
+  PresenceAction,
+  type PresenceField,
   ProjectPermission,
   type ProjectHolidaysDto,
   requiresBucket,
@@ -48,7 +53,8 @@ import { dayOf } from '../../core/format';
 import { ItemsApiService } from '../../core/items-api.service';
 import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
 import { PageActions } from '../../core/page-actions';
-import { ProjectContext } from '../../core/project-context';
+import { changedFields, CONFLICT_FIELDS, personName, personWithRole } from '../../core/live-logic';
+import { type ItemHold, ProjectContext, type RemoteChange } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
 import { SessionStore } from '../../core/session.store';
 import {
@@ -81,9 +87,11 @@ import {
   type TimelineZoom,
 } from '../../core/timeline-logic';
 import { StaticAvatar } from '../../ui/avatar';
+import { keepMine } from '../../ui/conflict';
 import { Dialogs } from '../../ui/dialogs';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
+import { PresenceAvatars } from '../../ui/live-ui';
 import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
 import { dialogMotion } from '../../ui/motion';
@@ -107,6 +115,27 @@ type ColumnId =
   | 'priority'
   | 'work'
   | 'progress';
+
+/** The presence field each editable column names (M10). */
+const COLUMN_FIELDS: Partial<Record<ColumnId, PresenceField>> = {
+  title: 'title',
+  start: 'startDate',
+  days: 'duration',
+  due: 'dueDate',
+  pred: 'dependencies',
+  who: 'assignees',
+  status: 'status',
+  type: 'type',
+  sprint: 'sprint',
+};
+
+/** The item fields each text column writes, for the conflict notice (M10). */
+const COLUMN_WRITES: Partial<Record<ColumnId, readonly (keyof WorkItemDto)[]>> = {
+  title: CONFLICT_FIELDS.title,
+  start: CONFLICT_FIELDS.dates,
+  days: CONFLICT_FIELDS.dates,
+  due: CONFLICT_FIELDS.dates,
+};
 
 /** A grid column. */
 interface Column {
@@ -222,6 +251,7 @@ interface BarDraft {
     MatSelectModule,
     EmptyState,
     Icon,
+    PresenceAvatars,
     Skeleton,
     StaticAvatar,
     StatusPill,
@@ -632,6 +662,8 @@ interface BarDraft {
                 [class.summary]="r.summary !== null"
                 [class.selected]="selected().has(r.node.id)"
                 [class.flash]="flash() === r.node.id"
+                [class.k-live-flash]="ctx.flashing().has(r.node.id)"
+                [attr.title]="changedBy(r.node.id)"
                 [attr.aria-selected]="r.node.item ? selected().has(r.node.id) : null"
               >
                 <div class="cells" [style.width.px]="gridPane()">
@@ -659,6 +691,8 @@ interface BarDraft {
                       [class.num]="c.id === 'days' || c.id === 'work' || c.id === 'progress'"
                       [class.title]="c.id === 'title'"
                       [class.focus]="focus().row === i && focus().col === ci"
+                      [class.k-live-other]="otherEditor(r.node.id, c.id) !== null"
+                      [attr.data-initials]="otherEditor(r.node.id, c.id)"
                       [attr.tabindex]="focus().row === i && focus().col === ci ? 0 : -1"
                       [attr.aria-readonly]="!editable(r, c) || null"
                       (click)="focusCell(i, ci, false)"
@@ -745,6 +779,8 @@ interface BarDraft {
                           [class.blocked]="it.status === 'BLOCKED'"
                           [class.done]="it.status === 'DONE'"
                           [class.conflict]="conflictMap().has(it.id)"
+                          [class.k-live-other]="otherMover(it.id) !== null"
+                          [attr.data-initials]="otherMover(it.id)"
                           [style.left.px]="b.left"
                           [style.width.px]="b.width"
                           [style]="barVars(it)"
@@ -766,6 +802,14 @@ interface BarDraft {
                         </div>
                       }
                       <div class="blabel" [style.left.px]="b.left + b.width + 8">
+                        @if (ctx.presenceByItem().get(it.id); as people) {
+                          <app-presence
+                            [people]="people"
+                            [members]="ctx.membersById()"
+                            what="this bar"
+                            [size]="16"
+                          />
+                        }
                         @if (it.startNoEarlierThan) {
                           <app-icon class="pin" name="pin" [size]="12" label="Pinned start" />
                         }
@@ -1063,6 +1107,20 @@ export class TimelinePage implements OnInit {
   private readonly injector = inject(Injector);
   private readonly dialog = inject(MatDialog);
   private readonly holidaysApi = inject(HolidaysApiService);
+  /** Holds the item of the cell being edited (M10). */
+  private editHold: ItemHold | null = null;
+  /** Holds the item of the bar being dragged (M10). */
+  private barHold: ItemHold | null = null;
+  /** Ends holds when the page closes, so the item does not stay busy (M10). */
+  private readonly holdsEnd = inject(DestroyRef).onDestroy(() => {
+    void this.editHold?.release();
+    void this.barHold?.release();
+  });
+  /** Reloads the links and holidays when someone else changed them (M10). */
+  private readonly linksWatch = effect(() => {
+    if (this.ctx.linksVersion() === 0) return;
+    untracked(() => void this.loadEdges().catch(() => undefined));
+  });
   /** Shows this view's Export… in the project header (the workbook has a Timeline sheet). */
   private readonly pageActions = inject(PageActions).register(() => ({
     source: this.ctx.project()?.id ?? '',
@@ -1911,6 +1969,8 @@ export class TimelinePage implements OnInit {
         pred: this.predNumbers(item),
       }[c.id as 'title' | 'start' | 'days' | 'due' | 'pred'] ??
       '';
+    void this.editHold?.release();
+    this.editHold = this.ctx.hold(item.id, PresenceAction.EDITING, COLUMN_FIELDS[c.id] ?? null);
     this.editing.set({ row, col, value });
     afterNextRender(
       () => {
@@ -1973,6 +2033,8 @@ export class TimelinePage implements OnInit {
     if (event.key === 'Escape') {
       event.preventDefault();
       this.editing.set(null);
+      void this.editHold?.release();
+      this.editHold = null;
       this.focusCell(e.row, e.col);
     } else if (event.key === 'Enter') {
       event.preventDefault();
@@ -1999,8 +2061,110 @@ export class TimelinePage implements OnInit {
     if (next === 'add') this.focusAdd(null);
     else if (next !== null) this.focusCell(next.row, next.col);
     else this.focus.set({ row: e.row, col: e.col });
-    if (r?.node.item === null || r === undefined || c === undefined) return;
-    await this.saveCell(r.node.item, c.id, e.value.trim());
+    const hold = this.editHold;
+    this.editHold = null;
+    const missed = (await hold?.release(false)) ?? null;
+    if (r?.node.item === null || r === undefined || c === undefined) {
+      if (missed !== null) this.ctx.applyRemote(missed);
+      return;
+    }
+    const item = await this.afterMissed(r.node.item, missed, COLUMN_WRITES[c.id] ?? [], 'editing');
+    if (item !== null) await this.saveCell(item, c.id, e.value.trim());
+  }
+
+  /**
+   * Applies a change someone else made while the caller edited or dragged
+   * the same item. When it touched what the caller is changing, the caller
+   * chooses: Keep mine (save on top of theirs) or Use theirs (M10 plan
+   * sections 4.3, 4.3.1). No role outranks another; the notice names theirs.
+   *
+   * @param item The copy the edit started from.
+   * @param missed The waiting change, if any.
+   * @param fields What the caller's change writes.
+   * @param doing "editing" or "moving", for the notice.
+   * @returns The item to save the caller's change on, or null to drop it.
+   */
+  private async afterMissed(
+    item: WorkItemDto,
+    missed: RemoteChange | null,
+    fields: readonly (keyof WorkItemDto)[],
+    doing: 'editing' | 'moving',
+  ): Promise<WorkItemDto | null> {
+    if (missed === null) return item;
+    this.ctx.applyRemote(missed);
+    if (missed.item === null) {
+      this.toast.show(
+        missed.deleted
+          ? `${personName(this.ctx.membersById(), missed.actorId)} deleted this item`
+          : 'This item is no longer available to you',
+      );
+      return null;
+    }
+    if (!changedFields(item, missed.item, fields)) return missed.item;
+    const who = personWithRole(this.ctx.membersById(), missed.actorId);
+    const keep = await keepMine(
+      this.dialog,
+      doing === 'moving'
+        ? `${who} changed the dates of this item while you were moving it`
+        : `${who} changed this while you were editing`,
+    );
+    return keep ? missed.item : null;
+  }
+
+  /**
+   * Initials of someone else editing a cell's field, for its outline.
+   *
+   * @param itemId Item id.
+   * @param column The cell's column.
+   * @returns Their initials, or null.
+   */
+  protected otherEditor(itemId: string, column: ColumnId): string | null {
+    const field = COLUMN_FIELDS[column];
+    const entry = this.ctx
+      .presenceByItem()
+      .get(itemId)
+      ?.find((p) => p.action === PresenceAction.EDITING && p.field === field);
+    return entry === undefined ? null : this.initials(entry.userId);
+  }
+
+  /**
+   * Initials of someone else dragging a bar, for its outline.
+   *
+   * @param itemId Item id.
+   * @returns Their initials, or null.
+   */
+  protected otherMover(itemId: string): string | null {
+    const entry = this.ctx
+      .presenceByItem()
+      .get(itemId)
+      ?.find((p) => p.action === PresenceAction.MOVING);
+    return entry === undefined ? null : this.initials(entry.userId);
+  }
+
+  /**
+   * "Changed by … just now" of a recently changed row.
+   *
+   * @param itemId Item id.
+   * @returns The text, or null.
+   */
+  protected changedBy(itemId: string): string | null {
+    this.ctx.recent();
+    return this.ctx.changedBy(itemId);
+  }
+
+  /**
+   * A person's initials.
+   *
+   * @param userId The person.
+   * @returns Up to two letters.
+   */
+  private initials(userId: string): string {
+    return personName(this.ctx.membersById(), userId)
+      .split(/\s+/)
+      .map((w) => w[0] ?? '')
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
   }
 
   /**
@@ -2228,6 +2392,8 @@ export class TimelinePage implements OnInit {
     event.preventDefault();
     (event.target as HTMLElement).setPointerCapture(event.pointerId);
     this.drag = { id: item.id, mode, x: event.clientX, pointer: event.pointerId };
+    void this.barHold?.release();
+    this.barHold = this.ctx.hold(item.id, PresenceAction.MOVING);
     const target = event.target as HTMLElement;
     const move = (e: PointerEvent) => {
       if (this.drag === null) return;
@@ -2291,13 +2457,21 @@ export class TimelinePage implements OnInit {
    * @returns Resolves once saved or cancelled.
    */
   private async commitBar(item: WorkItemDto): Promise<void> {
+    const hold = this.barHold;
+    this.barHold = null;
+    const missed = (await hold?.release(false)) ?? null;
     const draft = this.barDraft();
-    if (draft === null || draft.id !== item.id) return;
-    if (draft.start === 0 && draft.end === 0) {
+    if (draft === null || draft.id !== item.id || (draft.start === 0 && draft.end === 0)) {
+      if (draft?.id === item.id) this.barDraft.set(null);
+      if (missed !== null) this.ctx.applyRemote(missed);
+      return;
+    }
+    // The dates the caller dropped the bar on, from the copy they saw.
+    const to = this.drafted(item, draft);
+    if ((await this.afterMissed(item, missed, CONFLICT_FIELDS.dates, 'moving')) === null) {
       this.barDraft.set(null);
       return;
     }
-    const to = this.drafted(item, draft);
     try {
       await this.reschedule([{ item: item.id, ...to }]);
     } finally {

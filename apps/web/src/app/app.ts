@@ -30,7 +30,7 @@ import { Icon } from './ui/icon';
  * shown without it. At narrow widths the sidebar opens from a menu button.
  * The bell (sidebar link, and a top bar button at narrow widths) shows the
  * unread notification count, polled every 60 seconds while signed in
- * (SPEC §6).
+ * (SPEC §6) and updated at once while live updates are connected (M10).
  *
  * The name and logo come from the admin's branding, and the signed-in
  * user's own theme is loaded at sign-in (SPEC §6), so no product or
@@ -85,6 +85,9 @@ export class App {
     const user = this.store.user();
     return user && !user.mustChangePassword ? user : null;
   });
+  /** The sign-in extras (introduction, live updates), once loaded. */
+  private signedIn: typeof import('./core/signed-in') | undefined;
+
   /** Refresh session services only when the signed-in, password-cleared identity changes. */
   private readonly activeIdentity = computed(() => this.user()?.id);
 
@@ -116,7 +119,7 @@ export class App {
 
   /**
    * Loads the project switcher and the user's own theme and starts the
-   * notification polling when someone signs in (stopping it and returning
+   * notification polling and live updates when someone signs in (stopping it and returning
    * to the default theme when they sign out), and closes the narrow sidebar
    * after every navigation.
    */
@@ -128,8 +131,14 @@ export class App {
           this.nav.clear();
           this.notifications.stop();
           this.theme.setUserTheme(null);
+          this.signedIn?.stopLive(this.injector);
         } else {
-          void import('./pages/help/tour').then((m) => m.offerIntroduction(this.injector, id));
+          // Loaded after sign-in, so the first page stays small (M10).
+          void import('./core/signed-in').then((m) => {
+            this.signedIn = m;
+            m.startLive(this.injector);
+            void m.offerIntroduction(this.injector, id);
+          });
           void this.nav.refresh();
           this.notifications.start();
           void this.theme.loadUserTheme();

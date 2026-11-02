@@ -15,6 +15,8 @@ outbound email or external services at runtime.
 - My work across projects, private personal spaces, project roles and optional teams.
 - Rich descriptions, checklists, notes, mentions, attachments and pasted images.
 - Item duplication, independent copies per person, Excel snapshots and offline archives.
+- **Live updates**: boards, timelines, item details and the bell follow other people's changes
+  without a reload, and you see who else has an item open.
 - In-app notifications, themes, branding, bundled fonts and keyboard navigation.
 - Local accounts, access controls, audit history and scheduled database backups.
 - Searchable **Help & FAQ** and a skippable introduction with **Take the tour** replay.

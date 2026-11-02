@@ -4,6 +4,7 @@ import {
   BACKUP_TIME_PATTERN,
   type BackupSettingsDto,
   HEX_COLOUR_PATTERN,
+  type LiveSettingsDto,
   LOG_RETENTION_LIMITS,
   type LogSettingsDto,
   SECURITY_LIMITS,
@@ -74,6 +75,13 @@ export class LogSettingsBody implements LogSettingsDto {
   /** Days daily log files are kept. */
   @IntIn(LOG_RETENTION_LIMITS)
   retentionDays: number;
+}
+
+/** Body of `PUT /admin/settings/live`. */
+export class LiveSettingsBody implements LiveSettingsDto {
+  /** Whether live updates and presence are on. */
+  @IsBoolean()
+  enabled: boolean;
 }
 
 /** Body of `PUT /admin/backups/settings`; every field is required. */
