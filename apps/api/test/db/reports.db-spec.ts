@@ -150,18 +150,25 @@ describe('shares, reports and calendar (db)', () => {
       });
       expect(created.statusCode).toBe(201);
       const item = created.json() as WorkItemDetailDto;
-      expect(item.assigneeShares).toEqual([
-        { userId: ids.member, share: 100 },
-        { userId: ids.lead, share: 25 },
-      ]);
+      // Assignees added together come back in id order, so compare as sets.
+      const sorted = (list: { userId: string; share: number }[]) =>
+        [...list].sort((a, b) => a.userId.localeCompare(b.userId));
+      expect(sorted(item.assigneeShares)).toEqual(
+        sorted([
+          { userId: ids.member, share: 100 },
+          { userId: ids.lead, share: 25 },
+        ]),
+      );
       // Plain ids keep the shares of people who stay; new people get 100%.
       const kept = await as('pm', 'PATCH', base(`/items/${item.id}`), {
         assigneeIds: [ids.lead, ids.pm],
       });
-      expect((kept.json() as WorkItemDetailDto).assigneeShares).toEqual([
-        { userId: ids.lead, share: 25 },
-        { userId: ids.pm, share: 100 },
-      ]);
+      expect(sorted((kept.json() as WorkItemDetailDto).assigneeShares)).toEqual(
+        sorted([
+          { userId: ids.lead, share: 25 },
+          { userId: ids.pm, share: 100 },
+        ]),
+      );
       for (const share of [0, 33, 105]) {
         const bad = await as('pm', 'PATCH', base(`/items/${item.id}`), {
           assignees: [{ userId: ids.lead, share }],
