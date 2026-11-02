@@ -173,7 +173,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **WorkItem**: projectId, number (per-project sequence), type (`EPIC|FEATURE|STORY|TASK|BUG`), parentId,
   title, description (sanitized HTML), status (`NOT_STARTED|IN_PROGRESS|BLOCKED|DONE`), priority (1–4),
   bucketId (required for STORY/TASK/BUG; optional for EPIC/FEATURE), sprintId, teamId (nullable), startDate,
-  startAfternoon (M9), startNoEarlierThan and startNoEarlierThanAfternoon (timeline pin, M9),
+  startSecondHalf and dueFirstHalf (timeline half days, M9), startNoEarlierThan and
+  startNoEarlierThanSecondHalf (timeline pin, M9),
   dueDate, dueTime (optional minutes after midnight, wall-clock with no time zone; needs a dueDate; M8.5),
   position (fractional index for ordering), createdById, completedAt
 - **WorkItemAssignee**: workItemId, userId (many-to-many)
@@ -392,8 +393,9 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   defaults to the allowed child), and multi-line paste creating rows after a preview. Predecessors are item
   numbers and use the existing dependency rules.
 - Durations are working days (Monday to Friday, no holiday calendar) in half-day steps; any two of start,
-  duration and due set the third. An item starts in the morning or, with `startAfternoon`, the afternoon; it
-  finishes at midday when its due time is 12:00 and at the end of the day otherwise.
+  duration and due set the third. Each day has a 1st and a 2nd half with no clock
+  times: an item starts in the 1st half or, with `startSecondHalf`, the 2nd; it finishes at the end of the 2nd half
+  or, with `dueFirstHalf`, after the 1st. The M8.5 due time stays a deadline only and never affects scheduling.
 - Totals: Epics, Features and Stories with dated visible descendants show their span (earliest start, latest
   finish, working days between) as read-only summary values, with an optional work column summing leaf
   durations; the toolbar shows the plan's span and working days. Totals are display-only, never written back,

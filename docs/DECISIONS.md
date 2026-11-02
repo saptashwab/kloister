@@ -47,9 +47,15 @@
     confirmation until a PM switches it on, so the instance in use sees no
     behaviour change.
   - Durations are in half working days. This takes one additive migration on
-    `WorkItem`: `startAfternoon`, plus the pin columns `startNoEarlierThan` and
-    `startNoEarlierThanAfternoon`. The owner approved the migration. A midday
-    finish reuses `dueTime` 12:00.
+    `WorkItem`: `startSecondHalf`, `dueFirstHalf`, plus the pin columns
+    `startNoEarlierThan` and `startNoEarlierThanSecondHalf`. The owner approved
+    the migration.
+  - Owner refinement after the mockups: halves are "1st half" and "2nd half",
+    with no clock time such as noon defined in the app. The details panel's
+    Morning and Afternoon name the same halves. A first-half finish is therefore
+    its own flag rather than a 12:00 due time, which would also have made such
+    items overdue from noon. Layout A (spreadsheet first) was chosen from the
+    mockups.
   - Epics, Features and Stories show their span as summary values. An optional
     Work column sums leaf durations, and the toolbar and workbook show the
     plan's total working days. All of these are display-only and use visible

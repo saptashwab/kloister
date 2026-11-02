@@ -101,35 +101,39 @@ opens over it at `/p/:key/timeline/items/:number`, as it does under `/backlog`.
 ### 3.2 Dates and duration
 
 - Durations are in **working days** (Monday to Friday, no holiday calendar), in
-  steps of **half a day**. Each working day has a morning and an afternoon half;
-  there are no working hours.
+  steps of **half a day**. Each working day has a **1st half** and a **2nd half**.
+  The app defines no clock times for them: no working hours and no noon. Grid
+  cells and exports say "1st half" and "2nd half"; the details panel says
+  Morning and Afternoon, which mean the same halves.
 - Stored per item:
-  - `startDate`, plus the new `startAfternoon` flag (default false: the item
-    starts in the morning);
-  - `dueDate`, plus the existing due time (M8.5). A due time of exactly 12:00
-    means the item finishes at midday. No due time, or any other due time, means
-    it finishes at the end of that day.
+  - `startDate`, plus the new `startSecondHalf` flag (default false: the item
+    starts in the 1st half);
+  - `dueDate`, plus the new `dueFirstHalf` flag (default false: the item
+    finishes at the end of the 2nd half).
+  - The M8.5 due time is separate and unchanged: an optional deadline time for
+    overdue checks and sorting, never used for scheduling.
   - Duration itself is not stored; it is computed from those.
 - Duration is the number of working half days from the start half to the finish
-  half, both included, divided by two. Examples: Monday morning to Monday midday
-  is 0.5; Monday afternoon to Tuesday midday is 1; Monday morning to Friday end of
-  day is 5.
+  half, both included, divided by two. Examples: Monday 1st half to Monday 1st
+  half is 0.5; Monday 2nd half to Tuesday 1st half is 1; Monday 1st half to Friday
+  2nd half is 5.
 - Any two of Start, Duration and Due set the third:
-  - changing Duration keeps Start and sets Due (and a 12:00 due time when the
-    finish falls at midday, or no due time when it falls at the end of a day);
+  - changing Duration keeps Start and sets Due and its half;
   - changing Due keeps Start and recomputes Duration;
   - changing Start keeps Duration and moves Due.
 - A typed duration must be at least 0.5 and a multiple of 0.5. Start and Due cells
-  accept a date, optionally followed by AM or PM ("4 Nov PM").
+  accept a date, optionally followed by the half ("4 Nov 2nd", "4 Nov 2nd half");
+  a cell shows the half only when it is not the default ("5 Nov, 2nd half" for a
+  start, "11 Nov, 1st half" for a due date).
 - With only a due date, the row shows a due marker, not a bar. With only a start
   date, it shows a start marker.
 - A start or due date entered on a Saturday or Sunday is kept as entered, since
   dates are free-form elsewhere in the app. Durations count only the working half
   days between, so a weekend-only span shows 0. When a duration is counted from a
-  weekend start, counting begins on the next Monday morning.
+  weekend start, counting begins on the next Monday's 1st half.
 - Dates the timeline computes (section 4) always land on working half days.
-- A due time other than 12:00 that someone set in the drawer is kept when the item
-  moves; the timeline treats that item as finishing at the end of the day.
+- A due time someone set in the drawer is kept when the item moves; it does not
+  affect scheduling, and the timeline does not show it.
 - Dates use the app's one date format and the M8.5 day-first entry.
 
 ### 3.2.1 Totals for parents and the whole plan
@@ -225,9 +229,9 @@ opens over it at `/p/:key/timeline/items/:number`, as it does under `/backlog`.
 
 - A dependency is finish-to-start with no lag. An item's **earliest start** is the
   next working half day after the latest finish among its constraining
-  predecessors: a predecessor finishing at midday lets its successor start that
-  afternoon; one finishing at the end of a day lets it start the next working
-  morning.
+  predecessors: a predecessor finishing in the 1st half lets its successor start
+  in the 2nd half of the same day; one finishing in the 2nd half lets it start in
+  the 1st half of the next working day.
 - Only predecessors with a due date constrain their successors; a start-only
   predecessor does not. Predecessors constrain whatever their status, including
   Done.
@@ -337,7 +341,7 @@ project key. For a personal space, both endpoints return 404.
   auditing admins who are not members.
 
 - `POST /projects/:id/timeline/reschedule` takes
-  `{ changes: [{ item, startDate?, startAfternoon?, dueDate?, dueTime?, pin? }],
+  `{ changes: [{ item, startDate?, startSecondHalf?, dueDate?, dueFirstHalf?, pin? }],
 mode, expect? }`, where `mode` is `preview`, `apply` or `only`, and `pin` is
   `keep`, `set` or `remove`. With no `pin` given, the server applies the pin rule
   in 4.1.
@@ -366,7 +370,8 @@ mode, expect? }`, where `mode` is `preview`, `apply` or `only`, and `pin` is
 - Archived projects refuse `apply`, `only` and the automatic-mode switch, like
   any other write.
 - The existing item PATCH is unchanged. Item responses gain the additive
-  `startAfternoon` and `startNoEarlierThan` fields; the drawer shows a pin
+  `startSecondHalf`, `dueFirstHalf`, `startNoEarlierThan` and
+  `startNoEarlierThanSecondHalf` fields; the drawer shows a pin
   under the start date.
 - Working-half-day arithmetic and the planner's rules live once in
   `@kloister/shared` and are used by the API (moves) and the web (durations,
@@ -379,7 +384,7 @@ mode, expect? }`, where `mode` is `preview`, `apply` or `only`, and `pin` is
   Excel outline levels (collapsible groups, summary rows above) and an indented
   title; columns Key, Title, Type, Assignees, Status, Start, Duration (working
   days, in halves, as a value, not a formula), Due, Work, Half days ("starts
-  afternoon", "ends midday" where they apply), Start no earlier than,
+  2nd half", "ends 1st half" where they apply), Start no earlier than,
   Predecessors (keys of readable predecessors only), Sprint. Summary rows carry
   their span as in 3.2.1, and a first "Plan" row and the Summary sheet give the
   plan's total span and working days.
@@ -400,11 +405,13 @@ mode, expect? }`, where `mode` is `preview`, `apply` or `only`, and `pin` is
 ## 7. Data model
 
 - One additive migration on `WorkItem`, approved by the owner on 2026-11-02:
-  - `startAfternoon Boolean @default(false)`: the item starts in the afternoon;
+  - `startSecondHalf Boolean @default(false)`: the item starts in the 2nd half;
+  - `dueFirstHalf Boolean @default(false)`: the item finishes after the 1st half;
   - `startNoEarlierThan DateTime? @db.Date` and
-    `startNoEarlierThanAfternoon Boolean @default(false)`: the pin (4.1).
-- Existing rows get morning starts and no pins, so nothing changes for them.
-- A half-day finish reuses the existing `dueTime` (720, i.e. 12:00).
+    `startNoEarlierThanSecondHalf Boolean @default(false)`: the pin (4.1).
+- Existing rows start in the 1st half, finish at the end of the day and have no
+  pins, so nothing changes for them. Overdue still follows the due date and the
+  optional M8.5 due time only; `dueFirstHalf` never makes an item overdue earlier.
 - The automatic switch is a key in `Project.settings`, and the reschedule batch
   id is audit `meta`.
 - ADO transfers stay date-only: the start half and pins are not exported, an
@@ -438,7 +445,7 @@ Web (`apps/web/src/app/`):
 - `core/timeline-logic.ts` (outline building, row order, summary spans,
   conflicts, indent/outdent rules, paste parsing) with unit tests.
 - Project shell tab and route; Project settings › General switch; drawer date
-  fields (with AM/PM and the pin) use the reschedule flow; "Show on board" and
+  fields (with Morning/Afternoon for the halves, and the pin) use the reschedule flow; "Show on board" and
   "Show on timeline" in the drawer, card menu and backlog row menu.
 - `e2e/timeline.e2e-spec.ts` covers:
   - creating items by typing and by pasting, indent and outdent;
@@ -467,7 +474,12 @@ README feature list, DESIGN (timeline bars, conflict style), DECISIONS.
   - automatic moving is on for new projects;
   - existing projects keep the confirmation until a PM switches it on, which
     PMs can do from the dialog itself.
-- Durations are working days (Monday to Friday) in half-day steps.
+- Durations are working days (Monday to Friday) in half-day steps, named "1st
+  half" and "2nd half" (Morning and Afternoon in the details panel), with no
+  clock time defined for either.
+- From the design mockups, layout A was chosen: a spreadsheet-first grid
+  (key, title, start, days, due, predecessors, assignee) beside the bars, a
+  plan totals strip above, and the week zoom by default.
 - Parent rows show their total span, and the toolbar shows the plan's total
   working days.
 - Timeline rows and bars open the item's drawer, for viewing and editing.
