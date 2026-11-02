@@ -34,10 +34,11 @@ interface Internals {
 async function render(
   permissions: ('EXPORT_ADO' | 'IMPORT_ADO')[] = ['EXPORT_ADO', 'IMPORT_ADO'],
   destination: AdoDestinationDto | null = null,
+  profile: Promise<AdoDestinationDto | null> = Promise.resolve(destination),
 ) {
   const project = signal(makeProject({ myPermissions: permissions }));
   const api = {
-    profile: vi.fn().mockResolvedValue(destination),
+    profile: vi.fn().mockReturnValue(profile),
     sample: vi.fn(),
     reviewPolicy: vi.fn(),
     exportPreview: vi.fn(),
@@ -76,6 +77,31 @@ async function render(
 }
 
 describe('lazy transfer review lifecycle', () => {
+  it('keeps the destination when the form changes while it loads', async () => {
+    let answer: (value: AdoDestinationDto | null) => void = () => undefined;
+    const pending = new Promise<AdoDestinationDto | null>((resolve) => (answer = resolve));
+    const { page, fixture } = await render(['EXPORT_ADO', 'IMPORT_ADO'], null, pending);
+    // An early choice, e.g. the incoming workflow, before the settings arrive.
+    page.changed();
+    answer({
+      id: 'd',
+      organization: 'example-org',
+      remoteProject: 'Example',
+      profile: {
+        process: 'Agile',
+        reverseTypes: {},
+        incomingStates: {},
+        incomingIdentities: {},
+        tags: {},
+        iterations: {},
+      },
+      revision: 1,
+      requireDetailedReview: false,
+    } as unknown as AdoDestinationDto);
+    await settle(fixture);
+    expect(page.destination()?.remoteProject).toBe('Example');
+  });
+
   it('keeps Viewer snapshots separate and never loads transfer metadata without permission', async () => {
     const { fixture, api } = await render([]);
     expect(api.profile).not.toHaveBeenCalled();

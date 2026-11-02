@@ -225,8 +225,11 @@ export class AdoTransferPage {
       this.busy.set(true);
       void (async () => {
         await this.ctx.refresh();
-        const destination = await this.answer(this.api.profile(project.id));
-        if (this.ctx.project()?.id !== project.id) return;
+        // Not through answer(): form edits made while the settings load bump
+        // the epoch and must not discard them; only another project or role
+        // (a new context key) does.
+        const destination = await this.api.profile(project.id);
+        if (this.contextKey !== key || this.ctx.project()?.id !== project.id) return;
         this.destination.set(destination);
         if (destination) {
           this.editDestination(destination);
