@@ -1,5 +1,17 @@
 # Decisions
 
+## Planning: M11–M13 (2026-11-02)
+
+- The owner approved three milestones after M10, planned in docs/M11-PLAN.md, docs/M12-PLAN.md and
+  docs/M13-PLAN.md. M11 documents the system and completes the existing generated OpenAPI document (no
+  interactive explorer in the app). M12: default bucket for new items, sprints owned by Stories (Epic and Feature
+  sprints cleared at upgrade), ad-hoc items (left out of ADO export by default), Trash with 30-day restore
+  (admin-configurable 1–365), item references; closing a sprint moves a Story with its unfinished children. M13:
+  per-assignee shares (default 100%, no dialogs), four dashboards visible to every member with their visibility
+  applied (workload amber from 80%, red above 100%), calendars whose drag keeps the working duration.
+- Left out on purpose for now: watching items, estimates and story points (durations suffice), baselines,
+  saved views; email, SSO and webhooks stay out because the server makes no outbound calls.
+
 ## M10 live updates and presence (2026-11-02)
 
 - Built as planned in docs/M10-PLAN.md (owner decisions in its section 11). Choices made while building,
