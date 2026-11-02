@@ -1,5 +1,41 @@
 # Decisions
 
+## Planning update: M9 project timeline (2026-11-02)
+
+- Owner request: a project timeline for planning and reviewing Epic → Feature →
+  Story → Task work as a grid with start, duration, due and predecessors next to
+  bars, with quick spreadsheet-style entry, over the same items as every other
+  screen. Planned as milestone M9 in docs/M9-PLAN.md and SPEC §6.4; waiting for
+  approval of the plan's open questions before implementation.
+- Owner decisions: dependent items move after a confirmation by default, with an
+  opt-in automatic mode per project that PMs can switch on from that confirmation;
+  durations are working days (Monday to Friday, no holiday calendar); it is a new
+  milestone; project Excel snapshots, including the board's, gain the timeline
+  format as a Timeline sheet.
+- Accepted recommendations: a view over existing items (no separate plan data and
+  no table changes: dates and dependencies exist, the automatic switch is a key in
+  `Project.settings`); finish-to-start links with no lag; moves only push later;
+  projects only; grid-only at phone width; no third-party Gantt library (licences,
+  the bundle budget and the Material/CDK preference); dependency links stay out of
+  ADO CSV files, which cannot create them.
+- Visibility: moves are planned only over items the caller can see and edit, and
+  hidden items are never moved, listed or counted, matching the existing rule that
+  hidden children are not revealed even as a count. This replaces an earlier
+  suggestion to show "1 hidden predecessor".
+- An independent review of the plan led to these changes:
+  - applying a previewed reschedule checks the versions of every previewed move
+    and refuses if the recomputed plan differs;
+  - hidden items answer 404 before any version check;
+  - Undo is all or nothing;
+  - "moved with" activity text blanks hidden triggering items;
+  - new rows get a bucket and team the caller can see;
+  - the automatic switch is a flat settings key, because settings merge shallowly;
+  - only the timeline and the drawer move dependent items (the board has no date
+    fields);
+  - the grid follows the ARIA grid keyboard pattern and suppresses single-key
+    shortcuts;
+  - the working-day and indent edge cases are defined.
+
 ## v1.2.1 date entry and due-time list (2026-10-26)
 
 A small UI fix release on the owner's decision of 2026-10-26; no API, schema or
