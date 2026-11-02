@@ -1,5 +1,16 @@
 # Decisions
 
+## M9.3 own items until scheduled, suggested changes (2026-11-02)
+
+- Owner approved both proposals. A Member's own item stays editable and deletable until it is scheduled (start
+  or due date, sprint, or a visible dependency link); the "until a PM or Lead edits it" part was left out because
+  it needs an audit lookup per listed item or a schema change, and placing an item in the plan locks it anyway.
+  Visible children also count as scheduled. The lock is not sticky: removing an undated item's sprint (closing
+  or deleting the sprint) or its dates and links returns it to its creator; links to hidden items never count,
+  to avoid disclosing them.
+- Suggested changes reuse notes and mentions (no new endpoint): the note mentions the project's active PMs and
+  Leads. Team Leads are not mentioned automatically; the Member can mention them in a normal note.
+
 ## M9.2 plan setting and splitter (2026-11-02)
 
 - Owner decisions: "Only PMs and Leads change the plan" is a project setting, on for all projects including

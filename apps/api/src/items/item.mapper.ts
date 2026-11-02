@@ -10,8 +10,9 @@ import type { ItemFacts } from '../projects/project-access.service.js';
 
 /**
  * Relations every item response needs: assignees, labels, checklist
- * progress, and the number of children the caller can see (hidden children
- * are not revealed, not even as a count).
+ * progress, the number of children the caller can see (hidden children
+ * are not revealed, not even as a count) and of visible dependency links,
+ * which with the children tell whether the item is scheduled (M9.3).
  *
  * @param scope The caller's visibility filter.
  * @returns The Prisma include.
@@ -24,7 +25,13 @@ export function itemInclude(scope: Prisma.WorkItemWhereInput) {
     },
     labels: { select: { labelId: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
     checklist: { select: { done: true } },
-    _count: { select: { children: { where: scope } } },
+    _count: {
+      select: {
+        children: { where: scope },
+        blockedBy: { where: { blockingItem: scope } },
+        blocks: { where: { blockedItem: scope } },
+      },
+    },
   } satisfies Prisma.WorkItemInclude;
 }
 
@@ -58,6 +65,13 @@ export function itemFacts(row: ItemRow): ItemFacts {
     bucketId: row.bucketId,
     teamId: row.teamId,
     hasChildren: row._count.children > 0,
+    // Visible children count too: a parent's span comes from them (M9.3).
+    scheduled:
+      row._count.children > 0 ||
+      row.startDate !== null ||
+      row.dueDate !== null ||
+      row.sprintId !== null ||
+      row._count.blockedBy + row._count.blocks > 0,
   };
 }
 

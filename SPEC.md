@@ -93,10 +93,10 @@ kloister/
 | Duplicate fully visible items within the same space | ✔ | ✔ | ✔ | ✘ |
 | Edit any item | ✔ | ✔ | ✘ | ✘ |
 | Edit items assigned to or created by self | ✔ | ✔ | ✔ | ✘ |
-| Change the plan of existing items: title, type, parent, sprint, dates, half days, pin, dependencies | ✔ | ✔ | Own/assigned, only when the project setting allows (default off) | ✘ |
+| Change the plan of existing items: title, type, parent, sprint, dates, half days, pin, dependencies | ✔ | ✔ | Own unscheduled items; own/assigned when the project setting allows (default off) | ✘ |
 | Assign items to others | ✔ | ✔ | Project setting (default off) | ✘ |
 | Move cards between buckets | ✔ | ✔ | Own/assigned only | ✘ |
-| Delete items | ✔ | ✔ | Own created, no children, only when the project setting allows (default off) | ✘ |
+| Delete items | ✔ | ✔ | Own created, no children; once scheduled only when the project setting allows (default off) | ✘ |
 | Notes and attachments on visible items | ✔ | ✔ | ✔ | ✘ |
 | Manage buckets, labels, sprints | ✔ | ✔ | ✘ | ✘ |
 | Manage members, roles, visibility | ✔ | ✘ | ✘ | ✘ |
@@ -114,7 +114,11 @@ indenting, outdenting and linking) or delete items, since each of these changes 
 any of these when creating an item, and still edit the due time, status, checklist, assignees (within the
 assignment rule), labels, priority, bucket, description, notes and attachments of their own items. Team Leads
 keep their Lead rights on their team's items (3.5). Dependent items move only where the caller may change the
-plan.
+plan. An item a Member created stays theirs to finish and to delete until it is scheduled: it gets a start or
+due date, a sprint, or a dependency link or child the Member can see (M9.3); the change that schedules it is their
+last.
+A Member who may not change an item's plan can suggest a change: it is posted as a note on the item that
+mentions the project's PMs and Leads, who are notified as for any mention.
 
 Duplication requires the ordinary create permission, full visibility of the source and the normal creation,
 assignment and destination-scope checks. A title-only ancestor is not a readable source. Excel/offline export

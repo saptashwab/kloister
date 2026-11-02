@@ -2477,8 +2477,9 @@ export class TimelinePage implements OnInit {
         return;
       }
     }
-    // Undo deletes the rows, so it is offered only when the caller may
-    // (Members may not while the plan is kept to PMs and Leads).
+    // Undo deletes the rows, so it is offered only when the caller may delete
+    // every one (with the plan kept to PMs and Leads, a Member may not once a
+    // row is scheduled).
     if (rows.length > 1 && !created.every((i) => i.can.delete)) {
       this.toast.show(`${created.length} rows created`);
     } else if (rows.length > 1) {

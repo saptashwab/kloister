@@ -761,7 +761,9 @@ export class ItemsService {
    * Permissions: 404 unless visible; then project PMs and Leads may delete
    * any item, with or without cascade; team Leads their team's items without
    * cascade; Members items they created that have no children, while the
-   * project lets Members change the plan (M9.2; 403 otherwise). 409 `HAS_CHILDREN` for a non-cascade delete of a parent.
+   * project lets Members change the plan or the item is not yet scheduled
+   * (M9.2, M9.3; 403 otherwise). 409 `HAS_CHILDREN` for a non-cascade delete
+   * of a parent.
    *
    * @param auth The caller.
    * @param access The caller's access.

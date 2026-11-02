@@ -260,6 +260,13 @@ describe('work items (db)', () => {
     };
     // Non-members get 404; admins who are not members are read-only (403).
     const refusedOutside = { outsider: 404, admin: 403 };
+    /** Puts the Member's own item in the plan with a due date (M9.3). */
+    const scheduleMine = async (): Promise<void> => {
+      await prisma.workItem.update({
+        where: { id: itemIds.mine },
+        data: { dueDate: new Date('2026-11-06') },
+      });
+    };
     /** An open sprint for the sprint rows (M9.2). */
     let sprintId = '';
     const withSprint = async (): Promise<void> => {
@@ -300,11 +307,19 @@ describe('work items (db)', () => {
         expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
       },
       {
-        name: 'retitle own item (schedule kept to PMs and Leads, the default)',
+        name: 'retitle own scheduled item (default)',
         method: 'PATCH',
         url: () => item(N.mine),
+        setup: scheduleMine,
         body: () => ({ title: 'Edited' }),
         expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'retitle, date and re-parent own unscheduled item (default, M9.3)',
+        method: 'PATCH',
+        url: () => item(N.mine),
+        body: () => ({ title: 'Fixed', parentId: itemIds.story, dueDate: '2026-11-06' }),
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
       },
       {
         name: 'retitle own item (schedule open to Members)',
@@ -330,9 +345,10 @@ describe('work items (db)', () => {
         expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
       },
       {
-        name: 'move own item under a parent (default)',
+        name: 'move own scheduled item under a parent (default)',
         method: 'PATCH',
         url: () => item(N.mine),
+        setup: scheduleMine,
         body: () => ({ parentId: itemIds.story }),
         expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
       },
@@ -345,18 +361,22 @@ describe('work items (db)', () => {
         expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
       },
       {
-        name: 'change the type of own item (default)',
+        name: 'change the type of own scheduled item (default)',
         method: 'PATCH',
         url: () => item(N.mine),
+        setup: scheduleMine,
         body: () => ({ type: 'BUG' }),
         expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
       },
       {
-        name: 'put own item in a sprint (default)',
+        name: 'put own scheduled item in a sprint (default)',
         method: 'PATCH',
         url: () => item(N.mine),
         body: () => ({ sprintId }),
-        setup: withSprint,
+        setup: async () => {
+          await withSprint();
+          await scheduleMine();
+        },
         expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
       },
       {
@@ -458,9 +478,16 @@ describe('work items (db)', () => {
         expect: { pm: 204, lead: 204, member: 403, viewer: 403, ...refusedOutside },
       },
       {
-        name: 'delete own created item without children (default: plan kept to Leads)',
+        name: 'delete own unscheduled item without children (default, M9.3)',
         method: 'DELETE',
         url: () => item(N.mine),
+        expect: { pm: 204, lead: 204, member: 204, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'delete own scheduled item without children (default)',
+        method: 'DELETE',
+        url: () => item(N.mine),
+        setup: scheduleMine,
         expect: { pm: 204, lead: 204, member: 403, viewer: 403, ...refusedOutside },
       },
       {
@@ -578,11 +605,19 @@ describe('work items (db)', () => {
         expect: editOwn(204),
       },
       {
-        name: 'add dependency to own item (default)',
+        name: 'add dependency to own scheduled item (default)',
         method: 'POST',
         url: () => `${item(N.mine)}/dependencies`,
         body: () => ({ blockingItemId: itemIds.theirs }),
+        setup: scheduleMine,
         expect: editAny(200),
+      },
+      {
+        name: 'add the first dependency to own unscheduled item (default, M9.3)',
+        method: 'POST',
+        url: () => `${item(N.mine)}/dependencies`,
+        body: () => ({ blockingItemId: itemIds.theirs }),
+        expect: editOwn(200),
       },
       {
         name: 'add dependency to own item (schedule open to Members)',
@@ -667,15 +702,36 @@ describe('work items (db)', () => {
     });
 
     it('reports capabilities that match the rules', async () => {
+      // The Member's own item is still theirs to finish until it is scheduled (M9.3).
       const mine = (await as('member', 'GET', item(N.mine))).json() as WorkItemDetailDto;
       expect(mine.can).toEqual({
         edit: true,
-        plan: false,
+        plan: true,
         move: true,
-        delete: false,
+        delete: true,
         deleteCascade: false,
         annotate: true,
       });
+      await prisma.workItem.update({
+        where: { id: itemIds.mine },
+        data: { sprintId: (await seedSprint(prisma, projectId, 'S1')).id },
+      });
+      const planned = (await as('member', 'GET', item(N.mine))).json() as WorkItemDetailDto;
+      expect(planned.can).toMatchObject({ edit: true, plan: false, delete: false });
+      // A link to an item the Member sees schedules it too; the assigned item stays locked.
+      await prisma.workItem.update({ where: { id: itemIds.mine }, data: { sprintId: null } });
+      await prisma.workItemDependency.create({
+        data: { projectId, blockedItemId: itemIds.mine, blockingItemId: itemIds.theirs },
+      });
+      const linked = (await as('member', 'GET', item(N.mine))).json() as WorkItemDetailDto;
+      expect(linked.can.plan).toBe(false);
+      const assignedCan = (await as('member', 'GET', item(N.assigned))).json() as WorkItemDetailDto;
+      expect(assignedCan.can.plan).toBe(false);
+      // A parent the Member created counts as scheduled once it has visible children.
+      const parentCan = (
+        await as('member', 'GET', item(N.memberParent))
+      ).json() as WorkItemDetailDto;
+      expect(parentCan.can.plan).toBe(false);
       const theirs = (await as('member', 'GET', item(N.theirs))).json() as WorkItemDetailDto;
       expect(theirs.can).toMatchObject({ edit: false, move: false, delete: false });
       const lead = (await as('lead', 'GET', item(N.story))).json() as WorkItemDetailDto;

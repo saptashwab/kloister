@@ -329,13 +329,13 @@ test('admins add and remove instance holidays; others cannot use them', async ({
   expect((await page.request.get('api/v1/admin/holidays')).status()).toBe(403);
 });
 
-test('Members keep the schedule to PMs and Leads; the splitter narrows the table', async ({
+test('Members keep the plan to PMs and Leads, suggest changes; the splitter narrows the table', async ({
   page,
 }) => {
   await signIn(page, USERS.member);
   await page.goto(`/p/${PROJECT_KEY}/timeline`);
   const key = `${PROJECT_KEY}-${ITEMS.taskA}`;
-  // The Member's own task: its title and dates are not editable cells.
+  // A task assigned to the Member (created by the PM): its title and dates are not editable cells.
   const title = cell(page, key, 1);
   await title.dblclick();
   await expect(title.locator('input')).toHaveCount(0);
@@ -358,4 +358,12 @@ test('Members keep the schedule to PMs and Leads; the splitter narrows the table
   const drawer = page.getByRole('dialog', { name: 'Item details', exact: true });
   await expect(drawer.getByText('The plan is set by PMs and Leads')).toBeVisible();
   await expect(drawer.getByRole('textbox', { name: 'Due date' })).toHaveCount(0);
+  // Instead, the Member suggests a change; the PMs and Leads are mentioned (M9.3).
+  await drawer.getByRole('button', { name: 'Suggest a change…' }).click();
+  const ask = page.getByRole('dialog', { name: /Suggest a change/ });
+  await ask.getByRole('textbox').fill('Due 12 Nov, waiting on review');
+  await ask.getByRole('button', { name: 'Send to PMs and Leads' }).click();
+  await expect(
+    drawer.getByText('Suggested plan change: Due 12 Nov, waiting on review'),
+  ).toBeVisible();
 });

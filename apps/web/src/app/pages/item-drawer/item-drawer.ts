@@ -28,6 +28,7 @@ import {
   LabelStyle,
   type MoveItemRequest,
   PRIORITY_MAX,
+  ProjectRole,
   PRIORITY_MIN,
   requiresBucket,
   SprintState,
@@ -519,6 +520,11 @@ const FIELD_NAMES: Record<string, string> = {
                   @if (canEdit()) {
                     <span class="muted">The plan is set by PMs and Leads</span>
                   }
+                  @if (canSuggest()) {
+                    <button type="button" class="k-action" (click)="suggestChange()">
+                      Suggest a change…
+                    </button>
+                  }
                 }
                 @if (canEdit()) {
                   @if (d.dueDate && (d.dueTime || addingTime())) {
@@ -903,6 +909,26 @@ export class ItemDrawer {
   /** The description prepared for read-only display. */
   protected readonly descriptionHtml = computed(() => forDisplay(this.detail()?.description ?? ''));
 
+  /**
+   * The project's PMs and Leads, who get a suggested plan change (M9.3).
+   */
+  private readonly planners = computed(() =>
+    this.ctx
+      .members()
+      .filter((m) => m.isActive && (m.role === ProjectRole.PM || m.role === ProjectRole.LEAD)),
+  );
+  /**
+   * A Member who may not change the plan can suggest a change instead: it
+   * posts a note mentioning the project's PMs and Leads (M9.3).
+   */
+  protected readonly canSuggest = computed(
+    () =>
+      this.canAnnotate() &&
+      !this.canPlan() &&
+      this.ctx.project()?.ownerId === null &&
+      this.planners().length > 0,
+  );
+
   /** Deleting is offered. */
   protected readonly canDelete = computed(() => {
     const d = this.detail();
@@ -1253,6 +1279,44 @@ export class ItemDrawer {
     const d = this.detail();
     if (d === null) return;
     await this.apply(() => this.api.addDependency(this.projectId(), d.id, { blockingItemId }));
+  }
+
+  /**
+   * Asks what should change and posts it as a note that mentions the
+   * project's PMs and Leads, who are then notified (M9.3).
+   *
+   * @returns Resolves once posted.
+   */
+  protected async suggestChange(): Promise<void> {
+    const d = this.detail();
+    if (d === null) return;
+    const text = await this.dialogs.prompt({
+      title: `Suggest a change to ${d.key}`,
+      label: 'What should change, e.g. "Due 12 Nov, waiting on review"',
+      confirm: 'Send to PMs and Leads',
+      maxLength: 500,
+    });
+    if (text === null) return;
+    // Built as DOM text so typed markup stays text; the API sanitizes again.
+    const doc = document.implementation.createHTMLDocument('');
+    const ask = doc.createElement('p');
+    ask.textContent = `Suggested plan change: ${text}`;
+    const who = doc.createElement('p');
+    for (const m of this.planners()) {
+      const mention = doc.createElement('span');
+      mention.setAttribute('data-mention', m.userId);
+      mention.textContent = `@${m.displayName}`;
+      who.append(mention, ' ');
+    }
+    try {
+      await this.annotations.addNote(this.projectId(), d.id, {
+        body: ask.outerHTML + who.outerHTML,
+      });
+      this.version.update((v) => v + 1);
+      this.toast.show('Suggestion sent to the PMs and Leads');
+    } catch (error) {
+      this.toast.error(error);
+    }
   }
 
   /**

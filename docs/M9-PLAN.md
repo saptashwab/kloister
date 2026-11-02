@@ -614,6 +614,23 @@ DECISIONS apply.
   icon links in the drawer header rather than menu items, so read-only drawers
   keep their previous controls.
 
+## 16. Own items until scheduled, and suggested changes (M9.3, owner request 2026-11-02)
+
+- A Member keeps the plan fields and delete of an item they created until it is scheduled: a start or due date,
+  a sprint, or a dependency link they can see (hidden links do not count, so nothing hidden is hinted at).
+  `ItemFacts.scheduled` comes from the item row and visible link counts in `itemInclude`; unknown counts as
+  scheduled. This fixes typos, dates title-only timeline rows and removes mistaken items without a PM. Items
+  only assigned to the Member stay locked.
+- A parent with visible children counts as scheduled too, so its creator cannot move a planned subtree.
+- Not included: "until a PM or Lead edits it" would need an audit lookup per listed item or a new column; data
+  that places an item in the plan (dates, sprint, links, children) locks it instead. The lock follows the data:
+  an undated item whose sprint is closed or deleted, or whose dates and links are removed, is its creator's
+  again. Links to items the Member cannot see do not count (counting them would disclose them), so deleting
+  such an item also removes those links, as before M9.2.
+- "Suggest a change…" next to the locked dates in the drawer asks for a short text and posts it as a note that
+  mentions the project's active PMs and Leads, so they get the usual mention notification. No new endpoint or
+  data; it needs the ordinary note permission and is hidden in personal spaces.
+
 ## 15. Plan kept to PMs and Leads, and the splitter (M9.2, owner request 2026-11-02)
 
 Owner decisions: a project setting, "Only PMs and Leads change the plan", on by default and for existing

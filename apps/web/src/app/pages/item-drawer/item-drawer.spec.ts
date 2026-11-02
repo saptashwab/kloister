@@ -58,7 +58,11 @@ describe('ItemDrawer', () => {
     const projectsApi = {
       get: vi.fn().mockResolvedValue(project),
       members: vi.fn().mockResolvedValue({
-        items: [makeMember('u1', 'Ann'), makeMember('u2', 'Bob')],
+        items: [
+          makeMember('u1', 'Ann'),
+          makeMember('u2', 'Bob'),
+          makeMember('u3', 'Pat <PM>', { role: 'PM' }),
+        ],
         nextCursor: null,
       }),
       teams: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
@@ -77,11 +81,12 @@ describe('ItemDrawer', () => {
       move: vi.fn(),
       remove: vi.fn().mockResolvedValue(undefined),
     };
-    const dialogs = { confirm: vi.fn().mockResolvedValue(true) };
+    const dialogs = { confirm: vi.fn().mockResolvedValue(true), prompt: vi.fn() };
     const annotationsApi = {
       notes: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
       attachments: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
       addImage: vi.fn(),
+      addNote: vi.fn().mockResolvedValue({}),
     };
     await TestBed.configureTestingModule({
       imports: [ItemDrawer],
@@ -124,6 +129,7 @@ describe('ItemDrawer', () => {
       show,
       showError,
       dialogs,
+      annotationsApi,
     };
   }
 
@@ -183,6 +189,30 @@ describe('ItemDrawer', () => {
     expect(root.querySelector('app-time-field, button.k-action')).not.toBeNull();
     expect(root.querySelector('mat-select[aria-label="Status"]')).not.toBeNull();
     expect(root.querySelector('mat-select[aria-label="Add a blocking item"]')).toBeNull();
+  });
+
+  it('sends a suggested plan change to the PMs and Leads as a note (M9.3)', async () => {
+    const { root, dialogs, annotationsApi, fixture, show } = await render(
+      makeItem(4, { dueDate: '2026-11-06', can: { ...readOnly, edit: true, annotate: true } }),
+    );
+    const suggest = Array.from(root.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Suggest a change'),
+    );
+    expect(suggest).toBeDefined();
+    dialogs.prompt.mockResolvedValue('Due <b>12 Nov</b>');
+    suggest?.click();
+    await settle(fixture);
+    const [, itemId, request] = annotationsApi.addNote.mock.calls[0] as [
+      string,
+      string,
+      { body: string },
+    ];
+    expect(itemId).toBe('i4');
+    // Typed text stays text; only the PM is mentioned.
+    expect(request.body).toContain('Suggested plan change: Due &lt;b&gt;12 Nov&lt;/b&gt;');
+    expect(request.body).toContain('<span data-mention="u3">@Pat &lt;PM&gt;</span>');
+    expect(request.body).not.toContain('data-mention="u1"');
+    expect(show).toHaveBeenCalledWith('Suggestion sent to the PMs and Leads');
   });
 
   it('edits the title in place', async () => {

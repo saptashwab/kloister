@@ -387,6 +387,15 @@ describe('ProjectAccessService', () => {
       const kept = await as('MEMBER');
       expect(kept.service.canPlanItem(kept.access, created)).toBe(false);
       expect(kept.service.canPlanItem(kept.access, assigned)).toBe(false);
+      // Own items stay the Member's to finish until scheduled (M9.3).
+      const draft = { ...created, scheduled: false };
+      expect(kept.service.canPlanItem(kept.access, draft)).toBe(true);
+      expect(kept.service.canPlanItem(kept.access, { ...draft, scheduled: true })).toBe(false);
+      expect(kept.service.canPlanItem(kept.access, { ...assigned, scheduled: false })).toBe(false);
+      expect(kept.service.canDeleteItem(kept.access, draft, false)).toBe(true);
+      expect(kept.service.canDeleteItem(kept.access, { ...draft, scheduled: true }, false)).toBe(
+        false,
+      );
       const open = await as('MEMBER', { planLeadsOnly: false });
       expect(open.service.canPlanItem(open.access, created)).toBe(true);
       expect(open.service.canPlanItem(open.access, assigned)).toBe(true);
