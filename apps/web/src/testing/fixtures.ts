@@ -29,6 +29,8 @@ export function makeProject(overrides: Partial<ProjectDto> = {}): ProjectDto {
       statusToBucket: {},
       labelStyle: 'SOLID',
       autoMoveDependents: false,
+      useInstanceHolidays: true,
+      holidaysReviewedAt: null,
     },
     myRole: 'PM',
     myVisibility: 'ALL',

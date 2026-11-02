@@ -562,3 +562,6 @@ The approved mockups (layout A, spreadsheet first) set the look; docs/M9-PLAN.md
 - **Selection bar.** The backlog's bulk bar look: sprint, assign and status selects, outline and link
   buttons, and More… for the rest. Results show as a status line with per-row reasons.
 - **Phone.** Below 600 px the timeline is a list of cards with dates and durations and no bars.
+- **Holidays (M9.1).** Holiday days get a translucent `--k-warn-soft` shading over the bar area, with a warn-ink
+  marker in the date header that names the holiday on hover. The instance-holiday notice uses the warn
+  alert above the plan strip, with "Keep their durations" as the primary action and "Keep dates" beside it.

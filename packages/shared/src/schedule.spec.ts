@@ -1,6 +1,7 @@
 import {
   endSlot,
   finishAfter,
+  isHoliday,
   isValidDuration,
   isWorkingDay,
   KeptReason,
@@ -11,6 +12,7 @@ import {
   slotHalfDay,
   startSlot,
   startsAfterFinish,
+  workCalendar,
   workingDuration,
 } from './index.js';
 
@@ -211,5 +213,53 @@ describe('scheduleSpan (M9)', () => {
       work: 6,
     });
     expect(scheduleSpan([span(null, null)])).toBeNull();
+  });
+});
+
+describe('holidays (M9.1)', () => {
+  // Wednesday 4 Nov 2026 is a holiday; the weekend in the range is ignored.
+  const cal = workCalendar([{ startDate: '2026-11-04', endDate: '2026-11-04' }]);
+  const two = workCalendar([{ startDate: '2026-11-04', endDate: '2026-11-08' }]);
+
+  it('skips holidays in durations, finishes and slots', () => {
+    expect(isHoliday('2026-11-04', cal)).toBe(true);
+    expect(isHoliday('2026-11-07', two)).toBe(false);
+    expect(workingDuration(span('2026-11-02', '2026-11-06'), cal)).toBe(4);
+    expect(finishAfter({ date: '2026-11-02', second: false }, 3, cal)).toEqual({
+      dueDate: '2026-11-05',
+      dueFirstHalf: false,
+    });
+    expect(finishAfter({ date: '2026-11-02', second: false }, 3, two)).toEqual({
+      dueDate: '2026-11-09',
+      dueFirstHalf: false,
+    });
+    // A start on a holiday counts from the next working day, a finish to the previous one.
+    expect(slotHalfDay(startSlot('2026-11-04', true, cal), cal)).toEqual({
+      date: '2026-11-05',
+      second: false,
+    });
+    expect(slotHalfDay(endSlot('2026-11-04', true, cal), cal)).toEqual({
+      date: '2026-11-03',
+      second: true,
+    });
+    for (let slot = 7010; slot < 7040; slot++) {
+      const half = slotHalfDay(slot, two);
+      expect(startSlot(half.date, half.second, two)).toBe(slot);
+    }
+  });
+
+  it('moves dependent items past holidays', () => {
+    const pred = item('p', span('2026-11-02', '2026-11-03'));
+    const succ = item('s', span('2026-11-04', '2026-11-05'));
+    const plan = planSchedule(
+      [pred, succ],
+      [{ blockingItemId: 'p', blockedItemId: 's' }],
+      [{ id: 's' }],
+      cal,
+    );
+    // Its one working day (Thursday; Wednesday is a holiday) follows the predecessor.
+    expect(plan.changes[0]?.to).toEqual(span('2026-11-05', '2026-11-05'));
+    expect(scheduleSpan([pred, span('2026-11-05', '2026-11-06')], cal)?.duration).toBe(4);
+    expect(scheduleSpan([pred, span('2026-11-05', '2026-11-05')], cal)?.duration).toBe(3);
   });
 });

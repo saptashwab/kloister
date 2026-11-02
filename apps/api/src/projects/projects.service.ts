@@ -30,6 +30,7 @@ import {
   ProjectAccessService,
   projectArchived,
 } from './project-access.service.js';
+import { databaseNow } from '../holidays/holidays.service.js';
 import { mergeProjectSettings, parseProjectSettings } from './project-settings.js';
 import type { CreateProjectDto, ListProjectsQueryDto, UpdateProjectDto } from './projects.dto.js';
 
@@ -250,8 +251,12 @@ export class ProjectsService {
         'settings.membersCanAssignOthers',
         'Personal spaces do not have assignments',
       );
-    if (access.project.ownerId !== null && dto.settings?.autoMoveDependents !== undefined)
-      throw invalidField('settings.autoMoveDependents', 'Personal spaces do not have a timeline');
+    if (access.project.ownerId !== null) {
+      for (const key of ['autoMoveDependents', 'useInstanceHolidays'] as const) {
+        if (dto.settings?.[key] !== undefined)
+          throw invalidField(`settings.${key}`, 'Personal spaces do not have a timeline');
+      }
+    }
     const id = access.project.id;
     // The row is re-read inside a serializable transaction so settings are
     // merged into the latest stored JSON (concurrent edits to different keys
@@ -321,6 +326,19 @@ export class ProjectsService {
             changes['settings.autoMoveDependents'] = {
               from: settings.autoMoveDependents,
               to: settingsChange.autoMoveDependents,
+            };
+          }
+          if (
+            settingsChange.useInstanceHolidays !== undefined &&
+            settingsChange.useInstanceHolidays !== settings.useInstanceHolidays
+          ) {
+            changedSettings.useInstanceHolidays = settingsChange.useInstanceHolidays;
+            // The timeline keeps durations for this switch itself, so the
+            // instance holidays count as reviewed from now on.
+            changedSettings.holidaysReviewedAt = (await databaseNow(tx)).toISOString();
+            changes['settings.useInstanceHolidays'] = {
+              from: settings.useInstanceHolidays,
+              to: settingsChange.useInstanceHolidays,
             };
           }
           if (Object.keys(changedSettings).length > 0) {

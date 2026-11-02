@@ -18,6 +18,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { type MatMenu, MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, Router, RouterLink, RouterOutlet } from '@angular/router';
 import {
@@ -28,15 +29,18 @@ import {
   ItemType,
   type PlanEdge,
   ProjectPermission,
+  type ProjectHolidaysDto,
   requiresBucket,
   type RescheduleChangeRequest,
   type ScheduleDates,
   slotHalfDay,
   startSlot,
+  type WorkCalendar,
+  workCalendar,
   type WorkItemDto,
   workingDuration,
 } from '@kloister/shared';
-import { map } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 import { errorMessage } from '../../core/api';
 import { buildTree, NONE, pruneTree } from '../../core/board-logic';
 import { type BulkField, planBulk, runBulk } from '../../core/bulk';
@@ -65,6 +69,7 @@ import {
   parsePredecessors,
   planSpan,
   allowedTypes,
+  keepDurations,
   percentComplete,
   rebaseDescendants,
   scaleTicks,
@@ -81,6 +86,9 @@ import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
+import { dialogMotion } from '../../ui/motion';
+import { HolidaysApiService } from '../../core/holidays-api.service';
+import type { HolidaysDialogData, HolidaysDialogResult } from './holidays-dialog';
 import { TimelineBarStyles, TimelineGridStyles, TimelineToolStyles } from './timeline-styles';
 
 /** Grid columns (docs/M9-PLAN.md §3.1). */
@@ -277,6 +285,11 @@ interface BarDraft {
       </mat-button-toggle-group>
       <button mat-stroked-button type="button" (click)="scrollToDay(todayDay)">Today</button>
       <button mat-stroked-button type="button" (click)="fitPlan()">Fit plan</button>
+      <button mat-stroked-button type="button" (click)="openHolidays()">
+        Holidays{{
+          holidayInfo().holidays.length > 0 ? ' (' + holidayInfo().holidays.length + ')' : ''
+        }}
+      </button>
       <button mat-stroked-button type="button" [matMenuTriggerFor]="columnsMenu">Columns</button>
       <mat-form-field subscriptSizing="dynamic" class="rows">
         <mat-label>Rows</mat-label>
@@ -414,6 +427,18 @@ interface BarDraft {
         <button mat-button type="button" (click)="selected.set(emptySet)">Clear</button>
       </div>
     }
+    @if (holidayReview(); as review) {
+      <div class="k-alert warn notice" role="status">
+        <span
+          >Instance holidays changed since this plan was made ({{ review.holidays }}):
+          {{ review.count }} {{ review.count === 1 ? 'item spans' : 'items span' }} them.</span
+        >
+        <button mat-flat-button type="button" (click)="reviewHolidays(true)">
+          Keep their durations
+        </button>
+        <button mat-button type="button" (click)="reviewHolidays(false)">Keep dates</button>
+      </div>
+    }
     @if (report(); as r) {
       <div role="status" class="muted">
         {{ r.summary }}
@@ -534,6 +559,16 @@ interface BarDraft {
                     {{ s.name }}
                   </div>
                 }
+              }
+              @for (h of holidayBlocks(); track h.id) {
+                <div
+                  class="hol"
+                  role="img"
+                  [attr.aria-label]="'Holiday: ' + h.name"
+                  [attr.title]="h.name"
+                  [style.left.px]="h.left"
+                  [style.width.px]="h.width"
+                ></div>
               }
               @for (t of ticks().upper; track t.left) {
                 <div class="tick up" [style.left.px]="t.left" [style.width.px]="t.width">
@@ -730,6 +765,9 @@ interface BarDraft {
           }
 
           <div class="layer" [style.left.px]="gridWidth()" [style.width.px]="barsWidth()">
+            @for (h of holidayBlocks(); track h.id) {
+              <div class="holiday" [style.left.px]="h.left" [style.width.px]="h.width"></div>
+            }
             <div class="today" [style.left.px]="todayX()"></div>
             <svg
               class="links"
@@ -971,6 +1009,8 @@ export class TimelinePage implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly injector = inject(Injector);
+  private readonly dialog = inject(MatDialog);
+  private readonly holidaysApi = inject(HolidaysApiService);
   /** Shows this view's Export… in the project header (the workbook has a Timeline sheet). */
   private readonly pageActions = inject(PageActions).register(() => ({
     source: this.ctx.project()?.id ?? '',
@@ -1013,6 +1053,34 @@ export class TimelinePage implements OnInit {
 
   /** Visible links. */
   private readonly edges = signal<PlanEdge[]>([]);
+  /** The project's holidays and instance changes since the last review (M9.1). */
+  protected readonly holidayInfo = signal<ProjectHolidaysDto>({
+    holidays: [],
+    useInstanceHolidays: true,
+    instanceChanges: [],
+  });
+  /** The working-day calendar: weekends and the project's holidays are off. */
+  protected readonly calendar = computed(() => workCalendar(this.holidayInfo().holidays));
+  /** Holiday shading on the bars, one block per holiday. */
+  protected readonly holidayBlocks = computed(() =>
+    this.holidayInfo().holidays.map((h) => ({
+      id: h.id,
+      name: h.name,
+      left: halfX(this.scale(), h.startDate, false),
+      width: (dayNumber(h.endDate) - dayNumber(h.startDate) + 1) * this.scale().dayWidth,
+    })),
+  );
+  /** PMs and Leads may change holidays and review instance changes. */
+  protected readonly canManageHolidays = computed(
+    () => this.ctx.writable() && this.ctx.has(ProjectPermission.MANAGE_BOARD),
+  );
+  /** Items an instance holiday change touches, for the review notice. */
+  protected readonly holidayReview = computed(() => {
+    const info = this.holidayInfo();
+    if (info.instanceChanges.length === 0 || !this.canManageHolidays()) return null;
+    const changes = this.durationChanges(info.instanceChanges, this.previousCalendar());
+    return { count: changes.length, holidays: info.instanceChanges.length };
+  });
   protected readonly zoom = signal<TimelineZoom>('week');
   protected readonly collapsed = signal<ReadonlySet<string>>(new Set());
   protected readonly text = signal('');
@@ -1082,7 +1150,9 @@ export class TimelinePage implements OnInit {
         (this.showDone() || i.status !== ItemStatus.DONE),
     );
   });
-  protected readonly rows = computed(() => timelineRows(this.tree(), this.collapsed()));
+  protected readonly rows = computed(() =>
+    timelineRows(this.tree(), this.collapsed(), this.calendar()),
+  );
   /** Selected rows the filters hide; bulk actions include them, as on the backlog. */
   protected readonly hiddenSelected = computed(() => {
     const shown = new Set(this.rows().map((r) => r.node.id));
@@ -1094,6 +1164,7 @@ export class TimelinePage implements OnInit {
       this.filtered()
         ? this.rows().flatMap((r) => (r.node.item ? [r.node.item] : []))
         : this.ctx.items(),
+      this.calendar(),
     ),
   );
   protected readonly parentIds = computed(
@@ -1112,7 +1183,9 @@ export class TimelinePage implements OnInit {
   protected readonly todayX = computed(
     () => (this.todayDay - this.scale().origin + 0.5) * this.scale().dayWidth,
   );
-  protected readonly conflictMap = computed(() => conflicts(this.ctx.items(), this.edges()));
+  protected readonly conflictMap = computed(() =>
+    conflicts(this.ctx.items(), this.edges(), this.calendar()),
+  );
   protected readonly openSprints = computed(() =>
     this.ctx.sprints().filter((s) => s.state !== 'CLOSED'),
   );
@@ -1207,7 +1280,117 @@ export class TimelinePage implements OnInit {
   private async loadEdges(): Promise<void> {
     const project = this.ctx.project();
     if (project === null) return;
-    this.edges.set((await this.api.timeline(project.id)).edges);
+    const [timeline, holidays] = await Promise.all([
+      this.api.timeline(project.id),
+      this.holidaysApi.forProject(project.id),
+    ]);
+    this.edges.set(timeline.edges);
+    this.holidayInfo.set(holidays);
+  }
+
+  /**
+   * The calendar before the unreviewed instance changes: added holidays
+   * removed again and removed ones put back.
+   *
+   * @returns The calendar items were planned with.
+   */
+  private previousCalendar(): WorkCalendar {
+    const info = this.holidayInfo();
+    const added = new Set(
+      info.instanceChanges.filter((h) => h.deletedAt === null).map((h) => h.id),
+    );
+    const removed = info.instanceChanges.filter((h) => h.deletedAt !== null);
+    return workCalendar([...info.holidays.filter((h) => !added.has(h.id)), ...removed]);
+  }
+
+  /**
+   * The changes that keep working days for items touched by changed holidays.
+   *
+   * @param ranges Changed holidays.
+   * @param before The calendar the items were planned with.
+   * @returns Reschedule changes.
+   */
+  private durationChanges(
+    ranges: readonly { startDate: string; endDate: string }[],
+    before: WorkCalendar,
+  ): RescheduleChangeRequest[] {
+    return keepDurations(this.ctx.items(), ranges, before, this.calendar());
+  }
+
+  /**
+   * Answers the instance holiday notice: keep the affected items' durations
+   * (moving finishes and dependent items) or keep their dates. Either way the
+   * review is recorded.
+   *
+   * @param keep Keep durations (true) or dates (false).
+   * @returns Resolves once done.
+   */
+  protected async reviewHolidays(keep: boolean): Promise<void> {
+    const project = this.ctx.project();
+    if (project === null) return;
+    const info = this.holidayInfo();
+    if (keep) {
+      const changes = this.durationChanges(info.instanceChanges, this.previousCalendar());
+      if (changes.length > 0 && (await this.flow.change(changes)) === null) return;
+    }
+    // Only the changes shown count as reviewed; newer ones show next time.
+    const through = info.instanceChanges
+      .map((h) => h.deletedAt ?? h.createdAt)
+      .reduce((a, b) => (a > b ? a : b));
+    try {
+      await this.holidaysApi.markReviewed(project.id, through);
+      this.holidayInfo.set({ ...info, instanceChanges: [] });
+    } catch (error) {
+      this.toast.error(error);
+    }
+  }
+
+  /**
+   * Opens the Holidays dialog; after a project holiday changed, affected
+   * items keep their working days through the reschedule flow.
+   *
+   * @returns Resolves once closed and applied.
+   */
+  protected async openHolidays(): Promise<void> {
+    const project = this.ctx.project();
+    if (project === null) return;
+    const { HolidaysDialog } = await import('./holidays-dialog');
+    const before = this.calendar();
+    const beforeInstance = this.holidayInfo().holidays.filter((h) => h.scope === 'INSTANCE');
+    const ref = this.dialog.open<
+      InstanceType<typeof HolidaysDialog>,
+      HolidaysDialogData,
+      HolidaysDialogResult
+    >(HolidaysDialog, {
+      data: {
+        projectId: project.id,
+        info: this.holidayInfo(),
+        canManage: this.canManageHolidays(),
+        canSwitch: this.ctx.writable() && this.ctx.has(ProjectPermission.MANAGE_PROJECT),
+        today: this.today,
+      },
+      width: 'var(--k-size-640px)',
+      maxWidth: 'calc(100vw - var(--k-space-8))',
+      enterAnimationDuration: dialogMotion(),
+      exitAnimationDuration: dialogMotion(),
+    });
+    const result = await firstValueFrom(ref.afterClosed());
+    if (result === undefined) return;
+    if (result.useInstanceHolidays !== undefined) await this.ctx.refresh();
+    const after = await this.holidaysApi.forProject(project.id);
+    this.holidayInfo.set(after);
+    // Switching the instance holidays changes their days too.
+    const changed =
+      result.useInstanceHolidays === undefined
+        ? result.changed
+        : [
+            ...result.changed,
+            ...beforeInstance,
+            ...after.holidays.filter((h) => h.scope === 'INSTANCE'),
+          ];
+    if (changed.length === 0) return;
+    const changes = this.durationChanges(changed, before);
+    if (changes.length > 0) await this.flow.change(changes);
   }
 
   // --- Display helpers -------------------------------------------------
@@ -1288,7 +1471,7 @@ export class TimelinePage implements OnInit {
     if (row.summary !== null) return durationText(row.summary.duration);
     const item = row.node.item;
     if (item === null || item.startDate === null || item.dueDate === null) return '';
-    return durationText(workingDuration(item));
+    return durationText(workingDuration(item, this.calendar()));
   }
 
   /**
@@ -1299,7 +1482,7 @@ export class TimelinePage implements OnInit {
    * @returns E.g. "60%", or empty for a title-only row.
    */
   protected progress(row: TimelineRow): string {
-    const percent = percentComplete(row.node);
+    const percent = percentComplete(row.node, this.calendar());
     return percent === null ? '' : `${percent}%`;
   }
 
@@ -1410,7 +1593,7 @@ export class TimelinePage implements OnInit {
     const dates = draft?.id === item.id ? this.drafted(item, draft) : item;
     const days =
       dates.startDate !== null && dates.dueDate !== null
-        ? `, ${durationText(workingDuration(dates))} days`
+        ? `, ${durationText(workingDuration(dates, this.calendar()))} days`
         : '';
     const conflict = this.conflictMap().has(item.id)
       ? `, starts before ${this.predKeys(item)} ends`
@@ -1789,6 +1972,7 @@ export class TimelinePage implements OnInit {
           const finish = finishAfter(
             { date: start, second: item.startDate !== null && item.startSecondHalf },
             days,
+            this.calendar(),
           );
           await this.reschedule([
             {
@@ -1839,7 +2023,8 @@ export class TimelinePage implements OnInit {
     if (item.startDate !== null && item.dueDate !== null) {
       const finish = finishAfter(
         { date: parsed.date, second },
-        Math.max(0.5, workingDuration(item)),
+        Math.max(0.5, workingDuration(item, this.calendar())),
+        this.calendar(),
       );
       return { item: item.id, startDate: parsed.date, startSecondHalf: second, ...finish };
     }
@@ -1895,6 +2080,7 @@ export class TimelinePage implements OnInit {
    * @returns The dates.
    */
   private drafted(item: WorkItemDto, draft: BarDraft): ScheduleDates {
+    const cal = this.calendar();
     const shift = (date: string, second: boolean, halves: number) => {
       const index = dayNumber(date) * 2 + (second ? 1 : 0) + halves;
       return { date: dateOfDay(Math.floor(index / 2)), second: index % 2 === 1 };
@@ -1902,7 +2088,7 @@ export class TimelinePage implements OnInit {
     if (item.startDate === null || item.dueDate === null) {
       if (item.dueDate !== null) {
         const end = shift(item.dueDate, !item.dueFirstHalf, draft.end);
-        const half = slotHalfDay(endSlot(end.date, !end.second));
+        const half = slotHalfDay(endSlot(end.date, !end.second, cal), cal);
         return {
           startDate: null,
           startSecondHalf: false,
@@ -1912,7 +2098,7 @@ export class TimelinePage implements OnInit {
       }
       if (item.startDate !== null) {
         const start = shift(item.startDate, item.startSecondHalf, draft.start);
-        const half = slotHalfDay(startSlot(start.date, start.second));
+        const half = slotHalfDay(startSlot(start.date, start.second, cal), cal);
         return {
           startDate: half.date,
           startSecondHalf: half.second,
@@ -1928,19 +2114,19 @@ export class TimelinePage implements OnInit {
       };
     }
     const s = shift(item.startDate, item.startSecondHalf, draft.start);
-    const startHalf = slotHalfDay(startSlot(s.date, s.second));
+    const startHalf = slotHalfDay(startSlot(s.date, s.second, cal), cal);
     if (draft.start === draft.end) {
       return {
         startDate: startHalf.date,
         startSecondHalf: startHalf.second,
-        ...finishAfter(startHalf, Math.max(0.5, workingDuration(item))),
+        ...finishAfter(startHalf, Math.max(0.5, workingDuration(item, cal)), cal),
       };
     }
     const e = shift(item.dueDate, !item.dueFirstHalf, draft.end);
-    let endIndex = endSlot(e.date, !e.second);
-    const startIndex = startSlot(startHalf.date, startHalf.second);
+    let endIndex = endSlot(e.date, !e.second, cal);
+    const startIndex = startSlot(startHalf.date, startHalf.second, cal);
     endIndex = Math.max(endIndex, startIndex);
-    const endHalf = slotHalfDay(endIndex);
+    const endHalf = slotHalfDay(endIndex, cal);
     return {
       startDate: startHalf.date,
       startSecondHalf: startHalf.second,
@@ -2492,17 +2678,18 @@ export class TimelinePage implements OnInit {
       return;
     }
     const halves = days * 2;
+    const cal = this.calendar();
     const changes: RescheduleChangeRequest[] = [];
     for (const item of this.selectedItems()) {
       if (!this.ctx.canEdit(item) || (item.startDate === null && item.dueDate === null)) continue;
       const start =
         item.startDate === null
           ? null
-          : slotHalfDay(startSlot(item.startDate, item.startSecondHalf) + halves);
+          : slotHalfDay(startSlot(item.startDate, item.startSecondHalf, cal) + halves, cal);
       const end =
         item.dueDate === null
           ? null
-          : slotHalfDay(endSlot(item.dueDate, item.dueFirstHalf) + halves);
+          : slotHalfDay(endSlot(item.dueDate, item.dueFirstHalf, cal) + halves, cal);
       changes.push({
         item: item.id,
         ...(start === null ? {} : { startDate: start.date, startSecondHalf: start.second }),
@@ -2524,7 +2711,7 @@ export class TimelinePage implements OnInit {
    */
   protected async sprintFromSelection(): Promise<void> {
     const project = this.ctx.project()!;
-    const span = planSpan(this.selectedItems());
+    const span = planSpan(this.selectedItems(), this.calendar());
     if (span === null) {
       this.toast.show('The selected rows have no dates');
       return;

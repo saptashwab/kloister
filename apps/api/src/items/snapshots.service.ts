@@ -1,3 +1,4 @@
+import { HolidaysService } from '../holidays/holidays.service.js';
 import { timelineSheet, type TimelineSheetItem } from './snapshot-timeline.js';
 import { createHash } from 'node:crypto';
 import type { ReadStream } from 'node:fs';
@@ -32,6 +33,7 @@ export class SnapshotsService {
    * @param items Scoped item and activity readers.
    * @param work My work eligibility reader.
    * @param files Independent authorized file bytes.
+   * @param holidays The project's holidays for the Timeline sheet (M9.1).
    */
   constructor(
     private readonly prisma: PrismaService,
@@ -39,6 +41,7 @@ export class SnapshotsService {
     private readonly items: ItemsService,
     private readonly work: WorkService,
     private readonly files: FileStoreService,
+    private readonly holidays: HolidaysService,
   ) {}
 
   /**
@@ -403,6 +406,7 @@ export class SnapshotsService {
           endDate: s.endDate.toISOString().slice(0, 10),
         })),
         new Date().toISOString().slice(0, 10),
+        (await this.holidays.forProject(project)).holidays,
       );
       tables['Timeline'] = { headers: sheet.headers, rows: sheet.rows, layout: sheet.layout };
       tables['Summary']?.rows.push(['Timeline plan', sheet.rows[0]?.[1] ?? '']);

@@ -91,46 +91,129 @@ function workIndex(day: number): number {
 }
 
 /**
- * The slot a start falls in. A weekend start counts from the next Monday's
- * 1st half.
- *
- * @param date Start date.
- * @param second Starts in the 2nd half.
- * @returns Slot number.
+ * Whole-day holidays that are not working days (docs/M9-PLAN.md §14), as
+ * indexes among all weekdays. Build it with {@link workCalendar}.
  */
-export function startSlot(date: string, second: boolean): number {
-  const day = dayNumber(date);
-  const dow = weekday(day);
-  if (dow >= 5) return workIndex(day + (7 - dow)) * 2;
-  return workIndex(day) * 2 + (second ? 1 : 0);
+export interface WorkCalendar {
+  /** Weekday indexes of the holidays, ascending. */
+  readonly holidayIndexes: readonly number[];
+  /** The same indexes, for lookups. */
+  readonly holidaySet: ReadonlySet<number>;
+}
+
+/** A calendar without holidays. */
+export const NO_HOLIDAYS: WorkCalendar = { holidayIndexes: [], holidaySet: new Set() };
+
+/**
+ * Builds a calendar from holiday date ranges; weekend days in them are
+ * ignored, since they are not working days anyway.
+ *
+ * @param ranges Holidays, each from `startDate` to `endDate` inclusive.
+ * @returns The calendar.
+ */
+export function workCalendar(
+  ranges: readonly { startDate: string; endDate: string }[],
+): WorkCalendar {
+  const set = new Set<number>();
+  for (const range of ranges) {
+    for (let day = dayNumber(range.startDate); day <= dayNumber(range.endDate); day++) {
+      if (weekday(day) < 5) set.add(workIndex(day));
+    }
+  }
+  return { holidayIndexes: [...set].sort((a, b) => a - b), holidaySet: set };
 }
 
 /**
- * The last slot of a finish. A weekend finish counts to the previous
- * Friday's 2nd half.
+ * Reports whether a date is a holiday in a calendar.
+ *
+ * @param date `YYYY-MM-DD`.
+ * @param cal The calendar.
+ * @returns True for a weekday holiday.
+ */
+export function isHoliday(date: string, cal: WorkCalendar): boolean {
+  const day = dayNumber(date);
+  return weekday(day) < 5 && cal.holidaySet.has(workIndex(day));
+}
+
+/**
+ * Number of holidays before a weekday index.
+ *
+ * @param index Weekday index.
+ * @param cal The calendar.
+ * @returns The count.
+ */
+function holidaysBefore(index: number, cal: WorkCalendar): number {
+  let low = 0;
+  let high = cal.holidayIndexes.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (cal.holidayIndexes[mid] < index) low = mid + 1;
+    else high = mid;
+  }
+  return low;
+}
+
+/**
+ * The slot a start falls in. A start on a weekend or a holiday counts from
+ * the next working day's 1st half.
+ *
+ * @param date Start date.
+ * @param second Starts in the 2nd half.
+ * @param cal Holidays; none by default.
+ * @returns Slot number.
+ */
+export function startSlot(date: string, second: boolean, cal: WorkCalendar = NO_HOLIDAYS): number {
+  const day = dayNumber(date);
+  const dow = weekday(day);
+  let index = dow >= 5 ? workIndex(day + (7 - dow)) : workIndex(day);
+  let half = dow >= 5 ? 0 : second ? 1 : 0;
+  while (cal.holidaySet.has(index)) {
+    index++;
+    half = 0;
+  }
+  return (index - holidaysBefore(index, cal)) * 2 + half;
+}
+
+/**
+ * The last slot of a finish. A finish on a weekend or a holiday counts to the
+ * previous working day's 2nd half.
  *
  * @param date Due date.
  * @param firstHalf Finishes after the 1st half.
+ * @param cal Holidays; none by default.
  * @returns Slot number.
  */
-export function endSlot(date: string, firstHalf: boolean): number {
+export function endSlot(date: string, firstHalf: boolean, cal: WorkCalendar = NO_HOLIDAYS): number {
   const day = dayNumber(date);
   const dow = weekday(day);
-  if (dow >= 5) return workIndex(day - (dow - 4)) * 2 + 1;
-  return workIndex(day) * 2 + (firstHalf ? 0 : 1);
+  let index = dow >= 5 ? workIndex(day - (dow - 4)) : workIndex(day);
+  let half = dow >= 5 ? 1 : firstHalf ? 0 : 1;
+  while (cal.holidaySet.has(index)) {
+    index--;
+    half = 1;
+  }
+  return (index - holidaysBefore(index, cal)) * 2 + half;
 }
 
 /**
  * The half day a slot stands for.
  *
  * @param slot Slot number.
+ * @param cal Holidays; none by default.
  * @returns Date and half.
  */
-export function slotHalfDay(slot: number): HalfDay {
-  const index = Math.floor(slot / 2);
+export function slotHalfDay(slot: number, cal: WorkCalendar = NO_HOLIDAYS): HalfDay {
+  const working = Math.floor(slot / 2);
+  // The weekday index whose working-day position is `working`, skipping holidays.
+  let index = working;
+  for (;;) {
+    const candidate = working + holidaysBefore(index, cal);
+    if (candidate === index && !cal.holidaySet.has(index)) break;
+    index = cal.holidaySet.has(candidate) ? candidate + 1 : candidate;
+  }
   const week = Math.floor(index / 5);
   const dow = index - week * 5;
-  return { date: dateOf(EPOCH_MONDAY + week * 7 + dow), second: slot - index * 2 === 1 };
+  return { date: dateOf(EPOCH_MONDAY + week * 7 + dow), second: slot - working * 2 === 1 };
 }
 
 /**
@@ -139,13 +222,14 @@ export function slotHalfDay(slot: number): HalfDay {
  * span holds no working half day.
  *
  * @param dates The item's dates.
+ * @param cal Holidays; none by default.
  * @returns Working days, e.g. 2.5.
  */
-export function workingDuration(dates: ScheduleDates): number {
+export function workingDuration(dates: ScheduleDates, cal: WorkCalendar = NO_HOLIDAYS): number {
   if (dates.startDate === null || dates.dueDate === null) return 0;
   const halves =
-    endSlot(dates.dueDate, dates.dueFirstHalf) -
-    startSlot(dates.startDate, dates.startSecondHalf) +
+    endSlot(dates.dueDate, dates.dueFirstHalf, cal) -
+    startSlot(dates.startDate, dates.startSecondHalf, cal) +
     1;
   return Math.max(0, halves) / 2;
 }
@@ -155,14 +239,16 @@ export function workingDuration(dates: ScheduleDates): number {
  *
  * @param start Start date and half.
  * @param duration Working days, a positive multiple of 0.5.
+ * @param cal Holidays; none by default.
  * @returns Due date and whether it finishes after the 1st half.
  */
 export function finishAfter(
   start: HalfDay,
   duration: number,
+  cal: WorkCalendar = NO_HOLIDAYS,
 ): { dueDate: string; dueFirstHalf: boolean } {
-  const last = startSlot(start.date, start.second) + Math.round(duration * 2) - 1;
-  const half = slotHalfDay(last);
+  const last = startSlot(start.date, start.second, cal) + Math.round(duration * 2) - 1;
+  const half = slotHalfDay(last, cal);
   return { dueDate: half.date, dueFirstHalf: !half.second };
 }
 
@@ -296,12 +382,14 @@ export interface SchedulePlan {
  * @param items Visible items (at least the requested ones and their neighbours).
  * @param edges Links whose both ends are visible.
  * @param requested The changes asked for.
+ * @param cal Holidays; none by default.
  * @returns The plan.
  */
 export function planSchedule(
   items: readonly PlanItem[],
   edges: readonly PlanEdge[],
   requested: readonly PlanChange[],
+  cal: WorkCalendar = NO_HOLIDAYS,
 ): SchedulePlan {
   const byId = new Map(items.map((i) => [i.id, { ...i }]));
   const preds = new Map<string, string[]>();
@@ -330,12 +418,12 @@ export function planSchedule(
     const item = byId.get(id)!;
     const before = original.get(id)!;
     const change = asked.get(id);
-    const earliest = earliestStart(preds.get(id) ?? [], byId);
+    const earliest = earliestStart(preds.get(id) ?? [], byId, cal);
 
     if (change !== undefined) {
-      applyRequested(item, before, change, earliest, snapped);
+      applyRequested(item, before, change, earliest, snapped, cal);
     } else {
-      const reason = reachedOutcome(item, earliest);
+      const reason = reachedOutcome(item, earliest, cal);
       if (reason !== null) {
         if (reason !== 'MOVE') kept.push({ id, reason });
       }
@@ -373,6 +461,7 @@ export function planSchedule(
  * @param change The change.
  * @param earliest Earliest start slot, or null without constraining predecessors.
  * @param snapped Collects items whose start was moved to the earliest one.
+ * @param cal Holidays.
  */
 function applyRequested(
   item: PlanItem,
@@ -380,17 +469,19 @@ function applyRequested(
   change: PlanChange,
   earliest: number | null,
   snapped: Set<string>,
+  cal: WorkCalendar,
 ): void {
   const pin = change.pin ?? PinAction.AUTO;
-  const start = item.startDate === null ? null : startSlot(item.startDate, item.startSecondHalf);
+  const start =
+    item.startDate === null ? null : startSlot(item.startDate, item.startSecondHalf, cal);
   if (pin === PinAction.KEEP) return;
   if (pin === PinAction.SET) {
-    item.pin = start === null ? null : slotHalfDay(start);
+    item.pin = start === null ? null : slotHalfDay(start, cal);
     return;
   }
   if (pin === PinAction.REMOVE) {
     item.pin = null;
-    if (item.status === ItemStatus.NOT_STARTED && earliest !== null) placeAt(item, earliest);
+    if (item.status === ItemStatus.NOT_STARTED && earliest !== null) placeAt(item, earliest, cal);
     return;
   }
   const startChanged =
@@ -400,17 +491,17 @@ function applyRequested(
   if (change.dates === undefined) {
     // A plain reschedule: as a reached item, but the caller asked for it.
     if (item.status === ItemStatus.NOT_STARTED && item.editable && earliest !== null) {
-      placeAt(item, Math.max(earliest, pinSlot(item) ?? earliest));
+      placeAt(item, Math.max(earliest, pinSlot(item, cal) ?? earliest), cal);
     }
     return;
   }
   if (!startChanged || item.status !== ItemStatus.NOT_STARTED || earliest === null) return;
   if (start === null) return;
-  if (start > earliest) item.pin = slotHalfDay(start);
+  if (start > earliest) item.pin = slotHalfDay(start, cal);
   else {
     item.pin = null;
     if (start < earliest) {
-      placeAt(item, earliest);
+      placeAt(item, earliest, cal);
       snapped.add(item.id);
     }
   }
@@ -422,17 +513,22 @@ function applyRequested(
  *
  * @param item The item; updated in place when it moves.
  * @param earliest Earliest start slot, or null without constraining predecessors.
+ * @param cal Holidays.
  * @returns 'MOVE' when it may move (whether or not it changed), a reason when
  *   it would have moved but stays, or null when nothing applies.
  */
-function reachedOutcome(item: PlanItem, earliest: number | null): KeptReason | 'MOVE' | null {
+function reachedOutcome(
+  item: PlanItem,
+  earliest: number | null,
+  cal: WorkCalendar,
+): KeptReason | 'MOVE' | null {
   if (earliest === null || (item.startDate === null && item.dueDate === null)) return null;
-  const pin = pinSlot(item);
+  const pin = pinSlot(item, cal);
   const target = Math.max(earliest, pin ?? earliest);
-  const current = currentStart(item);
+  const current = currentStart(item, cal);
   if (!item.editable) return current !== target ? KeptReason.NOT_EDITABLE : null;
   if (item.status !== ItemStatus.NOT_STARTED) return current < earliest ? KeptReason.STARTED : null;
-  placeAt(item, target);
+  placeAt(item, target, cal);
   if (pin !== null && pin > earliest && current === target) return KeptReason.PINNED;
   return 'MOVE';
 }
@@ -443,11 +539,12 @@ function reachedOutcome(item: PlanItem, earliest: number | null): KeptReason | '
  *
  * @param item The item; updated in place.
  * @param slot Target start slot.
+ * @param cal Holidays.
  */
-function placeAt(item: PlanItem, slot: number): void {
+function placeAt(item: PlanItem, slot: number, cal: WorkCalendar): void {
   if (item.startDate === null) {
     if (item.dueDate === null) return;
-    const half = slotHalfDay(slot);
+    const half = slotHalfDay(slot, cal);
     item.dueDate = half.date;
     item.dueFirstHalf = !half.second;
     return;
@@ -457,15 +554,15 @@ function placeAt(item: PlanItem, slot: number): void {
       ? 0
       : Math.max(
           1,
-          endSlot(item.dueDate, item.dueFirstHalf) -
-            startSlot(item.startDate, item.startSecondHalf) +
+          endSlot(item.dueDate, item.dueFirstHalf, cal) -
+            startSlot(item.startDate, item.startSecondHalf, cal) +
             1,
         );
-  const start = slotHalfDay(slot);
+  const start = slotHalfDay(slot, cal);
   item.startDate = start.date;
   item.startSecondHalf = start.second;
   if (item.dueDate !== null) {
-    const end = slotHalfDay(slot + halves - 1);
+    const end = slotHalfDay(slot + halves - 1, cal);
     item.dueDate = end.date;
     item.dueFirstHalf = !end.second;
   }
@@ -475,21 +572,23 @@ function placeAt(item: PlanItem, slot: number): void {
  * The slot an item currently starts in, using its due date for due-only items.
  *
  * @param item The item, with at least one date.
+ * @param cal Holidays.
  * @returns Slot number.
  */
-function currentStart(item: PlanItem): number {
-  if (item.startDate !== null) return startSlot(item.startDate, item.startSecondHalf);
-  return endSlot(item.dueDate!, item.dueFirstHalf);
+function currentStart(item: PlanItem, cal: WorkCalendar): number {
+  if (item.startDate !== null) return startSlot(item.startDate, item.startSecondHalf, cal);
+  return endSlot(item.dueDate!, item.dueFirstHalf, cal);
 }
 
 /**
  * The slot of an item's pin, or null without one.
  *
  * @param item The item.
+ * @param cal Holidays.
  * @returns Slot number, or null.
  */
-function pinSlot(item: PlanItem): number | null {
-  return item.pin === null ? null : startSlot(item.pin.date, item.pin.second);
+function pinSlot(item: PlanItem, cal: WorkCalendar): number | null {
+  return item.pin === null ? null : startSlot(item.pin.date, item.pin.second, cal);
 }
 
 /**
@@ -498,17 +597,19 @@ function pinSlot(item: PlanItem): number | null {
  *
  * @param predIds The item's predecessors.
  * @param byId Items in their planned state.
+ * @param cal Holidays; none by default.
  * @returns Slot number, or null when no predecessor constrains it.
  */
 export function earliestStart(
   predIds: readonly string[],
   byId: ReadonlyMap<string, ScheduleDates>,
+  cal: WorkCalendar = NO_HOLIDAYS,
 ): number | null {
   let latest: number | null = null;
   for (const id of predIds) {
     const pred = byId.get(id);
     if (pred === undefined || pred.dueDate === null) continue;
-    const end = endSlot(pred.dueDate, pred.dueFirstHalf);
+    const end = endSlot(pred.dueDate, pred.dueFirstHalf, cal);
     if (latest === null || end > latest) latest = end;
   }
   return latest === null ? null : latest + 1;
@@ -613,16 +714,20 @@ export interface ScheduleSpan {
  * M9-PLAN.md §3.2.1). An item with only one date counts that half day.
  *
  * @param items Items, usually the dated leaves under a parent.
+ * @param cal Holidays; none by default.
  * @returns The span, or null when no item has a date.
  */
-export function scheduleSpan(items: readonly ScheduleDates[]): ScheduleSpan | null {
+export function scheduleSpan(
+  items: readonly ScheduleDates[],
+  cal: WorkCalendar = NO_HOLIDAYS,
+): ScheduleSpan | null {
   let first: number | null = null;
   let last: number | null = null;
   let work = 0;
   for (const item of items) {
     const own = {
-      start: item.startDate === null ? null : startSlot(item.startDate, item.startSecondHalf),
-      end: item.dueDate === null ? null : endSlot(item.dueDate, item.dueFirstHalf),
+      start: item.startDate === null ? null : startSlot(item.startDate, item.startSecondHalf, cal),
+      end: item.dueDate === null ? null : endSlot(item.dueDate, item.dueFirstHalf, cal),
     };
     // A one-date item counts the half day it has.
     const s = own.start ?? own.end;
@@ -630,12 +735,12 @@ export function scheduleSpan(items: readonly ScheduleDates[]): ScheduleSpan | nu
     if (s === null || e === null) continue;
     if (first === null || s < first) first = s;
     if (last === null || e > last) last = e;
-    work += workingDuration(item);
+    work += workingDuration(item, cal);
   }
   if (first === null || last === null) return null;
-  const end = slotHalfDay(last);
+  const end = slotHalfDay(last, cal);
   return {
-    start: slotHalfDay(first),
+    start: slotHalfDay(first, cal),
     finish: { dueDate: end.date, dueFirstHalf: !end.second },
     duration: Math.max(0, last - first + 1) / 2,
     work,

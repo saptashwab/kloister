@@ -10,6 +10,7 @@ const TABS: readonly { path: string; name: string }[] = [
   { path: 'storage', name: 'Storage' },
   { path: 'backups', name: 'Backups' },
   { path: 'logs', name: 'Logs' },
+  { path: 'holidays', name: 'Holidays' },
 ];
 
 /**

@@ -10,6 +10,7 @@ import { BrandingModule } from './branding/branding.module.js';
 import { ConfigModule } from './config/config.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ItemsModule } from './items/items.module.js';
+import { HolidaysModule } from './holidays/holidays.module.js';
 import { TimelineModule } from './timeline/timeline.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
@@ -39,6 +40,7 @@ import { UsersModule } from './users/users.module.js';
     BoardModule,
     ItemsModule,
     TimelineModule,
+    HolidaysModule,
     AnnotationsModule,
     NotificationsModule,
     AdminSettingsModule,

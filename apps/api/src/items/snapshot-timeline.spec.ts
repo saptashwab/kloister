@@ -55,14 +55,21 @@ describe('timelineSheet (M9)', () => {
   );
 
   it('orders by hierarchy with outline levels and a plan and sprint row first', () => {
-    expect(sheet.rows.map((r) => r[0])).toEqual(['Plan', 'Sprints', 'WEB-1', 'WEB-9', 'WEB-10']);
-    expect(sheet.layout.outlineLevels).toEqual([0, 0, 0, 1, 1]);
+    expect(sheet.rows.map((r) => r[0])).toEqual([
+      'Plan',
+      'Sprints',
+      'Holidays',
+      'WEB-1',
+      'WEB-9',
+      'WEB-10',
+    ]);
+    expect(sheet.layout.outlineLevels).toEqual([0, 0, 0, 0, 1, 1]);
     expect(sheet.rows[0]?.[1]).toBe('2026-11-02 – 2026-11-11 · 7.5 working days · 6 days of work');
-    expect(sheet.layout.boldRows).toEqual([0, 2]);
+    expect(sheet.layout.boldRows).toEqual([0, 3]);
   });
 
   it('gives parents their children span and work, and leaves their own values', () => {
-    const [, , parent, done, open] = sheet.rows;
+    const [, , , parent, done, open] = sheet.rows;
     expect(parent?.slice(5, 9)).toEqual(['2026-11-02', '7.5', '2026-11-11', '6']);
     expect(done?.slice(5, 9)).toEqual(['2026-11-02', '2', '2026-11-03', '2']);
     expect(open?.slice(5, 13)).toEqual([
@@ -80,10 +87,10 @@ describe('timelineSheet (M9)', () => {
   it('draws one column per week, marks today and shows status as text', () => {
     expect(sheet.headers.slice(13)).toEqual(['2026-11-02', '2026-11-09 (today)']);
     expect(sheet.rows[1]?.slice(13)).toEqual(['Sprint 4', 'Sprint 4']);
-    expect(sheet.rows[3]?.slice(13)).toEqual(['✓', '']);
-    expect(sheet.rows[4]?.slice(13)).toEqual(['○', '']);
-    expect(sheet.layout.fills?.[4]?.slice(13)).toEqual(['C8EBF3', 'C8EBF3']);
-    expect(sheet.layout.fills?.[3]?.slice(13)).toEqual(['E3E6EC', null]);
+    expect(sheet.rows[4]?.slice(13)).toEqual(['✓', '']);
+    expect(sheet.rows[5]?.slice(13)).toEqual(['○', '']);
+    expect(sheet.layout.fills?.[5]?.slice(13)).toEqual(['C8EBF3', 'C8EBF3']);
+    expect(sheet.layout.fills?.[4]?.slice(13)).toEqual(['E3E6EC', null]);
     expect(sheet.note).toBeNull();
   });
 
@@ -102,5 +109,14 @@ describe('timelineSheet (M9)', () => {
     const empty = timelineSheet([item({ id: 'x', number: 1 })], [], '2026-11-02');
     expect(empty.rows[0]?.[1]).toBe('No dated items');
     expect(empty.headers.length).toBe(13);
+  });
+
+  it('skips holidays in durations and lists them per week (M9.1)', () => {
+    const task = item({ id: 'h', number: 1, startDate: '2026-11-02', dueDate: '2026-11-06' });
+    const withHoliday = timelineSheet([task], [], '2026-11-02', [
+      { name: 'Founders day', startDate: '2026-11-04', endDate: '2026-11-04' },
+    ]);
+    expect(withHoliday.rows[3]?.[6]).toBe('4');
+    expect(withHoliday.rows[2]?.slice(13)).toEqual(['Founders day']);
   });
 });

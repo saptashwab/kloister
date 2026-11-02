@@ -9,6 +9,11 @@ import {
   type ScheduleSpan,
   startSlot,
   type WorkItemDto,
+  NO_HOLIDAYS,
+  type RescheduleChangeRequest,
+  slotHalfDay,
+  finishAfter,
+  type WorkCalendar,
   workingDuration,
 } from '@kloister/shared';
 import { flattenTree, type TreeNode } from './board-logic';
@@ -43,9 +48,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  *
  * @param roots Tree roots.
  * @param collapsed Ids of collapsed rows.
+ * @param cal Holidays (M9.1); none by default.
  * @returns Rows in display order.
  */
-export function timelineRows(roots: TreeNode[], collapsed: ReadonlySet<string>): TimelineRow[] {
+export function timelineRows(
+  roots: TreeNode[],
+  collapsed: ReadonlySet<string>,
+  cal: WorkCalendar = NO_HOLIDAYS,
+): TimelineRow[] {
   const spans = new Map<string, ScheduleSpan | null>();
   const leaves = (node: TreeNode): ScheduleDates[] =>
     node.children.flatMap((c) =>
@@ -53,7 +63,7 @@ export function timelineRows(roots: TreeNode[], collapsed: ReadonlySet<string>):
     );
   const walk = (list: TreeNode[]) => {
     for (const node of list) {
-      if (node.children.length > 0) spans.set(node.id, scheduleSpan(leaves(node)));
+      if (node.children.length > 0) spans.set(node.id, scheduleSpan(leaves(node), cal));
       walk(node.children);
     }
   };
@@ -70,11 +80,18 @@ export function timelineRows(roots: TreeNode[], collapsed: ReadonlySet<string>):
  * children.
  *
  * @param items Visible items.
+ * @param cal Holidays (M9.1); none by default.
  * @returns The span, or null without dates.
  */
-export function planSpan(items: readonly WorkItemDto[]): ScheduleSpan | null {
+export function planSpan(
+  items: readonly WorkItemDto[],
+  cal: WorkCalendar = NO_HOLIDAYS,
+): ScheduleSpan | null {
   const parents = new Set(items.map((i) => i.parentId).filter((id) => id !== null));
-  return scheduleSpan(items.filter((i) => !parents.has(i.id)));
+  return scheduleSpan(
+    items.filter((i) => !parents.has(i.id)),
+    cal,
+  );
 }
 
 /**
@@ -365,11 +382,13 @@ export function scaleTicks(
  *
  * @param items Visible items.
  * @param edges Visible links.
+ * @param cal Holidays (M9.1); none by default.
  * @returns Conflicting successors and their predecessors.
  */
 export function conflicts(
   items: readonly WorkItemDto[],
   edges: readonly PlanEdge[],
+  cal: WorkCalendar = NO_HOLIDAYS,
 ): Map<string, string[]> {
   const byId = new Map(items.map((i) => [i.id, i]));
   const result = new Map<string, string[]>();
@@ -379,11 +398,11 @@ export function conflicts(
     if (pred === undefined || succ === undefined || pred.dueDate === null) continue;
     const begin =
       succ.startDate !== null
-        ? startSlot(succ.startDate, succ.startSecondHalf)
+        ? startSlot(succ.startDate, succ.startSecondHalf, cal)
         : succ.dueDate !== null
-          ? endSlot(succ.dueDate, succ.dueFirstHalf)
+          ? endSlot(succ.dueDate, succ.dueFirstHalf, cal)
           : null;
-    if (begin === null || begin > endSlot(pred.dueDate, pred.dueFirstHalf)) continue;
+    if (begin === null || begin > endSlot(pred.dueDate, pred.dueFirstHalf, cal)) continue;
     result.set(succ.id, [...(result.get(succ.id) ?? []), pred.id]);
   }
   return result;
@@ -576,9 +595,10 @@ export function allowedTypes(item: WorkItemDto, childTypes: readonly ItemType[])
  * weighted by its working days (at least half a day), as Microsoft Project does.
  *
  * @param node The row's tree node.
+ * @param cal Holidays (M9.1); none by default.
  * @returns Whole percent, or null for a title-only row without visible items.
  */
-export function percentComplete(node: TreeNode): number | null {
+export function percentComplete(node: TreeNode, cal: WorkCalendar = NO_HOLIDAYS): number | null {
   const own = (item: WorkItemDto): number =>
     item.status === 'DONE'
       ? 100
@@ -592,9 +612,57 @@ export function percentComplete(node: TreeNode): number | null {
   let weight = 0;
   let done = 0;
   for (const item of items) {
-    const w = Math.max(0.5, workingDuration(item));
+    const w = Math.max(0.5, workingDuration(item, cal));
     weight += w;
     done += w * own(item);
   }
   return Math.round(done / weight);
+}
+
+/**
+ * Changes that keep items' working days after holidays changed (docs/
+ * M9-PLAN.md §14): Not started items the caller may edit, whose dates touch
+ * the changed days, keep the duration they had under the old calendar. A
+ * start on a new holiday moves to the next working day and the finish moves.
+ * Dependent items then follow through the reschedule flow.
+ *
+ * @param items Visible items.
+ * @param ranges The changed holiday ranges.
+ * @param before The calendar the items were planned with.
+ * @param after The calendar now.
+ * @returns Reschedule changes, keeping pins.
+ */
+export function keepDurations(
+  items: readonly WorkItemDto[],
+  ranges: readonly { startDate: string; endDate: string }[],
+  before: WorkCalendar,
+  after: WorkCalendar,
+): RescheduleChangeRequest[] {
+  const changes: RescheduleChangeRequest[] = [];
+  for (const item of items) {
+    if (item.status !== 'NOT_STARTED' || !item.can.edit) continue;
+    if (item.startDate === null || item.dueDate === null) continue;
+    const touches = ranges.some(
+      (r) => r.startDate <= item.dueDate! && r.endDate >= item.startDate!,
+    );
+    if (!touches) continue;
+    const start = slotHalfDay(startSlot(item.startDate, item.startSecondHalf, after), after);
+    const days = Math.max(0.5, workingDuration(item, before));
+    const finish = finishAfter(start, days, after);
+    if (
+      start.date === item.startDate &&
+      start.second === item.startSecondHalf &&
+      finish.dueDate === item.dueDate &&
+      finish.dueFirstHalf === item.dueFirstHalf
+    )
+      continue;
+    changes.push({
+      item: item.id,
+      startDate: start.date,
+      startSecondHalf: start.second,
+      ...finish,
+      pin: 'keep',
+    });
+  }
+  return changes;
 }

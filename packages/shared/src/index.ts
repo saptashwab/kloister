@@ -11,6 +11,7 @@ export * from './audit-labels.js';
 export * from './auth.js';
 export * from './due.js';
 export * from './errors.js';
+export * from './holidays.js';
 export * from './items.js';
 export * from './pagination.js';
 export * from './projects.js';

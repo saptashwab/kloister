@@ -2633,6 +2633,159 @@
         "tags": ["Notifications"]
       }
     },
+    "/api/v1/projects/{id}/holidays": {
+      "get": {
+        "operationId": "ProjectHolidaysController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "The project's calendar and the instance changes since the last review.",
+        "tags": ["ProjectHolidays"]
+      },
+      "post": {
+        "operationId": "ProjectHolidaysController_add",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateHolidayDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Adds a project holiday.",
+        "tags": ["ProjectHolidays"]
+      }
+    },
+    "/api/v1/projects/{id}/holidays/reviewed": {
+      "post": {
+        "operationId": "ProjectHolidaysController_reviewed",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/ReviewHolidaysDto" } }
+          }
+        },
+        "responses": { "204": { "description": "" } },
+        "summary": "Records that instance holiday changes were reviewed.",
+        "tags": ["ProjectHolidays"]
+      }
+    },
+    "/api/v1/projects/{id}/holidays/{holidayId}": {
+      "delete": {
+        "operationId": "ProjectHolidaysController_remove",
+        "parameters": [
+          {
+            "name": "holidayId",
+            "required": true,
+            "in": "path",
+            "description": "Holiday id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Removes a project holiday.",
+        "tags": ["ProjectHolidays"]
+      }
+    },
+    "/api/v1/admin/holidays": {
+      "get": {
+        "operationId": "AdminHolidaysController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": { "schema": { "type": "array", "items": { "type": "object" } } }
+            }
+          }
+        },
+        "summary": "Lists the instance holidays.",
+        "tags": ["AdminHolidays"]
+      },
+      "post": {
+        "operationId": "AdminHolidaysController_add",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateHolidayDto" } }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Adds an instance holiday.",
+        "tags": ["AdminHolidays"]
+      }
+    },
+    "/api/v1/admin/holidays/{holidayId}": {
+      "delete": {
+        "operationId": "AdminHolidaysController_remove",
+        "parameters": [
+          {
+            "name": "holidayId",
+            "required": true,
+            "in": "path",
+            "description": "Holiday id.",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "responses": { "204": { "description": "" } },
+        "summary": "Removes an instance holiday.",
+        "tags": ["AdminHolidays"]
+      }
+    },
     "/api/v1/projects/{id}/timeline": {
       "get": {
         "operationId": "TimelineController_get",
@@ -3847,6 +4000,10 @@
           "autoMoveDependents": {
             "type": "boolean",
             "description": "Timeline date changes move dependent items without asking (SPEC §6.4)."
+          },
+          "useInstanceHolidays": {
+            "type": "boolean",
+            "description": "The timeline uses the instance-wide holidays (M9.1)."
           }
         }
       },
@@ -4332,6 +4489,24 @@
           }
         },
         "required": ["copies"]
+      },
+      "CreateHolidayDto": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Name.", "minLength": 1, "maxLength": 100 },
+          "startDate": { "type": "string", "description": "First day." },
+          "endDate": { "type": "string", "description": "Last day, inclusive." }
+        },
+        "required": ["name", "startDate", "endDate"]
+      },
+      "ReviewHolidaysDto": {
+        "type": "object",
+        "properties": {
+          "through": {
+            "type": "string",
+            "description": "The newest instance change the caller saw (ISO timestamp); default now."
+          }
+        }
       },
       "HalfDayDto": {
         "type": "object",

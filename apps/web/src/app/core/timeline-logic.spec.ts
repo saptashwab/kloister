@@ -1,7 +1,9 @@
 import { makeItem as item } from '../../testing/fixtures';
 import { buildTree } from './board-logic';
+import { workCalendar } from '@kloister/shared';
 import {
   allowedTypes,
+  keepDurations,
   percentComplete,
   barBox,
   childTypeOf,
@@ -215,5 +217,41 @@ describe('percentComplete (M9)', () => {
     const [root] = buildTree([epic, done, half]);
     expect(percentComplete(root)).toBe(90);
     expect(percentComplete(root.children[1])).toBe(50);
+  });
+});
+
+describe('keepDurations (M9.1)', () => {
+  it('keeps working days of Not started items over new holidays', () => {
+    const range = { startDate: '2026-11-04', endDate: '2026-11-04' };
+    const before = workCalendar([]);
+    const after = workCalendar([range]);
+    const touched = item(1, { startDate: '2026-11-02', dueDate: '2026-11-04' });
+    const onHoliday = item(2, { startDate: '2026-11-04', dueDate: '2026-11-04' });
+    const started = item(3, {
+      startDate: '2026-11-02',
+      dueDate: '2026-11-04',
+      status: 'IN_PROGRESS',
+    });
+    const elsewhere = item(4, { startDate: '2026-11-09', dueDate: '2026-11-10' });
+    expect(keepDurations([touched, onHoliday, started, elsewhere], [range], before, after)).toEqual(
+      [
+        {
+          item: 'i1',
+          startDate: '2026-11-02',
+          startSecondHalf: false,
+          dueDate: '2026-11-05',
+          dueFirstHalf: false,
+          pin: 'keep',
+        },
+        {
+          item: 'i2',
+          startDate: '2026-11-05',
+          startSecondHalf: false,
+          dueDate: '2026-11-05',
+          dueFirstHalf: false,
+          pin: 'keep',
+        },
+      ],
+    );
   });
 });

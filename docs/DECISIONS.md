@@ -1,5 +1,12 @@
 # Decisions
 
+## Planning: M9.1 holidays (2026-11-02)
+
+- Owner decisions: holidays both instance-wide (admins) and per project (PMs and Leads), whole days only,
+  durations kept with finishes moving. Admins never move project items: instance changes surface as a
+  timeline notice for the project's PMs and Leads (keep durations or keep dates). One additive table,
+  `Holiday`, with soft deletes so projects can see what changed; details in docs/M9-PLAN.md §14.
+
 ## M9 timeline implementation (2026-11-02)
 
 - First CI run: the database tests passed; seven browser tests failed. Fixes: the timeline test data put Tasks

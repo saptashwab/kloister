@@ -193,6 +193,9 @@ import { ProjectTeamsComponent } from './project-teams';
                     <mat-checkbox formControlName="autoMoveDependents">
                       Move dependent items automatically on the timeline
                     </mat-checkbox>
+                    <mat-checkbox formControlName="useInstanceHolidays">
+                      Use the instance-wide holidays on the timeline
+                    </mat-checkbox>
                   }
 
                   <button
@@ -489,6 +492,7 @@ export class ProjectSettingsPage implements OnInit {
     description: ['', [Validators.maxLength(PROJECT_DESCRIPTION_MAX)]],
     membersCanAssignOthers: [false],
     autoMoveDependents: [false],
+    useInstanceHolidays: [true],
   });
 
   /**
@@ -571,7 +575,7 @@ export class ProjectSettingsPage implements OnInit {
   protected async saveGeneral(): Promise<void> {
     const project = this.project();
     if (project === null) return;
-    const { name, description, membersCanAssignOthers, autoMoveDependents } =
+    const { name, description, membersCanAssignOthers, autoMoveDependents, useInstanceHolidays } =
       this.generalForm.getRawValue();
     await this.run(async () => {
       const saved = await this.api.update(project.id, {
@@ -579,7 +583,7 @@ export class ProjectSettingsPage implements OnInit {
         description,
         ...(project.ownerId !== null
           ? {}
-          : { settings: { membersCanAssignOthers, autoMoveDependents } }),
+          : { settings: { membersCanAssignOthers, autoMoveDependents, useInstanceHolidays } }),
       });
       // Saved: the form shows the stored values again.
       this.generalForm.markAsPristine();
@@ -720,6 +724,7 @@ export class ProjectSettingsPage implements OnInit {
       description: project.description,
       membersCanAssignOthers: project.settings.membersCanAssignOthers,
       autoMoveDependents: project.settings.autoMoveDependents,
+      useInstanceHolidays: project.settings.useInstanceHolidays,
     });
   }
 

@@ -11,6 +11,8 @@ describe('project settings', () => {
         statusToBucket: {},
         labelStyle: 'SOLID',
         autoMoveDependents: false,
+        useInstanceHolidays: true,
+        holidaysReviewedAt: null,
       });
     }
   });

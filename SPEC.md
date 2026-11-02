@@ -436,6 +436,11 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   and Members with TEAMS scope get their team; personal spaces have no timeline (404).
 - Phone width shows the grid only, as stacked cards. The timeline is a lazy route and uses no third-party
   Gantt library.
+- Holidays (M9.1, docs/M9-PLAN.md §14): whole-day holidays per project (PMs and Leads) and instance-wide
+  (admins; projects may switch them off) are not working days for durations, moves, totals and exports.
+  Changing a project holiday keeps affected Not started items' working days through the reschedule flow.
+  Instance holiday changes never move items; the timeline offers the project's PMs and Leads to keep
+  durations or keep dates. Holidays are shaded on the timeline and listed in the Excel Timeline sheet.
 
 ## 7. ADO CSV transfers (M8; simplified in M8.1)
 

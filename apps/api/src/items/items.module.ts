@@ -1,4 +1,5 @@
 import { SettingsModule } from '../settings/settings.module.js';
+import { HolidaysModule } from '../holidays/holidays.module.js';
 import { DuplicationController } from './duplication.controller.js';
 import { DuplicationService } from './duplication.service.js';
 import { ProjectSnapshotsController, WorkSnapshotsController } from './snapshots.controller.js';
@@ -24,7 +25,14 @@ import { WorkService } from './work.service.js';
  * so notes and attachments find items through the same visibility filter.
  */
 @Module({
-  imports: [AuditModule, ProjectsModule, NotificationsModule, StorageModule, SettingsModule],
+  imports: [
+    AuditModule,
+    ProjectsModule,
+    NotificationsModule,
+    StorageModule,
+    SettingsModule,
+    HolidaysModule,
+  ],
   controllers: [
     ItemsController,
     ChecklistController,

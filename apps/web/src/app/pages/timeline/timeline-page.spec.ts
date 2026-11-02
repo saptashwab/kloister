@@ -1,6 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import type { RescheduleChangeRequest, WorkItemDetailDto } from '@kloister/shared';
+import type {
+  HolidayDto,
+  ProjectHolidaysDto,
+  RescheduleChangeRequest,
+  WorkItemDetailDto,
+} from '@kloister/shared';
 import {
   makeBucket,
   makeItem,
@@ -9,6 +14,7 @@ import {
   makeSprint,
   settle,
 } from '../../../testing/fixtures';
+import { HolidaysApiService } from '../../core/holidays-api.service';
 import { ItemsApiService } from '../../core/items-api.service';
 import { PageActions } from '../../core/page-actions';
 import { ProjectContext } from '../../core/project-context';
@@ -37,7 +43,10 @@ const readOnly = { edit: false, move: false, delete: false, deleteCascade: false
 const epicRef = { id: 'i1', number: 1, key: 'KLO-1', type: 'EPIC' as const, title: 'Launch' };
 
 describe('TimelinePage (M9)', () => {
-  async function render(items: WorkItemDetailDto[], options: { viewer?: boolean } = {}) {
+  async function render(
+    items: WorkItemDetailDto[],
+    options: { viewer?: boolean; holidays?: Partial<ProjectHolidaysDto> } = {},
+  ) {
     const project = makeProject(
       options.viewer === true ? { myRole: 'VIEWER', myPermissions: ['VIEW_ITEMS'] } : {},
     );
@@ -57,6 +66,15 @@ describe('TimelinePage (M9)', () => {
       addDependency: vi.fn().mockResolvedValue(undefined),
     };
     const flow = { change: vi.fn().mockResolvedValue(null) };
+    const holidaysApi = {
+      forProject: vi.fn().mockResolvedValue({
+        holidays: [],
+        useInstanceHolidays: true,
+        instanceChanges: [],
+        ...options.holidays,
+      }),
+      markReviewed: vi.fn().mockResolvedValue(undefined),
+    };
     await TestBed.configureTestingModule({
       imports: [TimelinePage],
       providers: [
@@ -64,6 +82,7 @@ describe('TimelinePage (M9)', () => {
         ProjectContext,
         PageActions,
         { provide: RescheduleFlow, useValue: flow },
+        { provide: HolidaysApiService, useValue: holidaysApi },
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
       ],
@@ -83,7 +102,14 @@ describe('TimelinePage (M9)', () => {
     await settle(fixture);
     await settle(fixture);
     const page = fixture.componentInstance as unknown as TimelineInternals;
-    return { fixture, root: fixture.nativeElement as HTMLElement, itemsApi, flow, page };
+    return {
+      fixture,
+      root: fixture.nativeElement as HTMLElement,
+      itemsApi,
+      flow,
+      page,
+      holidaysApi,
+    };
   }
 
   const epic = makeItem(1, { type: 'EPIC', bucketId: null, title: 'Launch' });
@@ -202,5 +228,33 @@ describe('TimelinePage (M9)', () => {
     expect((fixture.nativeElement as HTMLElement).classList.contains('wrap')).toBe(true);
     page.setDensity('compact');
     localStorage.removeItem('kloister.timeline.widths');
+  });
+
+  it('skips holidays in durations and offers to keep durations after instance changes', async () => {
+    const holiday: HolidayDto = {
+      id: 'h1',
+      name: 'Founders day',
+      startDate: '2026-11-09',
+      endDate: '2026-11-09',
+      scope: 'INSTANCE',
+      createdAt: '2026-11-01T00:00:00.000Z',
+      deletedAt: null,
+    };
+    const { root, flow, holidaysApi, fixture } = await render([epic, a, b], {
+      holidays: { holidays: [holiday], instanceChanges: [holiday] },
+    });
+    const rows = [...root.querySelectorAll('[role="row"]')];
+    // KLO-2 spans Monday 9 Nov, now a holiday: 3 working days instead of 4.
+    expect(rows[1]?.querySelector('.cell.num')?.textContent?.trim()).toBe('3');
+    expect(root.querySelector('.holiday')).not.toBeNull();
+    const notice = root.querySelector('.notice');
+    expect(notice?.textContent).toContain('1 item spans them');
+    flow.change.mockResolvedValue({ changes: [], kept: [], items: [], rescheduleId: 'r1' });
+    [...(notice?.querySelectorAll('button') ?? [])][0]?.click();
+    await settle(fixture);
+    const [changes] = flow.change.mock.calls[0] as [RescheduleChangeRequest[]];
+    expect(changes[0]).toMatchObject({ item: 'i2', dueDate: '2026-11-12', dueFirstHalf: true });
+    expect(holidaysApi.markReviewed).toHaveBeenCalledWith('p1', '2026-11-01T00:00:00.000Z');
+    expect(root.querySelector('.notice')).toBeNull();
   });
 });

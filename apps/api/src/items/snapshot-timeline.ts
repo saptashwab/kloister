@@ -4,6 +4,7 @@ import {
   type ItemType,
   scheduleSpan,
   type ScheduleDates,
+  workCalendar,
   workingDuration,
 } from '@kloister/shared';
 import type { SnapshotLayout } from './snapshot-format.js';
@@ -44,6 +45,16 @@ export interface TimelineSheetSprint {
   /** `YYYY-MM-DD`. */
   startDate: string;
   /** `YYYY-MM-DD`. */
+  endDate: string;
+}
+
+/** A holiday for the holidays row and the working-day calendar (M9.1). */
+export interface TimelineSheetHoliday {
+  /** Name. */
+  name: string;
+  /** `YYYY-MM-DD`. */
+  startDate: string;
+  /** `YYYY-MM-DD`, inclusive. */
   endDate: string;
 }
 
@@ -102,19 +113,22 @@ const FIXED_WIDTHS = [12, 44, 10, 22, 12, 12, 7, 12, 9, 24, 14, 16, 14];
 /**
  * Builds the Timeline sheet (docs/M9-PLAN.md §6): the items in hierarchy
  * order with Excel outline levels, summary spans for parents, a plan row and
- * a sprint row, then one column per week filled for each item's dates. Only
+ * a sprint row and a holidays row, then one column per week filled for each item's dates. Only
  * the items passed in appear, so the caller passes readable items only.
  *
  * @param items Readable items.
  * @param sprints The project's sprints.
  * @param today `YYYY-MM-DD`, marked in the week headers.
+ * @param holidays The project's holidays; durations skip them (M9.1).
  * @returns The sheet.
  */
 export function timelineSheet(
   items: readonly TimelineSheetItem[],
   sprints: readonly TimelineSheetSprint[],
   today: string,
+  holidays: readonly TimelineSheetHoliday[] = [],
 ): TimelineSheet {
+  const cal = workCalendar(holidays);
   const ids = new Set(items.map((i) => i.id));
   const children = new Map<string | null, TimelineSheetItem[]>();
   for (const item of items) {
@@ -135,11 +149,14 @@ export function timelineSheet(
   const leavesUnder = (id: string): TimelineSheetItem[] =>
     (children.get(id) ?? []).flatMap((c) => (children.has(c.id) ? leavesUnder(c.id) : [c]));
   const rows = ordered.map(({ item, depth }) => {
-    const summary = children.has(item.id) ? scheduleSpan(leavesUnder(item.id)) : null;
+    const summary = children.has(item.id) ? scheduleSpan(leavesUnder(item.id), cal) : null;
     return { item, depth, summary };
   });
 
-  const plan = scheduleSpan(items.filter((i) => !children.has(i.id)));
+  const plan = scheduleSpan(
+    items.filter((i) => !children.has(i.id)),
+    cal,
+  );
   const firstDay = plan === null ? null : mondayOf(plan.start.date);
   const lastDay = plan === null ? null : mondayOf(plan.finish.dueDate);
   const totalWeeks =
@@ -177,18 +194,31 @@ export function timelineSheet(
     ),
   ];
 
-  const dataRows: string[][] = [planRow, sprintRow];
+  const holidayRow = [
+    'Holidays',
+    'Holidays in each week (not working days)',
+    ...FIXED_HEADERS.slice(2).map(() => ''),
+    ...weekStarts.map((d) =>
+      holidays
+        .filter((h) => dayNumber(h.startDate) <= d + 6 && dayNumber(h.endDate) >= d)
+        .map((h) => h.name)
+        .join('\n'),
+    ),
+  ];
+
+  const dataRows: string[][] = [planRow, sprintRow, holidayRow];
   const fills: (string | null)[][] = [
     [...FIXED_HEADERS.map(() => PLAN_FILL), ...weekStarts.map(() => PLAN_FILL)],
     [],
+    [],
   ];
-  const outlineLevels = [0, 0];
+  const outlineLevels = [0, 0, 0];
   const boldRows = [0];
   for (const { item, depth, summary } of rows) {
     const own = {
       start: item.startDate,
       due: item.dueDate,
-      days: workingDuration(item),
+      days: workingDuration(item, cal),
     };
     const shown =
       summary === null

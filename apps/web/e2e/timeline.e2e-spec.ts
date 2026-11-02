@@ -242,3 +242,84 @@ test('Viewers read the timeline without editing; phones get a list; dark mode re
   await expect(page.getByText('Bars are shown on wider screens.')).toBeVisible();
   await snap(page, 'timeline-phone');
 });
+
+test('holidays keep working days: a project holiday moves finishes, an instance one asks first', async ({
+  page,
+}) => {
+  await signIn(page, USERS.admin);
+  const plan = await seedPlan(page, 'TLHOL');
+  const k = plan.project.key!;
+  await page.goto(`/p/${k}/timeline`);
+  // A project holiday on Wednesday 4 Nov: Draft copy (2-4 Nov) keeps 3 days and ends Thursday.
+  await page.getByRole('button', { name: /^Holidays/ }).click();
+  const dialog = page.getByRole('dialog', { name: 'Holidays' });
+  await dialog.getByRole('textbox', { name: 'Name' }).fill('Founders day');
+  await dialog.getByRole('textbox', { name: 'First day', exact: true }).fill('04/11/2026');
+  await dialog.getByRole('textbox', { name: 'First day', exact: true }).press('Tab');
+  await dialog.getByRole('button', { name: 'Add holiday' }).click();
+  await expect(dialog.getByText('Founders day')).toBeVisible();
+  await snap(page, 'timeline-holidays-dialog');
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect
+    .poll(() => datesOf(page, plan, plan.ids.draft))
+    .toEqual({ start: '2026-11-02', due: '2026-11-05' });
+  await expect(page.locator('.holiday')).toHaveCount(1);
+  await snap(page, 'timeline-holiday-shading');
+
+  // An instance holiday moves nothing until a PM or Lead answers the notice.
+  try {
+    await instanceNotice(page, plan);
+  } finally {
+    // Remove instance holidays even on failure, so later scenarios keep their working days.
+    const list = (await (await page.request.get('api/v1/admin/holidays')).json()) as {
+      id: string;
+    }[];
+    for (const h of list) await page.request.delete(`api/v1/admin/holidays/${h.id}`, { headers });
+  }
+});
+
+/**
+ * Adds an instance holiday and answers the timeline's notice with Keep dates.
+ *
+ * @param page Signed-in administrator page on the plan's timeline.
+ * @param plan The plan.
+ * @returns Resolves once checked.
+ */
+async function instanceNotice(page: Page, plan: Plan): Promise<void> {
+  const added = await page.request.post('api/v1/admin/holidays', {
+    headers,
+    data: { name: 'Company day', startDate: '2026-11-10', endDate: '2026-11-10' },
+  });
+  expect(added.status()).toBe(201);
+  const before = await datesOf(page, plan, plan.ids.launch);
+  await page.reload();
+  const notice = page.getByRole('status').filter({ hasText: 'Instance holidays changed' });
+  await expect(notice).toBeVisible();
+  expect(await datesOf(page, plan, plan.ids.launch)).toEqual(before);
+  await notice.getByRole('button', { name: 'Keep dates' }).click();
+  await expect(notice).toHaveCount(0);
+  await page.reload();
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Instance holidays changed' }),
+  ).toHaveCount(0);
+}
+
+test('admins add and remove instance holidays; others cannot use them', async ({ page }) => {
+  await signIn(page, USERS.admin);
+  await page.goto('/admin/settings/holidays');
+  await page.getByRole('textbox', { name: 'Name' }).fill('Example closure');
+  await page.getByRole('textbox', { name: 'First day', exact: true }).fill('24/12/2026');
+  await page.getByRole('textbox', { name: 'First day', exact: true }).press('Tab');
+  await page.getByRole('textbox', { name: 'Last day', exact: true }).fill('26/12/2026');
+  await page.getByRole('textbox', { name: 'Last day', exact: true }).press('Tab');
+  await page.getByRole('button', { name: 'Add holiday' }).click();
+  const list = page.getByRole('list', { name: 'Instance holidays' });
+  await expect(list).toContainText('Example closure');
+  await expect(list).toContainText('24 Dec 2026 – 26 Dec 2026');
+  await snap(page, 'admin-holidays');
+  await page.getByRole('button', { name: 'Remove Example closure' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Remove' }).click();
+  await expect(page.getByText('No instance holidays yet.')).toBeVisible();
+  await signIn(page, USERS.pm);
+  expect((await page.request.get('api/v1/admin/holidays')).status()).toBe(403);
+});

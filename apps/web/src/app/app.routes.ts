@@ -69,6 +69,12 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/admin-settings/admin-logs').then((m) => m.AdminLogsPage),
       },
+      {
+        // Instance-wide holidays for project timelines (SPEC §6.4, M9.1).
+        path: 'holidays',
+        loadComponent: () =>
+          import('./pages/admin-settings/admin-holidays').then((m) => m.AdminHolidaysPage),
+      },
       { path: '', pathMatch: 'full', redirectTo: 'branding' },
     ],
   },

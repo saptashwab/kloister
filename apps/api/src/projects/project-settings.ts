@@ -34,6 +34,15 @@ export function parseProjectSettings(raw: Prisma.JsonValue): ProjectSettings {
       typeof value['autoMoveDependents'] === 'boolean'
         ? value['autoMoveDependents']
         : DEFAULT_PROJECT_SETTINGS.autoMoveDependents,
+    useInstanceHolidays:
+      typeof value['useInstanceHolidays'] === 'boolean'
+        ? value['useInstanceHolidays']
+        : DEFAULT_PROJECT_SETTINGS.useInstanceHolidays,
+    holidaysReviewedAt:
+      typeof value['holidaysReviewedAt'] === 'string' &&
+      !Number.isNaN(Date.parse(value['holidaysReviewedAt']))
+        ? value['holidaysReviewedAt']
+        : DEFAULT_PROJECT_SETTINGS.holidaysReviewedAt,
   };
 }
 

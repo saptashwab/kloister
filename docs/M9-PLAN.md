@@ -613,3 +613,44 @@ DECISIONS apply.
   parents weighted by working days). "Show on board" and "Show on timeline" are
   icon links in the drawer header rather than menu items, so read-only drawers
   keep their previous controls.
+
+## 14. Holidays (M9.1, owner request 2026-11-02)
+
+Owner decisions: holidays both instance-wide (admins) and per project (PMs and
+Leads); whole days only; durations are kept and finishes move; admins never
+move project items.
+
+- **Data.** One additive table `Holiday`: `projectId` (null for an instance
+  holiday), `name`, `startDate`, `endDate` (whole days, inclusive),
+  `createdById`, `createdAt`, `deletedAt` (removal is a soft delete, so a
+  project can still see what changed). Project settings gain
+  `useInstanceHolidays` (default true, PM) and `holidaysReviewedAt`.
+- **Working days.** A holiday on a weekday is not a working day: durations,
+  finish dates, dependent moves, spans, totals and % complete weights skip it,
+  in the API planner, the web app and the Excel sheet alike. A project's
+  calendar is its own holidays plus, when switched on, the instance holidays.
+- **Project holidays.** PMs and Leads add and remove them from the timeline's
+  Holidays dialog. After saving, Not started items they may edit whose span
+  touches the changed days keep their working days: a start on a new holiday
+  moves to the next working day and the finish moves; dependent items follow.
+  This runs through the reschedule flow (confirmation or automatic, with Undo).
+- **Instance holidays.** Admins manage them under Admin settings › Holidays.
+  Nothing in any project moves then, so admins gain no reach into projects.
+  A project's timeline shows its PMs and Leads a notice while instance holidays
+  changed since `holidaysReviewedAt`: "Keep their durations" moves the affected
+  items as above (computing their old durations without those changes), "Keep
+  dates" leaves them. Either choice records the review.
+- **Display.** Holidays shade their days on the timeline with the name on
+  hover, are listed in the dialog (instance ones read-only, marked as such)
+  and get a Holidays row in the Excel Timeline sheet.
+- **API.** `GET /projects/:id/holidays` (any member: the project's calendar,
+  the instance changes since the review and the setting), `POST` and
+  `DELETE /projects/:id/holidays[/:holidayId]` and `POST
+/projects/:id/holidays/reviewed` (`MANAGE_BOARD`, audited), and
+  `GET/POST/DELETE /admin/holidays[/:holidayId]` (admins, audited). Personal
+  spaces answer 404, like the timeline.
+- M9.1 implementation notes: holiday dates are typed with the app's date fields
+  ("From" and "to"); the Holidays dialog also holds the PM switch for instance
+  holidays (also in Project settings › General); removing an instance holiday
+  asks for confirmation; a project that never reviewed compares instance
+  changes with its creation time.

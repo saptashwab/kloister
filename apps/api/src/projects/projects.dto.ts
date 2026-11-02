@@ -145,6 +145,11 @@ export class ProjectSettingsChangeDto implements Partial<ProjectSettings> {
   @OmittableNotNull()
   @IsBoolean()
   autoMoveDependents?: boolean;
+
+  /** The timeline uses the instance-wide holidays (M9.1). */
+  @OmittableNotNull()
+  @IsBoolean()
+  useInstanceHolidays?: boolean;
 }
 
 /** Body of `PATCH /projects/:id`. */

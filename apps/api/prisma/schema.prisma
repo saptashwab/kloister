@@ -58,6 +58,7 @@ model User {
   auditLogs     AuditLog[]
   memberships   ProjectMember[]
   createdItems  WorkItem[]
+  holidays      Holiday[]
   notes         Note[]
   attachments   Attachment[]
   notifications Notification[]  @relation("NotificationRecipient")
@@ -165,6 +166,7 @@ model Project {
   teams          Team[]
   buckets        Bucket[]
   sprints        Sprint[]
+  holidays       Holiday[]
   labels         Label[]
   items          WorkItem[]
   adoDestination AdoDestination?
@@ -622,4 +624,25 @@ model Notification {
   @@index([userId, createdAt])
   @@index([userId, readAt])
   @@index([workItemId])
+}
+
+/// A whole-day holiday that is not a working day on the timeline (SPEC §6.4,
+/// M9.1): instance-wide when projectId is null, else for one project.
+/// Removal sets deletedAt, so projects can review instance changes.
+model Holiday {
+  id          String    @id @default(uuid()) @db.Uuid
+  /// Null for an instance-wide holiday managed by admins.
+  projectId   String?   @db.Uuid
+  name        String
+  startDate   DateTime  @db.Date
+  /// Last day, inclusive.
+  endDate     DateTime  @db.Date
+  createdById String    @db.Uuid
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User     @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([projectId])
 }

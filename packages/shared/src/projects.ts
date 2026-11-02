@@ -214,6 +214,10 @@ export interface ProjectSettings {
    * start with it on.
    */
   autoMoveDependents: boolean;
+  /** The project's timeline uses the instance-wide holidays (M9.1; default on). */
+  useInstanceHolidays: boolean;
+  /** When the project's PMs or Leads last reviewed instance holiday changes, or null (M9.1). */
+  holidaysReviewedAt: string | null;
 }
 
 /**
@@ -239,6 +243,8 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   statusToBucket: {},
   labelStyle: LabelStyle.SOLID,
   autoMoveDependents: false,
+  useInstanceHolidays: true,
+  holidaysReviewedAt: null,
 };
 
 /** A project as the API returns it, from the caller's point of view. */

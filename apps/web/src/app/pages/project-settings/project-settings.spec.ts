@@ -61,6 +61,8 @@ describe('ProjectSettingsPage', () => {
         statusToBucket: {},
         labelStyle: 'SOLID',
         autoMoveDependents: false,
+        useInstanceHolidays: true,
+        holidaysReviewedAt: null,
       },
       myRole: null,
       myVisibility: 'ALL',

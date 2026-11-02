@@ -19,6 +19,7 @@ import { fromDbDate } from '../common/dates.js';
 import { serializable } from '../common/transactions.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { itemFacts, type ItemRow, toItemRef } from '../items/item.mapper.js';
+import { HolidaysService } from '../holidays/holidays.service.js';
 import { ItemsService } from '../items/items.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { type ProjectAccess, ProjectAccessService } from '../projects/project-access.service.js';
@@ -46,11 +47,13 @@ export class TimelineService {
    * @param prisma Database access.
    * @param items Item lookups, the visibility filter and item updates.
    * @param access Item permission rules.
+   * @param holidays The project's working-day calendar (M9.1).
    */
   constructor(
     private readonly prisma: PrismaService,
     private readonly items: ItemsService,
     private readonly access: ProjectAccessService,
+    private readonly holidays: HolidaysService,
   ) {}
 
   /**
@@ -105,7 +108,8 @@ export class TimelineService {
       const planItems = rows.map((r) => this.planItem(access, r));
       const edges = await this.visibleEdges(tx, access);
       const changes = dto.changes.map((c, i) => planChange(c, requested[i]));
-      let plan = planSchedule(planItems, edges, changes);
+      const calendar = await this.holidays.calendar(access, tx);
+      let plan = planSchedule(planItems, edges, changes, calendar);
       if (dto.mode === RescheduleMode.ONLY) {
         // Only the requested items change; their own planned result stands
         // (a pin rule, a removed pin or a snap), but nothing else moves.

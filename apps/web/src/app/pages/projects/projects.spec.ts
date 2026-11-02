@@ -19,6 +19,8 @@ const project: ProjectDto = {
     statusToBucket: {},
     labelStyle: 'SOLID',
     autoMoveDependents: false,
+    useInstanceHolidays: true,
+    holidaysReviewedAt: null,
   },
   myRole: 'LEAD',
   myVisibility: 'ALL',

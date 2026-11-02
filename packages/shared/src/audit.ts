@@ -60,6 +60,12 @@ export const AuditAction = {
   SPRINT_STARTED: 'SPRINT_STARTED',
   SPRINT_CLOSED: 'SPRINT_CLOSED',
   SPRINT_DELETED: 'SPRINT_DELETED',
+  /** A holiday was added, to a project or the whole instance (M9.1). */
+  HOLIDAY_ADDED: 'HOLIDAY_ADDED',
+  /** A holiday was removed (M9.1). */
+  HOLIDAY_REMOVED: 'HOLIDAY_REMOVED',
+  /** A project's PMs or Leads reviewed instance holiday changes (M9.1). */
+  HOLIDAYS_REVIEWED: 'HOLIDAYS_REVIEWED',
   /** An admin opened or read a project they are not a member of (SPEC §3.1). */
   ADMIN_CROSS_PROJECT_ACCESS: 'ADMIN_CROSS_PROJECT_ACCESS',
   /** An admin saved an app setting; `meta.key` names it, `meta.value` holds the new value. */
