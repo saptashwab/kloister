@@ -74,7 +74,7 @@ export const LiveEvent = {
   ITEM_REMOVED: 'item-removed',
   /** Dependency links between visible items changed. */
   LINKS_CHANGED: 'links-changed',
-  /** Buckets, labels, sprints, teams or holidays changed. */
+  /** Buckets, labels, sprints or holidays changed (team changes send `access-changed`). */
   BOARD_CHANGED: 'board-changed',
   /** Members, roles, teams or project settings changed; reload the project. */
   ACCESS_CHANGED: 'access-changed',

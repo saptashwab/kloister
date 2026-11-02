@@ -1,6 +1,6 @@
 {
   "name": "kloister",
-  "version": "0.0.0",
+  "version": "1.3.0-dev",
   "description": "Self-hosted Kanban project tracker for restricted environments.",
   "private": true,
   "license": "MIT",
@@ -23,7 +23,8 @@
     "test": "npm run test --workspaces --if-present && npm run test:deploy",
     "package:release": "node deploy/package.mjs",
     "verify:release": "node deploy/verify-package.mjs",
-    "test:deploy": "node --test deploy/*.test.mjs"
+    "test:deploy": "node --test deploy/*.test.mjs",
+    "docs": "node deploy/api-reference.mjs --write && node deploy/schema-diagram.mjs --write"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

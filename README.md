@@ -115,3 +115,15 @@ Excel/offline snapshots are reading copies, not restorable backups.
 
 [Installation](docs/INSTALL.md) · [Upgrades and rollback](docs/UPGRADE.md) ·
 [Administration and recovery](docs/ADMIN.md) · [MIT license](LICENSE)
+
+## Technical documentation
+
+For developers and reviewers, [docs/technical/README.md](docs/technical/README.md) gives a short
+overview with diagrams and links to the details: [architecture](docs/technical/ARCHITECTURE.md),
+[security and permissions](docs/technical/SECURITY.md), the
+[data model](docs/technical/DATA-MODEL.md), [scheduling](docs/technical/SCHEDULING.md),
+[live updates](docs/technical/LIVE-UPDATES.md), the [web app](docs/technical/WEB.md),
+[ADO transfer internals](docs/technical/ADO-TRANSFER.md), [testing](docs/technical/TESTING.md) and
+the generated [API reference](docs/technical/API.md) (also as [OpenAPI](docs/openapi.json)).
+[CONTRIBUTING](CONTRIBUTING.md) explains how to set up a development environment and the checks
+every change must pass.

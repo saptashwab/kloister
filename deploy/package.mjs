@@ -42,9 +42,10 @@ export async function packageRelease(version, destination) {
   await writeFile(join(backend, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   await cp(join(root, 'apps/api/dist'), join(backend, 'dist'), {
     recursive: true,
-    filter: (source) => !/[/\\]openapi\.(?:js|js\.map|d\.ts)$/.test(source),
+    filter: (source) => !/[/\\]openapi(?:-[a-z]+)?\.(?:js|js\.map|d\.ts|json)$/.test(source),
   });
-  // OpenAPI generation is a build command, not an installed backend entry point.
+  // OpenAPI generation (its script, helpers and output) is a build step, not part
+  // of the installed backend.
   await cp(join(root, 'apps/api/prisma'), join(backend, 'prisma'), { recursive: true });
   await cp(join(root, 'apps/api/prisma.config.ts'), join(backend, 'prisma.config.ts'));
   await cp(join(root, 'packages/shared/dist'), join(backend, 'vendor/shared/dist'), {

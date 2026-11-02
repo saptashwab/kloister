@@ -1,5 +1,36 @@
 # Decisions
 
+## M11 technical documentation and API reference (2026-11-02)
+
+- Built as planned in docs/M11-PLAN.md. Choices made while building, closest to the plan:
+- Response schemas come from the controllers' declared return types: the build-time generator
+  (`apps/api/src/cli/openapi-types.ts`) reads them with the TypeScript compiler, which is already a
+  development dependency, and turns the shared interfaces into named component schemas. No hand-written
+  copies of response shapes and no new decorators on controllers, so the reference follows the code.
+  Routes that answer through the raw reply (event stream, snapshot and ADO downloads) are described
+  in the generator; one that returns nothing without answering 204 stops the build.
+- The shared error schema follows the code, `ApiError` `{ code, message, details? }` (SPEC §8), not the
+  plan's `status`/`field` wording; validation errors carry `{ field, messages }` in `details`. Each
+  operation references the errors its guards and validation can produce (400, 401, 403, 404, 409, plus
+  413/415 for uploads and 429 for sign-in), not an exhaustive list per service rule.
+- The permission of each operation is read from the same metadata the guards use and written as the
+  `x-permission` extension and a description line, with the roles from the shared role table.
+- The session cookie and the CSRF header are security schemes (`session`, `csrf`); writes require
+  both, sign-in only `csrf`. The previous per-operation `X-Requested-With` parameter is replaced.
+- The API build writes `apps/api/dist/openapi.json`; `npm run docs` copies it to `docs/openapi.json` and
+  renders `docs/technical/API.md` and the DATA-MODEL diagram. Deployment tests fail when any of them is
+  stale, so the committed files always match the build (SPEC §8 wording updated). Packaging leaves the
+  generator files and its output out of the backend.
+- The document's version is the root `package.json` version, now `1.3.0-dev`; release preparation sets
+  the release number (for v1.3.0: `1.3.0`) and regenerates the documents.
+- The documentation plugin only read `*.dto.ts` files, so cursor pagination (`cursor`, `limit`) and the
+  audit log filters were missing from the document. `pagination.ts` is now included and the audit query
+  DTO moved unchanged to `audit/audit.dto.ts`; routes and validation are unchanged.
+- The ER diagram shows key columns (PK, FK, UK) and every relation; column details are in the text, to
+  keep the diagram readable.
+- Worked examples (items, timeline reschedule, notes, sprints) live in `cli/openapi-examples.ts` and are
+  validated against the generated schemas by a deployment test.
+
 ## Planning: M11–M13 (2026-11-02)
 
 - The owner approved three milestones after M10, planned in docs/M11-PLAN.md, docs/M12-PLAN.md and

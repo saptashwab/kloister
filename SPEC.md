@@ -631,7 +631,8 @@ resolve ambiguous types and validate the ordinary hierarchy rules.
 - Pagination is cursor-based on list endpoints.
 - Errors use a consistent shape: `{ code, message, details? }`.
 - `GET /api/v1/health` returns 200 with no auth required, for scripts.
-- An OpenAPI doc is generated at build time into `docs/` (not served in production).
+- An OpenAPI doc is generated at build time and committed as `docs/openapi.json` with a readable
+  reference in `docs/technical/API.md` (`npm run docs`; CI fails when they are stale). It is not served in production.
 
 Main groups: `auth`, `me`, `me/work`, `me/personal` (the caller's personal space), `users/:id/work`, `admin/users`, `admin/settings`, `admin/audit`, `admin/backups`,
 `projects`, `projects/:id/members`, `projects/:id/teams`, `buckets`, `labels`, `sprints`, `items` (+ `/move`, `/checklist`,

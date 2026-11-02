@@ -10,7 +10,7 @@
         "options": {
           "classValidatorShim": true,
           "introspectComments": true,
-          "dtoFileNameSuffix": [".dto.ts"]
+          "dtoFileNameSuffix": [".dto.ts", "pagination.ts"]
         }
       }
     ]
