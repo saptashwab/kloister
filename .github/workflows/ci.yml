@@ -28,7 +28,7 @@ concurrency:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     # Disposable Postgres for the database tests. Pulled from Google's mirror of
     # the official Docker Hub image, which avoids both Docker Hub pull rate limits
