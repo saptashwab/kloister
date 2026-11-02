@@ -1,10 +1,14 @@
 import {
+  fitTypeUnder,
   hasOwnSprint,
+  isAllowedParent,
+  type ItemType,
   type MoveItemRequest,
   type UpdateItemRequest,
   type WorkItemDto,
 } from '@kloister/shared';
 import { errorMessage } from './api';
+import { TYPE_LABELS } from './labels';
 import { NONE } from './board-logic';
 import { shareOf, sharesOf, withShareFor } from './shares';
 
@@ -26,7 +30,9 @@ export type BulkField =
   | 'priority'
   | 'labelAdd'
   | 'labelRemove'
-  | 'share';
+  | 'share'
+  | 'type'
+  | 'parent';
 
 /** One request of a bulk edit. */
 export type BulkStep =
@@ -39,6 +45,10 @@ export interface BulkRights {
   userId: string;
   /** Whether the caller may assign others on an item of this team. */
   canAssignOthers(teamId: string | null): boolean;
+  /** Types of an item's visible children (for `type` and `parent`, v1.3.1). */
+  childTypes?(itemId: string): ItemType[];
+  /** A visible item by id (the new parent for `parent`). */
+  itemById?(itemId: string): WorkItemDto | undefined;
 }
 
 /** The requests to send and the items left out. */
@@ -49,6 +59,8 @@ export interface BulkPlan {
   skipped: WorkItemDto[];
   /** Items that already have the value. */
   unchanged: WorkItemDto[];
+  /** Why a skipped item was left out, when there is more to say than "not allowed". */
+  reasons: Map<string, string>;
 }
 
 /** Result of a bulk edit. */
@@ -75,7 +87,11 @@ export function planBulk(
   value: string,
   rights: BulkRights,
 ): BulkPlan {
-  const plan: BulkPlan = { steps: [], skipped: [], unchanged: [] };
+  const plan: BulkPlan = { steps: [], skipped: [], unchanged: [], reasons: new Map() };
+  const skip = (item: WorkItemDto, reason?: string): void => {
+    plan.skipped.push(item);
+    if (reason !== undefined) plan.reasons.set(item.id, reason);
+  };
   const target = value === NONE ? null : value;
   for (const item of items) {
     switch (field) {
@@ -169,9 +185,67 @@ export function planBulk(
         } else plan.steps.push({ item, kind: 'update', request: { assigneeIds: next } });
         break;
       }
+      case 'type': {
+        // A plain type change (v1.3.1): checked against the item's parent and
+        // children here, so the summary says why a row was left out.
+        const type = value as ItemType;
+        const parentType = item.ancestors[item.ancestors.length - 1]?.type ?? null;
+        const children = rights.childTypes?.(item.id) ?? [];
+        const misfit = children.find((child) => !isAllowedParent(child, type));
+        if (item.type === type) plan.unchanged.push(item);
+        else if (!item.can.plan) skip(item);
+        else if (item.adHoc && !['TASK', 'BUG'].includes(type))
+          skip(item, 'an ad-hoc item stays a Task or Bug');
+        else if (parentType !== null && !isAllowedParent(type, parentType))
+          skip(
+            item,
+            `it sits under a ${typeLabel(parentType)}, which cannot hold a ${typeLabel(type)}`,
+          );
+        else if (misfit !== undefined)
+          skip(item, `a ${typeLabel(type)} cannot hold its ${typeLabel(misfit)} items`);
+        else plan.steps.push({ item, kind: 'update', request: { type } });
+        break;
+      }
+      case 'parent': {
+        // Move under a new parent, changing the type when the old one is not
+        // allowed there (the indent rule, v1.3.1); NONE moves to the top level.
+        const parent = target === null ? null : rights.itemById?.(target);
+        const fit =
+          parent === undefined
+            ? { error: 'the new parent is not visible' }
+            : fitTypeUnder(item.type, parent?.type ?? null, rights.childTypes?.(item.id) ?? []);
+        if (item.parentId === target) plan.unchanged.push(item);
+        else if (!item.can.plan) skip(item);
+        else if (item.adHoc && target !== null) skip(item, 'an ad-hoc item has no parent');
+        else if (
+          parent !== undefined &&
+          parent !== null &&
+          (parent.id === item.id || parent.ancestors.some((a) => a.id === item.id))
+        )
+          skip(item, 'an item cannot sit under itself or its own child');
+        else if ('error' in fit) skip(item, fit.error.charAt(0).toLowerCase() + fit.error.slice(1));
+        else
+          plan.steps.push({
+            item,
+            kind: 'update',
+            request:
+              fit.type === item.type ? { parentId: target } : { parentId: target, type: fit.type },
+          });
+        break;
+      }
     }
   }
   return plan;
+}
+
+/**
+ * A type's name for the bulk summary.
+ *
+ * @param type Item type.
+ * @returns E.g. "User Story".
+ */
+function typeLabel(type: ItemType): string {
+  return TYPE_LABELS[type];
 }
 
 /**

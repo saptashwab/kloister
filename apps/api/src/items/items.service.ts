@@ -458,7 +458,9 @@ export class ItemsService {
    * and, when the project maps the new status to a bucket and the item is
    * on the board, moves the card to the top of that bucket (SPEC §4.2); the
    * target bucket's entry rule does not run then, so the chosen status
-   * stands.
+   * stands. Making an item off the board a Story, Task or Bug places it at
+   * the top of the "New items start in" bucket, with that bucket's entry
+   * rule, provided the caller can still see it there (v1.3.1).
    *
    * Permissions: 404 unless visible; 403 unless the caller may edit it
    * (`EDIT_ANY_ITEM`, own items with `EDIT_OWN_ITEMS`, or leading its
@@ -542,11 +544,37 @@ export class ItemsService {
           type,
           children.map((c) => c.type),
         );
-        if (requiresBucket(type) && current.bucketId === null) {
-          throw invalidField('type', 'Move the item onto the board before making it a ' + type);
-        }
         note('type', current.type, type);
         data.type = type;
+        // A Story, Task or Bug needs a bucket: an item off the board goes into
+        // the project's "New items start in" bucket (v1.3.1) instead of the
+        // change being refused. As on create, the caller must still see the
+        // item there, and the bucket's entry rule sets the status unless this
+        // change names one. Placing it needs no move permission: the type
+        // change (a plan change) is what puts it on the board.
+        if (requiresBucket(type) && current.bucketId === null) {
+          const facts = { ...itemFacts(current), assigneeIds: after, teamId };
+          const bucketId = await this.defaultBucketId(tx, access, facts);
+          if (bucketId === null) throw invalidField('type', `A ${type} must be in a bucket`);
+          if (!this.access.canViewItem(access, { ...facts, bucketId })) {
+            throw invalidField(
+              'type',
+              'You could not see this item in the bucket new items start in; move it onto the board first',
+            );
+          }
+          note('bucketId', null, bucketId);
+          data.bucketId = bucketId;
+          data.position = await topPosition(tx, projectId, bucketId);
+          if (dto.status === undefined) {
+            const bucket = await tx.bucket.findUniqueOrThrow({ where: { id: bucketId } });
+            const entered = statusOnEnter(bucket, current.status);
+            if (entered !== current.status) {
+              note('status', current.status, entered);
+              data.status = entered;
+              data.completedAt = entered === ItemStatus.DONE ? new Date() : null;
+            }
+          }
+        }
       }
       const parentId = dto.parentId === undefined ? current.parentId : dto.parentId;
       if (parentId !== current.parentId) {

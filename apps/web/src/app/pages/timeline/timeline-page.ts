@@ -30,6 +30,7 @@ import {
   ITEM_TITLE_MAX,
   ItemStatus,
   ItemType,
+  naturalChildType,
   type PlanEdge,
   PresenceAction,
   type PresenceField,
@@ -78,6 +79,7 @@ import {
   parsePredecessors,
   planSpan,
   allowedTypes,
+  typeName,
   keepDurations,
   percentComplete,
   rebaseDescendants,
@@ -434,9 +436,33 @@ interface BarDraft {
             <button mat-menu-item type="button" [matMenuTriggerFor]="bucketMenu">
               Move to bucket
             </button>
+            <button mat-menu-item type="button" [matMenuTriggerFor]="typeMenuBulk">
+              Change type
+            </button>
+            <button mat-menu-item type="button" [matMenuTriggerFor]="parentMenuBulk">
+              Move under…
+            </button>
             <button mat-menu-item type="button" (click)="unlink()">Unlink</button>
             <button mat-menu-item type="button" (click)="shiftDates()">Shift dates…</button>
             <button mat-menu-item type="button" (click)="deleteSelected()">Delete…</button>
+          </mat-menu>
+          <mat-menu #typeMenuBulk="matMenu">
+            @for (t of types; track t) {
+              <button mat-menu-item type="button" (click)="bulk('type', t)">
+                <app-type-icon [type]="t" />{{ typeLabels[t] }}
+              </button>
+            }
+          </mat-menu>
+          <mat-menu #parentMenuBulk="matMenu">
+            <button mat-menu-item type="button" (click)="bulk('parent', none)">
+              Top level (no parent)
+            </button>
+            @for (p of parentChoices(); track p.id) {
+              <button mat-menu-item type="button" (click)="bulk('parent', p.id)">
+                <app-type-icon [type]="p.type" /><span class="k-key">{{ p.key }}</span>
+                {{ p.title }}
+              </button>
+            }
           </mat-menu>
           <mat-menu #sharePerson="matMenu">
             @for (m of ctx.members(); track m.userId) {
@@ -872,7 +898,7 @@ interface BarDraft {
                     [placeholder]="addLabel()"
                     [attr.maxlength]="titleMax"
                     (keydown.enter)="addRow($any($event.target))"
-                    (keydown.escape)="addParent.set(null)"
+                    (keydown.escape)="addParent.set(null); addChildId.set(null)"
                     (paste)="pasteRows($event)"
                   />
                 </div>
@@ -1060,6 +1086,9 @@ interface BarDraft {
         }
         @if (canCreate()) {
           <button mat-menu-item type="button" (click)="focusAdd(it)">Add row below</button>
+          @if (canHaveChildren(it)) {
+            <button mat-menu-item type="button" (click)="focusAddChild(it)">Add child row</button>
+          }
         }
         @if (ctx.canEdit(it)) {
           @if (ctx.canPlan(it)) {
@@ -1273,6 +1302,17 @@ export class TimelinePage implements OnInit {
   protected readonly report = signal<{ summary: string; problems: string[] } | null>(null);
   /** The parent new rows go under, set by "Add row below"; null for the focused row's level. */
   protected readonly addParent = signal<WorkItemDto | null>(null);
+  /** Id of the item new rows go under as its children, set by "Add child row" (v1.3.1). */
+  protected readonly addChildId = signal<string | null>(null);
+  /**
+   * The item new rows go under, read fresh from the store so a later type
+   * change or removal is seen; null once it can no longer take children.
+   */
+  protected readonly addChildOf = computed(() => {
+    const id = this.addChildId();
+    const item = id === null ? undefined : this.ctx.itemsById().get(id);
+    return item !== undefined && this.canHaveChildren(item) ? item : null;
+  });
   protected readonly barDraft = signal<BarDraft | null>(null);
   protected readonly activeMenu = signal<MatMenu | null>(null);
   protected readonly menuItem = signal<WorkItemDto | null>(null);
@@ -1997,6 +2037,14 @@ export class TimelinePage implements OnInit {
         return;
       case 'Enter':
         event.preventDefault();
+        // Alt+Enter adds a child row under the focused row (v1.3.1).
+        if (event.altKey) {
+          const item = r?.node.item;
+          if (!item || !this.canCreate()) return;
+          if (this.canHaveChildren(item)) this.focusAddChild(item);
+          else this.toast.show(`A ${typeName(item.type)} cannot have child rows`);
+          return;
+        }
         if (c?.id === 'key' && r?.node.item) this.openItem(r.node.item);
         else this.startEdit(row, col, null);
         return;
@@ -2732,8 +2780,34 @@ export class TimelinePage implements OnInit {
    * @param beside The item the new row goes beside, or null for the focused row.
    */
   protected focusAdd(beside: WorkItemDto | null): void {
+    this.addChildId.set(null);
     this.addParent.set(beside);
     afterNextRender(() => this.adder()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  /**
+   * Focuses the add-row field so new rows become children of an item, with
+   * its natural child type (v1.3.1): Stories under a Feature, Tasks under a
+   * Story, Features under an Epic. Stays until another row is chosen.
+   *
+   * @param parent The item the new rows go under.
+   */
+  protected focusAddChild(parent: WorkItemDto): void {
+    if (!this.canHaveChildren(parent)) return;
+    this.addParent.set(null);
+    this.addChildId.set(parent.id);
+    afterNextRender(() => this.adder()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  /**
+   * Whether an item can take child rows: Epics, Features and Stories that are
+   * not ad hoc.
+   *
+   * @param item The item.
+   * @returns True when "Add child row" applies.
+   */
+  protected canHaveChildren(item: WorkItemDto): boolean {
+    return !item.adHoc && naturalChildType(item.type) !== null;
   }
 
   /**
@@ -2743,6 +2817,8 @@ export class TimelinePage implements OnInit {
    * @returns The parent item reference, or null for the top level.
    */
   private newRowParent(): { id: string; key: string; type: ItemType } | null {
+    const under = this.addChildOf();
+    if (under !== null) return { id: under.id, key: under.key, type: under.type };
     const beside = this.addParent() ?? this.rows()[this.focus().row]?.node.item ?? null;
     const parent = beside?.ancestors[beside.ancestors.length - 1];
     return parent === undefined ? null : { id: parent.id, key: parent.key, type: parent.type };
@@ -2756,6 +2832,8 @@ export class TimelinePage implements OnInit {
    * @returns The type.
    */
   private newRowType(parentType: ItemType | null): ItemType {
+    const under = this.addChildOf();
+    if (under !== null) return naturalChildType(under.type) ?? ItemType.TASK;
     const beside = this.addParent() ?? this.rows()[this.focus().row]?.node.item ?? null;
     return beside?.type ?? childTypeOf(parentType, ItemType.TASK);
   }
@@ -2937,6 +3015,12 @@ export class TimelinePage implements OnInit {
     const plan = planBulk(this.selectedItems(), field, value, {
       userId,
       canAssignOthers: (teamId) => this.ctx.canAssignOthers(teamId),
+      childTypes: (id) =>
+        this.ctx
+          .items()
+          .filter((i) => i.parentId === id)
+          .map((i) => i.type),
+      itemById: (id) => this.ctx.itemsById().get(id),
     });
     const result = await runBulk(plan.steps, (step) =>
       step.kind === 'move'
@@ -2945,15 +3029,31 @@ export class TimelinePage implements OnInit {
     );
     this.busy.set(false);
     for (const item of result.updated) this.ctx.upsert(item);
+    // A new parent or type also changes descendants' ancestors and buckets.
+    if ((field === 'parent' || field === 'type') && result.updated.length > 0)
+      await this.ctx.refresh();
     this.bulkRuns.update((n) => n + 1);
     this.report.set({
       summary: `${result.updated.length} updated, ${plan.unchanged.length} already set, ${plan.skipped.length} skipped, ${result.failed.length} refused.`,
       problems: [
-        ...plan.skipped.map((i) => `${i.key}: you cannot make this change`),
+        ...plan.skipped.map(
+          (i) => `${i.key}: ${plan.reasons.get(i.id) ?? 'you cannot make this change'}`,
+        ),
         ...result.failed.map((f) => `${f.item.key}: ${f.message}`),
       ],
     });
   }
+
+  /**
+   * Items the selected rows can move under: visible Epics, Features and
+   * Stories that are not selected, in plan order (v1.3.1).
+   */
+  protected readonly parentChoices = computed(() => {
+    const chosen = this.selected();
+    return this.ctx
+      .items()
+      .filter((i) => naturalChildType(i.type) !== null && !i.adHoc && !chosen.has(i.id));
+  });
 
   /**
    * Indents or outdents the selected rows, or the focused row without a
@@ -3008,11 +3108,20 @@ export class TimelinePage implements OnInit {
     const item = rows[index]?.node.item;
     if (item === undefined || item === null) return 'Choose a row first';
     if (!this.ctx.canPlan(item)) return `${item.key}: only PMs and Leads change its plan`;
-    const target = direction === 1 ? indentTarget(rows, index) : outdentTarget(rows, index);
+    const childTypes = this.ctx
+      .items()
+      .filter((i) => i.parentId === item.id)
+      .map((i) => i.type);
+    const target =
+      direction === 1
+        ? indentTarget(rows, index, childTypes)
+        : outdentTarget(rows, index, childTypes);
     if ('error' in target) return `${item.key}: ${target.error}`;
     try {
+      // The type changes with the move when the old one is not allowed there.
       const moved = await this.api.update(this.ctx.project()!.id, item.id, {
         parentId: target.parentId,
+        ...(target.type === undefined ? {} : { type: target.type }),
       });
       this.ctx.items.set(
         rebaseDescendants(

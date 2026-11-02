@@ -1121,13 +1121,29 @@ describe('work items (db)', () => {
       expect((await as('pm', 'PATCH', item(N.story), { type: 'TASK' })).statusCode).toBe(400);
       // A feature with a STORY child cannot become a story itself.
       expect((await as('pm', 'PATCH', item(N.feature), { type: 'STORY' })).statusCode).toBe(400);
-      // A feature off the board cannot become a story until it is in a bucket.
+      // A feature off the board that becomes a story goes into the default
+      // bucket instead of being refused (v1.3.1), and the change records it.
       const loose = await seedItem(prisma, projectId, { createdById: ids.pm, type: 'FEATURE' });
+      expect(loose.bucketId).toBeNull();
       const toStory = await as('pm', 'PATCH', item(loose.number), { type: 'STORY' });
-      expect(toStory.statusCode).toBe(400);
-      expect((toStory.json() as { details: { field: string }[] }).details[0]?.field).toBe('type');
-      await as('pm', 'POST', `${item(loose.number)}/move`, { bucketId: buckets.todo });
-      expect((await as('pm', 'PATCH', item(loose.number), { type: 'STORY' })).statusCode).toBe(200);
+      expect(toStory.statusCode).toBe(200);
+      const placed = toStory.json() as WorkItemDetailDto;
+      expect(placed.type).toBe('STORY');
+      // No "New items start in" bucket is set, so the first bucket is used.
+      expect(placed.bucketId).toBe(buckets.todo);
+      const change = await prisma.auditLog.findFirstOrThrow({
+        where: { entityId: loose.id, action: AuditAction.ITEM_UPDATED },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(JSON.stringify(change.meta)).toContain('bucketId');
+      // The chosen bucket's entry rule applies, as when an item enters it.
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { settings: { newItemBucketId: buckets.doing } },
+      });
+      const second = await seedItem(prisma, projectId, { createdById: ids.pm, type: 'FEATURE' });
+      const toTask = await as('pm', 'PATCH', item(second.number), { type: 'STORY' });
+      expect(toTask.json()).toMatchObject({ bucketId: buckets.doing, status: 'IN_PROGRESS' });
       // A task cannot keep a STORY parent if it becomes a FEATURE.
       expect((await as('pm', 'PATCH', item(N.theirs), { type: 'FEATURE' })).statusCode).toBe(400);
       // A parent in another project is not found.

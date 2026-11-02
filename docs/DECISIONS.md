@@ -1,5 +1,23 @@
 # Decisions
 
+## v1.3.1 timeline rows and bulk hierarchy edits (2026-11-03)
+
+- Owner report after upgrading to v1.3.0: building Epic → Feature → Story → Task on the timeline needed
+  manual bucket, type and parent changes per row. Fixes approved by the owner: Add child row (Alt+Enter) with
+  the natural child type; indent and outdent fit the type to the new parent (`fitTypeUnder` in the shared
+  package) instead of refusing; changing an off-board item to a Story, Task or Bug places it in the default
+  bucket instead of a 400 (API behaviour relaxed, recorded in the change's audit entry); bulk Change type and
+  Move under in the timeline and backlog, with a reason for every skipped row (the owner preferred reasons over
+  a toast; they appear in the existing bulk summary).
+- Move under uses the same type rule as indenting, so one action places stray rows correctly. Ad-hoc items keep
+  no parent and stay Tasks or Bugs. The plan setting applies to all of it.
+- Review follow-ups: the automatic placement checks the caller can still see the item in the chosen bucket (as
+  create does) and applies that bucket's entry rule unless the change names a status; it needs no move
+  permission because the type change is the plan change. An item retyped to a Task under a Story keeps its own
+  sprint (no automatic sprint inheritance on retype; creating under a Story still inherits). Moving an Epic
+  under another item follows the same type rule rather than being refused. A refusal caused by children the
+  caller cannot see keeps the API's existing message.
+
 ## M13 reports, workload with assignee shares, and the calendar (2026-11-03)
 
 - Built as planned in docs/M13-PLAN.md (owner decisions in its section 7). Choices made while building,

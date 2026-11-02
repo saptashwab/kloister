@@ -1,9 +1,9 @@
 import {
   endSlot,
+  fitTypeUnder,
   isAllowedParent,
   ItemType,
   type PlanEdge,
-  requiresBucket,
   type ScheduleDates,
   scheduleSpan,
   type ScheduleSpan,
@@ -431,18 +431,28 @@ export function childTypeOf(parent: ItemType | null, fallback: ItemType): ItemTy
   }
 }
 
-/** Outcome of an indent or outdent. */
-export type OutlineMove = { parentId: string | null } | { error: string };
+/**
+ * Outcome of an indent or outdent: the new parent and, when the row's type is
+ * not allowed there, the type it becomes (v1.3.1).
+ */
+export type OutlineMove = { parentId: string | null; type?: ItemType } | { error: string };
 
 /**
  * Where indenting a row puts it: under its previous sibling (the nearest row
- * above at the same depth), keeping its type (docs/M9-PLAN.md §3.1).
+ * above at the same depth). Its type is kept when allowed there, else it
+ * becomes the sibling's natural child type (v1.3.1; a Feature indented under a
+ * Feature becomes a Story).
  *
  * @param rows Rows in display order.
  * @param index The row.
- * @returns The new parent, or why it cannot move.
+ * @param childTypes Types of the row's own children.
+ * @returns The new parent and type, or why it cannot move.
  */
-export function indentTarget(rows: readonly TimelineRow[], index: number): OutlineMove {
+export function indentTarget(
+  rows: readonly TimelineRow[],
+  index: number,
+  childTypes: readonly ItemType[] = [],
+): OutlineMove {
   const row = rows[index];
   if (row?.node.item === undefined || row.node.item === null)
     return { error: 'This row cannot move' };
@@ -451,23 +461,46 @@ export function indentTarget(rows: readonly TimelineRow[], index: number): Outli
   const sibling = rows[i];
   if (sibling === undefined || sibling.depth !== row.depth)
     return { error: 'There is no row above at the same level to indent under' };
-  const parentType = sibling.node.ref.type;
-  if (!isAllowedParent(row.node.item.type, parentType))
-    return {
-      error: `A ${typeName(row.node.item.type)} cannot sit under a ${typeName(parentType)}`,
-    };
-  return { parentId: sibling.node.id };
+  return placed(row.node.item, sibling.node.id, sibling.node.ref.type, childTypes);
+}
+
+/**
+ * The move to a new parent with the type the row needs there.
+ *
+ * @param item The row's item.
+ * @param parentId New parent id, or null for the top level.
+ * @param parentType New parent's type, or null.
+ * @param childTypes Types of the item's children.
+ * @returns The move, or why it cannot happen.
+ */
+function placed(
+  item: WorkItemDto,
+  parentId: string | null,
+  parentType: ItemType | null,
+  childTypes: readonly ItemType[],
+): OutlineMove {
+  if (item.adHoc && parentId !== null) return { error: 'An ad-hoc item has no parent' };
+  const fit = fitTypeUnder(item.type, parentType, childTypes);
+  if ('error' in fit) return fit;
+  return fit.type === item.type ? { parentId } : { parentId, type: fit.type };
 }
 
 /**
  * Where outdenting a row puts it: beside its parent, under the parent's
- * parent, keeping its type.
+ * parent. Its type is kept when allowed there, else it becomes the new
+ * parent's natural child type (v1.3.1; a Story outdented to an Epic becomes a
+ * Feature).
  *
  * @param rows Rows in display order.
  * @param index The row.
- * @returns The new parent, or why it cannot move.
+ * @param childTypes Types of the row's own children.
+ * @returns The new parent and type, or why it cannot move.
  */
-export function outdentTarget(rows: readonly TimelineRow[], index: number): OutlineMove {
+export function outdentTarget(
+  rows: readonly TimelineRow[],
+  index: number,
+  childTypes: readonly ItemType[] = [],
+): OutlineMove {
   const row = rows[index];
   const item = row?.node.item;
   if (item === undefined || item === null) return { error: 'This row cannot move' };
@@ -475,11 +508,7 @@ export function outdentTarget(rows: readonly TimelineRow[], index: number): Outl
   const parent = item.ancestors[item.ancestors.length - 1];
   const grandparent = item.ancestors[item.ancestors.length - 2] ?? null;
   if (parent === undefined) return { error: 'This row is already at the top level' };
-  if (grandparent !== null && !isAllowedParent(item.type, grandparent.type))
-    return {
-      error: `A ${typeName(item.type)} cannot sit under a ${typeName(grandparent.type)}`,
-    };
-  return { parentId: grandparent?.id ?? null };
+  return placed(item, grandparent?.id ?? null, grandparent?.type ?? null, childTypes);
 }
 
 /**
@@ -571,8 +600,9 @@ export function rebaseDescendants(
 }
 
 /**
- * The types an item may change to (SPEC §4.1): allowed under its parent,
- * able to hold its visible children, and on the board when it must be.
+ * The types an item may change to (SPEC §4.1): allowed under its parent and
+ * able to hold its visible children. An item off the board may become a
+ * Story, Task or Bug; the API then places it in the default bucket (v1.3.1).
  *
  * @param item The item.
  * @param childTypes Types of its visible children.
@@ -583,8 +613,7 @@ export function allowedTypes(item: WorkItemDto, childTypes: readonly ItemType[])
   return Object.values(ItemType).filter(
     (type) =>
       (parent === undefined || isAllowedParent(type, parent.type)) &&
-      childTypes.every((child) => isAllowedParent(child, type)) &&
-      (!requiresBucket(type) || item.bucketId !== null),
+      childTypes.every((child) => isAllowedParent(child, type)),
   );
 }
 

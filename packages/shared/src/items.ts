@@ -68,6 +68,62 @@ export function isAllowedParent(child: ItemType, parent: ItemType): boolean {
   return ALLOWED_PARENT_TYPES[child].includes(parent);
 }
 
+/** Readable names of the item types, as shown in the app. */
+const TYPE_NAMES: Record<ItemType, string> = {
+  EPIC: 'Epic',
+  FEATURE: 'Feature',
+  STORY: 'User Story',
+  TASK: 'Task',
+  BUG: 'Bug',
+};
+
+/**
+ * The type a new or moved item usually gets under a parent (SPEC §4.1): a
+ * Feature under an Epic, a Story under a Feature, a Task under a Story.
+ *
+ * @param parent The parent's type.
+ * @returns The child type, or null when the parent cannot have children.
+ */
+export function naturalChildType(parent: ItemType): ItemType | null {
+  switch (parent) {
+    case ItemType.EPIC:
+      return ItemType.FEATURE;
+    case ItemType.FEATURE:
+      return ItemType.STORY;
+    case ItemType.STORY:
+      return ItemType.TASK;
+    default:
+      return null;
+  }
+}
+
+/**
+ * The type an item needs to sit under a parent (v1.3.1): its own type when that
+ * is allowed there, else the parent's natural child type, provided the item's
+ * own children may then stay under it. Used by indent, outdent and "Move
+ * under…", so placing an item never needs a separate type change.
+ *
+ * @param type The item's type now.
+ * @param parent The new parent's type, or null for the top level.
+ * @param childTypes The types of the item's children.
+ * @returns The type to use, or why the item cannot go there.
+ */
+export function fitTypeUnder(
+  type: ItemType,
+  parent: ItemType | null,
+  childTypes: readonly ItemType[],
+): { type: ItemType } | { error: string } {
+  if (parent === null || isAllowedParent(type, parent)) return { type };
+  const fitted = naturalChildType(parent);
+  if (fitted === null) return { error: `A ${TYPE_NAMES[parent]} cannot have child items` };
+  const misfit = childTypes.find((child) => !isAllowedParent(child, fitted));
+  if (misfit !== undefined)
+    return {
+      error: `It would become a ${TYPE_NAMES[fitted]}, which cannot hold its ${TYPE_NAMES[misfit]} items`,
+    };
+  return { type: fitted };
+}
+
 /**
  * Reports whether an item type has a sprint of its own (M12): Epics and
  * Features show their children's sprints instead.

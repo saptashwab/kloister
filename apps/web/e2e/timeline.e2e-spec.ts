@@ -367,3 +367,58 @@ test('Members keep the plan to PMs and Leads, suggest changes; the splitter narr
     drawer.getByText('Suggested plan change: Due 12 Nov, waiting on review'),
   ).toBeVisible();
 });
+
+test('child rows and Move under build the hierarchy without retyping (v1.3.1)', async ({
+  page,
+}) => {
+  await signIn(page, USERS.admin);
+  const plan = await seedPlan(page, 'TLKIDS');
+  const k = plan.project.key!;
+  const find = async (title: string): Promise<WorkItemDetailDto> => {
+    const res = await page.request.get(
+      `api/v1/projects/${plan.project.id}/items?q=${encodeURIComponent(title)}`,
+    );
+    const found = ((await res.json()) as { items: WorkItemDetailDto[] }).items;
+    return found.find((i) => i.title === title)!;
+  };
+  const content = await find('Content');
+  await page.goto(`/p/${k}/timeline`);
+
+  // "Add child row" on the Feature adds a Story under it, on the board.
+  await page.getByRole('button', { name: `Actions for ${k}-2` }).click();
+  await page.getByRole('menuitem', { name: 'Add child row' }).click();
+  const adder = page.getByRole('textbox', { name: new RegExp(`New row under ${k}-2`) });
+  await adder.fill('Pay by card');
+  await adder.press('Enter');
+  await expect(page.locator('[role="row"]', { hasText: 'Pay by card' })).toBeVisible();
+  const story = await find('Pay by card');
+  expect(story).toMatchObject({ type: 'STORY', parentId: content.id });
+  expect(story.bucketId).not.toBeNull();
+
+  // Two stray Features at the top level move under the Feature as Stories.
+  for (const title of ['Card wallet', 'Saved cards']) {
+    const res = await page.request.post(`api/v1/projects/${plan.project.id}/items`, {
+      headers,
+      data: { type: 'FEATURE', title },
+    });
+    expect(res.status()).toBe(201);
+  }
+  await page.reload();
+  const wallet = await find('Card wallet');
+  const saved = await find('Saved cards');
+  await page.getByRole('checkbox', { name: `Select ${wallet.key}` }).click();
+  await page
+    .getByRole('checkbox', { name: `Select ${saved.key}` })
+    .click({ modifiers: ['Control'] });
+  const bar = page.getByRole('region', { name: 'Selected rows' });
+  await bar.getByRole('button', { name: 'More…' }).click();
+  await page.getByRole('menuitem', { name: 'Move under…' }).click();
+  await page.getByRole('menuitem', { name: `${k}-2 Content` }).click();
+  await expect(page.getByText('2 updated, 0 already set, 0 skipped, 0 refused.')).toBeVisible();
+  for (const title of ['Card wallet', 'Saved cards']) {
+    const moved = await find(title);
+    expect(moved).toMatchObject({ type: 'STORY', parentId: content.id });
+    expect(moved.bucketId).not.toBeNull();
+  }
+  await snap(page, 'timeline-child-rows');
+});

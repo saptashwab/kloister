@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { ToastService } from '../../ui/toast.service';
 import { provideRouter } from '@angular/router';
 import type {
   HolidayDto,
@@ -32,6 +33,9 @@ interface TimelineInternals {
   selectClick(event: MouseEvent, index: number): void;
   bulk(field: 'status', value: string): Promise<void>;
   outline(direction: 1 | -1): Promise<void>;
+  focusAddChild(parent: WorkItemDetailDto): void;
+  addRow(input: HTMLInputElement): Promise<void>;
+  addLabel(): string;
   linkInOrder(): Promise<void>;
   typesFor(item: WorkItemDetailDto): string[];
   setType(item: WorkItemDetailDto, type: string): Promise<void>;
@@ -205,7 +209,43 @@ describe('TimelinePage (M9)', () => {
     await page.outline(1);
     await settle(fixture);
     expect(itemsApi.update).not.toHaveBeenCalled();
-    expect(root.textContent).toContain('KLO-3: A Task cannot sit under a Task');
+    expect(root.textContent).toContain('KLO-3: A Task cannot have child items');
+  });
+
+  it('adds child rows with the natural child type under the chosen row (v1.3.1)', async () => {
+    const feature = makeItem(7, { type: 'FEATURE', bucketId: null, title: 'Checkout' });
+    const { page, itemsApi, fixture, root } = await render([epic, a, feature]);
+    itemsApi.create.mockImplementation((_p: string, request: { title: string }) =>
+      Promise.resolve(makeItem(8, { type: 'STORY', title: request.title, parentId: feature.id })),
+    );
+    page.focusAddChild(feature);
+    await settle(fixture);
+    expect(page.addLabel()).toContain('New row under KLO-7');
+    const input = document.createElement('input');
+    input.value = 'Pay by card';
+    await page.addRow(input);
+    expect(itemsApi.create).toHaveBeenCalledWith('p1', {
+      type: 'STORY',
+      title: 'Pay by card',
+      parentId: feature.id,
+    });
+    // Tasks and Bugs take no children: Alt+Enter on one says so.
+    itemsApi.create.mockClear();
+    page.focusAddChild(a);
+    expect(itemsApi.create).not.toHaveBeenCalled();
+    const show = vi.spyOn(TestBed.inject(ToastService), 'show');
+    page.focusCell(1, 1, false);
+    root
+      .querySelector('[role="grid"]')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true }));
+    expect(show).toHaveBeenCalledWith('A Task cannot have child rows');
+    // Alt+Enter on the Feature points the add field at it.
+    page.focusCell(2, 1, false);
+    root
+      .querySelector('[role="grid"]')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true }));
+    await settle(fixture);
+    expect(page.addLabel()).toContain('New row under KLO-7');
   });
 
   it('is read-only for viewers: no add row, no editors, no draggable edges', async () => {

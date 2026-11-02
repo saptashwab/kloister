@@ -180,6 +180,7 @@ export class NavigationDialog {
     { key: 'Shift / Ctrl + click', action: 'Select a range / add or remove one row' },
     { key: 'Ctrl + ] / Ctrl + [', action: 'Indent / outdent the row or the selection' },
     { key: 'Insert', action: 'Add a row below' },
+    { key: 'Alt + Enter', action: 'Add a child row under the row' },
     { key: 'Left / Right (bar)', action: 'Move the bar by half a day; Enter saves' },
     { key: 'Shift + Left / Right (bar)', action: 'Change the duration by half a day' },
     { key: 'Left / Right (column edge)', action: 'Resize the column; Home resets it' },

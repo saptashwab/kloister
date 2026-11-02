@@ -102,16 +102,22 @@ describe('timeline rows and totals (M9)', () => {
     expect([...found.entries()]).toEqual([['i4', ['i3']]]);
   });
 
-  it('indents under the previous sibling and outdents to the grandparent', () => {
+  it('indents under the previous sibling and outdents to the grandparent, fixing the type', () => {
     const rows = timelineRows(buildTree([epic, a, b]), new Set());
-    expect(indentTarget(rows, 2)).toEqual({ error: 'A Feature cannot sit under a Feature' });
+    // A Feature indented under a Feature becomes a Story (v1.3.1)...
+    expect(indentTarget(rows, 2)).toEqual({ parentId: a.id, type: 'STORY' });
+    // ...unless its own children could not stay under a Story.
+    expect(indentTarget(rows, 2, ['STORY'])).toEqual({
+      error: 'It would become a User Story, which cannot hold its User Story items',
+    });
     expect(indentTarget(rows, 0)).toEqual({
       error: 'There is no row above at the same level to indent under',
     });
     expect(outdentTarget(rows, 1)).toEqual({ parentId: null });
     const task = item(6, { parentId: 'i2', ancestors: [...a.ancestors, { ...a, number: 2 }] });
     const deep = timelineRows(buildTree([epic, a, task]), new Set());
-    expect(outdentTarget(deep, 2)).toEqual({ error: 'A Task cannot sit under a Epic' });
+    // A Task outdented to sit under an Epic becomes a Feature.
+    expect(outdentTarget(deep, 2)).toEqual({ parentId: epic.id, type: 'FEATURE' });
     expect(childTypeOf('EPIC', 'TASK')).toBe('FEATURE');
     expect(childTypeOf(null, 'TASK')).toBe('TASK');
   });
@@ -185,12 +191,14 @@ describe('rebaseDescendants (M9)', () => {
 });
 
 describe('allowedTypes (M9)', () => {
-  it('offers only types that fit the parent, the children and the board', () => {
+  it('offers only types that fit the parent and the children', () => {
     const story = { id: 's', number: 3, key: 'KLO-3', type: 'STORY' as const, title: 'S' };
     const task = item(4, { ancestors: [story], parentId: 's' });
     expect(allowedTypes(task, [])).toEqual(['TASK', 'BUG']);
     const feature = item(2, { type: 'FEATURE', bucketId: null });
     expect(allowedTypes(feature, ['STORY'])).toEqual(['FEATURE']);
+    // Off the board, a childless Feature may still become a Story, Task or Bug (v1.3.1).
+    expect(allowedTypes(feature, [])).toEqual(['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG']);
     expect(allowedTypes(item(5), [])).toEqual(['EPIC', 'FEATURE', 'STORY', 'TASK', 'BUG']);
   });
 });

@@ -63,6 +63,74 @@ describe('bulk edits', () => {
     });
   });
 
+  it('changes types and says why rows were left out (v1.3.1)', () => {
+    const storyParent = { id: 's', number: 9, key: 'KLO-9', type: 'STORY' as const, title: 'S' };
+    const free = makeItem(1, { type: 'FEATURE', parentId: null, ancestors: [] });
+    const underStory = makeItem(2, { type: 'TASK', parentId: 's', ancestors: [storyParent] });
+    const withStories = makeItem(3, { type: 'FEATURE', parentId: null, ancestors: [] });
+    const locked = makeItem(4, { type: 'FEATURE', can: readOnly });
+    const plan = planBulk([free, underStory, withStories, locked], 'type', 'STORY', {
+      ...rights(true),
+      childTypes: (id) => (id === withStories.id ? ['STORY'] : []),
+    });
+    expect(plan.steps).toEqual([{ item: free, kind: 'update', request: { type: 'STORY' } }]);
+    expect(plan.reasons.get(underStory.id)).toBe(
+      'it sits under a User Story, which cannot hold a User Story',
+    );
+    expect(plan.reasons.get(withStories.id)).toBe('a User Story cannot hold its User Story items');
+    expect(plan.skipped.map((i) => i.number)).toEqual([2, 3, 4]);
+    expect(plan.reasons.has(locked.id)).toBe(false);
+  });
+
+  it('moves rows under a parent and fixes their type like an indent (v1.3.1)', () => {
+    const feature = makeItem(10, { type: 'FEATURE', parentId: null, ancestors: [] });
+    const strayFeature = makeItem(11, { type: 'FEATURE', parentId: null, ancestors: [] });
+    const task = makeItem(12, { type: 'TASK', parentId: null, ancestors: [] });
+    const featureRef = {
+      id: feature.id,
+      number: 10,
+      key: feature.key,
+      type: 'FEATURE' as const,
+      title: 'F',
+    };
+    const child = makeItem(13, { type: 'STORY', parentId: feature.id, ancestors: [featureRef] });
+    const adHoc = makeItem(14, { type: 'TASK', adHoc: true, parentId: null, ancestors: [] });
+    const byId = new Map([feature, child].map((i) => [i.id, i]));
+    const plan = planBulk([strayFeature, task, feature, adHoc], 'parent', child.id, {
+      ...rights(true),
+      itemById: (id) => byId.get(id),
+    });
+    // The stray Feature becomes a Task under the Story; the Task keeps its type.
+    expect(plan.steps.map((s) => s.request)).toEqual([
+      { parentId: child.id, type: 'TASK' },
+      { parentId: child.id },
+    ]);
+    expect(plan.reasons.get(feature.id)).toBe('an item cannot sit under itself or its own child');
+    expect(plan.reasons.get(adHoc.id)).toBe('an ad-hoc item has no parent');
+    const top = planBulk([child], 'parent', NONE, rights(true));
+    expect(top.steps[0]?.request).toEqual({ parentId: null });
+    // A Bug moved under an Epic becomes a Feature; an unknown parent is reported.
+    const epic = makeItem(20, { type: 'EPIC', parentId: null, ancestors: [] });
+    const bug = makeItem(21, { type: 'BUG', parentId: null, ancestors: [] });
+    const underEpic = planBulk([bug], 'parent', epic.id, {
+      ...rights(true),
+      itemById: (id) => (id === epic.id ? epic : undefined),
+    });
+    expect(underEpic.steps[0]?.request).toEqual({ parentId: epic.id, type: 'FEATURE' });
+    const gone = planBulk([bug], 'parent', 'missing', {
+      ...rights(true),
+      itemById: () => undefined,
+    });
+    expect(gone.reasons.get(bug.id)).toBe('the new parent is not visible');
+  });
+
+  it('lets an item off the board become a Story; the API picks its bucket (v1.3.1)', () => {
+    const loose = makeItem(30, { type: 'FEATURE', bucketId: null, parentId: null, ancestors: [] });
+    expect(planBulk([loose], 'type', 'STORY', rights(true)).steps[0]?.request).toEqual({
+      type: 'STORY',
+    });
+  });
+
   it('keeps going after a refusal and reports the API message', async () => {
     const items = [makeItem(1), makeItem(2), makeItem(3)];
     const plan = planBulk(items, 'sprint', 's1', rights(true));

@@ -8,6 +8,7 @@ import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   hasOwnSprint,
   ItemType,
+  naturalChildType,
   ProjectPermission,
   SprintState,
   type WorkItemDto,
@@ -226,6 +227,23 @@ const AD_HOC_GROUP = 'ad-hoc';
               <mat-select [disabled]="busy()" (valueChange)="bulk('bucket', $event)">
                 @for (b of ctx.buckets(); track b.id) {
                   <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Change type</mat-label>
+              <mat-select [disabled]="busy()" (valueChange)="bulk('type', $event)">
+                @for (t of itemTypes; track t) {
+                  <mat-option [value]="t">{{ typeLabels[t] }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>Move under</mat-label>
+              <mat-select [disabled]="busy()" (valueChange)="bulk('parent', $event)">
+                <mat-option [value]="none">Top level (no parent)</mat-option>
+                @for (p of parentChoices(); track p.id) {
+                  <mat-option [value]="p.id">{{ p.key }} {{ p.title }}</mat-option>
                 }
               </mat-select>
             </mat-form-field>
@@ -462,6 +480,15 @@ export class BacklogPage implements OnInit {
   protected readonly types = Object.values(ItemType);
   /** Type names. */
   protected readonly typeLabels = TYPE_LABELS;
+  /** Item types for "Change type" (v1.3.1). */
+  protected readonly itemTypes = Object.values(ItemType);
+  /** Items the selection can move under: visible Epics, Features and Stories not selected (v1.3.1). */
+  protected readonly parentChoices = computed(() => {
+    const chosen = this.selected();
+    return this.ctx
+      .items()
+      .filter((i) => naturalChildType(i.type) !== null && !i.adHoc && !chosen.has(i.id));
+  });
   private readonly today = isoDate(new Date());
 
   /** Serializes every current screen filter for the server snapshot preview. */
@@ -700,6 +727,12 @@ export class BacklogPage implements OnInit {
     const plan = planBulk(items, field, value, {
       userId,
       canAssignOthers: (teamId) => this.ctx.canAssignOthers(teamId),
+      childTypes: (id) =>
+        this.ctx
+          .items()
+          .filter((i) => i.parentId === id)
+          .map((i) => i.type),
+      itemById: (id) => byId.get(id),
     });
     this.report.set({ summary: `Updating ${plan.steps.length} items…`, problems: [] });
     const result = await runBulk(plan.steps, (step) =>
@@ -709,13 +742,18 @@ export class BacklogPage implements OnInit {
     );
     this.busy.set(false);
     for (const item of result.updated) this.ctx.upsert(item);
+    // A new parent or type also changes descendants' ancestors and buckets.
+    if ((field === 'parent' || field === 'type') && result.updated.length > 0)
+      await this.ctx.refresh();
     this.bulkRuns.update((n) => n + 1);
     this.report.set({
       summary:
         `${result.updated.length} updated, ${plan.unchanged.length} already set, ` +
         `${plan.skipped.length} skipped, ${result.failed.length} refused.`,
       problems: [
-        ...plan.skipped.map((i) => `${i.key}: you cannot make this change`),
+        ...plan.skipped.map(
+          (i) => `${i.key}: ${plan.reasons.get(i.id) ?? 'you cannot make this change'}`,
+        ),
         ...result.failed.map((f) => `${f.item.key}: ${f.message}`),
       ],
     });
