@@ -4,14 +4,23 @@ Self-hosted project tracking for teams that keep their work on their own server.
 Plan on Kanban boards, organize a backlog and manage personal tasks without SSO,
 outbound email or external services at runtime.
 
-**MIT licensed · v1.2 pre-release · Production target: RHEL 8.10 x86_64**
+**MIT licensed · v1.3 pre-release · Production target: RHEL 8.10 x86_64**
 
 ## Features
 
 - Configurable boards, labels, assignments, priorities, due dates with optional times and status rules.
 - Epics, Features, Stories, Tasks and Bugs, with hierarchy, dependencies and sprints.
 - A project **Timeline**: plan in a spreadsheet-like grid beside bars, with half-day working
-  durations, predecessors that move dependent items automatically, totals and bulk row actions.
+  durations, predecessors that move dependent items automatically, totals, bulk row actions and
+  instance and project **holidays**.
+- **Who changes the plan**: by default only PMs and Leads change titles, dates, sprints and links of
+  existing items; Members finish their own new items and can **suggest a change**.
+- **Reports**: Overview, Sprint (with burndown), Workload (people × weeks, with each assignee's
+  share of an item) and Plan health, from the items each person can see.
+- **Calendars** for each project and for My work, with holidays and sprint ranges; drag an item to
+  move it.
+- **Trash** with restore for 30 days, **ad-hoc items** that stay out of the plan, sprints owned by
+  Stories, and item references such as `KLO-12` with previews.
 - My work across projects, private personal spaces, project roles and optional teams.
 - Rich descriptions, checklists, notes, mentions, attachments and pasted images.
 - Item duplication, independent copies per person, Excel snapshots and offline archives.
@@ -28,6 +37,12 @@ choice), returned-ID linking and durable retry recovery. The
 processes; [ADO transfer](docs/ADO-EXPORT.md) lists permissions, limits and the acceptance drill.
 
 ![Project board with example data](docs/screenshots/board.png)
+
+![Project timeline with example data](docs/screenshots/timeline.png)
+
+![Workload report with example data](docs/screenshots/workload.png)
+
+![Project calendar week with a holiday, example data](docs/screenshots/calendar.png)
 
 ![Item details with example data](docs/screenshots/item-drawer.png)
 

@@ -103,8 +103,9 @@ General; the app then behaves as before (changes show after a reload).
 From v1.3.0 Epics and Features have no sprint of their own: they show the sprints of their
 stories. The upgrade's migration clears any sprint still set on an Epic or Feature and records
 each one in that item's history as an unattributed change marked `"upgrade": "M12"`. Nothing else
-changes: Stories, Tasks and Bugs keep their sprints. To see how many items each project had
-cleared, run as the app account in **Bash** with the same private `PG*` environment as the
+changes: Stories, Tasks and Bugs keep their sprints. The guided upgrade helper prints how many
+items each project had cleared, together with the live-updates check, at the end of the upgrade.
+To see the counts later, run as the app account in **Bash** with the same private `PG*` environment as the
 database checks in [ADMIN](ADMIN.md#manual-database-validation-and-restore) (passwords only in the
 password file) and the selected major's binary:
 

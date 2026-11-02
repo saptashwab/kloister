@@ -117,6 +117,35 @@ pg() {
     "$PG_BIN/$program" --no-password -p "$PG_PORT" "$@"
 }
 
+# Report what this run's migrations changed for people, read-only, and the checks
+# that need a browser. Migrations that change user data record each change in the
+# audit log with meta.upgrade; only rows written during this run are counted.
+# A failed query is reported and never fails the completed upgrade.
+report_upgrade_notes() {
+  local changes
+  if changes=$(pg psql -X -d "$APP_NAME" -At -F ' ' -v ON_ERROR_STOP=1 -v since="$UPGRADE_SINCE" <<'SQL'
+SELECT a."meta"->>'upgrade', coalesce(p."key", 'personal'), count(*)
+FROM "AuditLog" a LEFT JOIN "Project" p ON p."id" = a."projectId"
+WHERE a."meta" ? 'upgrade' AND a."createdAt" >= :'since'::timestamptz
+GROUP BY 1, 2 ORDER BY 1, 2;
+SQL
+  ); then
+    if [[ -n $changes ]]; then
+      say 'Items changed by this upgrade, recorded in their history (migration, project, items):'
+      while read -r migration project count; do say "  $migration  $project  $count"; done <<<"$changes"
+      say '  (M12: sprints set on Epics and Features were cleared; see docs/UPGRADE.md.)'
+    else
+      say 'No items were changed by this upgrade.'
+    fi
+  else
+    say 'Could not read the upgrade notes from the database; see docs/UPGRADE.md to check by hand.'
+  fi
+  say 'Live updates: sign in with two browsers and move a card; the other board should follow within'
+  say 'a second or two. If changes arrive late, follow "Live updates after upgrading" in docs/UPGRADE.md'
+  say '(one line in the Kloister httpd conf file, added by hand), or switch Live updates off under'
+  say 'Admin settings > General until then.'
+}
+
 # Refuse a backup or rollback while a backend is still listening.
 assert_stopped() {
   local listeners
@@ -427,6 +456,7 @@ SQL
   # Run the shipped script as a child so its exit traps cannot close this helper;
   # it moves the staged dependencies into place instead of reinstalling them.
   step 'Run the shipped upgrade (database dump, code replacement, migrations, frontend)'
+  UPGRADE_SINCE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   KLOISTER_STAGED_BACKEND=$STAGING bash "$RELEASE/deploy/upgrade.sh" 3>&- 4>&- 7>&-
   STAGING=''
   step 'Return to the original supervision mode'
@@ -434,6 +464,8 @@ SQL
   step 'Check process and application health'
   check_health
   touch "$SAFE/UPGRADE-COMPLETE"
+  step 'Report upgrade notes'
+  report_upgrade_notes
   say ''
   say "UPGRADE COMPLETE: $INSTALLED_VERSION -> $NEW_VERSION; automated checks passed."
   say "Backup/recovery: $SAFE"

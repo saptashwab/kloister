@@ -142,6 +142,19 @@ test('health checks fail honestly without network access or sleeping', () => {
   assert.match(result.stderr, /Loopback health did not pass/);
 });
 
+test('upgrade notes are read-only, limited to this run and never fail the upgrade', () => {
+  const start = code.indexOf('report_upgrade_notes() {');
+  const body = code.slice(start, code.indexOf('\n}\n', start));
+  assert.match(body, /SELECT /);
+  assert.doesNotMatch(body, /\b(INSERT|UPDATE|DELETE|ALTER|DROP|TRUNCATE)\b/);
+  assert.match(body, /"createdAt" >= :'since'/);
+  assert.match(body, /if changes=\$\(pg psql/);
+  assert.ok(
+    code.indexOf('touch "$SAFE/UPGRADE-COMPLETE"') < code.lastIndexOf('report_upgrade_notes'),
+    'notes are reported after the upgrade is marked complete',
+  );
+});
+
 test('shared filesystems add their space demands', () => {
   const result = isolated(`stat() { printf '1'; }
 available_bytes() { printf '100'; }
