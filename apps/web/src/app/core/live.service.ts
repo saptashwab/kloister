@@ -86,10 +86,34 @@ export class LiveService {
   private reconnectingTimer: ReturnType<typeof setTimeout> | undefined;
   private offlineTimer: ReturnType<typeof setTimeout> | undefined;
   private projectId: string | null = null;
+  /** The project the API confirmed this stream follows; presence waits for it. */
+  private followed: string | null = null;
   private presence: LivePresenceRequest = { itemId: null, action: null, field: null };
   private presenceSent = SAME_PRESENCE;
   private presenceAt = 0;
   private presenceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * Notices the browser going offline at once (an open stream may not fail
+   * by itself), and reconnects when it is back.
+   */
+  constructor() {
+    window.addEventListener('offline', () =>
+      this.zone.run(() => {
+        if (!this.started || this.status() === 'off') return;
+        this.close();
+        clearTimeout(this.retryTimer);
+        this.down();
+      }),
+    );
+    window.addEventListener('online', () =>
+      this.zone.run(() => {
+        if (!this.started || this.status() === 'off' || this.source !== null) return;
+        this.attempt = 0;
+        void this.connect();
+      }),
+    );
+  }
 
   /** Opens the stream after sign-in; calling it again does nothing. */
   start(): void {
@@ -118,6 +142,7 @@ export class LiveService {
   follow(projectId: string | null): void {
     if (this.projectId === projectId) return;
     this.projectId = projectId;
+    this.followed = null;
     this.presence = { itemId: null, action: null, field: null };
     this.presenceSent = SAME_PRESENCE;
     void this.sendFollow();
@@ -260,6 +285,7 @@ export class LiveService {
     this.source?.close();
     this.source = null;
     this.streamId = null;
+    this.followed = null;
   }
 
   /**
@@ -275,7 +301,9 @@ export class LiveService {
       await firstValueFrom(
         this.http.put<void>(apiUrl(`events/${streamId}/project`), { projectId }),
       );
-      if (projectId !== null && this.projectId === projectId) void this.sendPresence();
+      if (this.projectId !== projectId || this.streamId !== streamId) return;
+      this.followed = projectId;
+      if (projectId !== null) void this.sendPresence();
     } catch (error) {
       this.lost(error);
     }
@@ -289,7 +317,14 @@ export class LiveService {
   private async sendPresence(): Promise<void> {
     const streamId = this.streamId;
     const text = JSON.stringify(this.presence);
-    if (streamId === null || this.projectId === null || text === this.presenceSent) return;
+    // Before the API confirmed the subscription, a report would be refused.
+    if (
+      streamId === null ||
+      this.projectId === null ||
+      this.followed !== this.projectId ||
+      text === this.presenceSent
+    )
+      return;
     this.presenceSent = text;
     this.presenceAt = Date.now();
     try {

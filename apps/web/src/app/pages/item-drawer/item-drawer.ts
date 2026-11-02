@@ -1223,7 +1223,8 @@ export class ItemDrawer {
       typing ||
       this.editingTitle() ||
       document.querySelector(
-        '.cdk-overlay-container .mat-mdc-select-panel, .cdk-overlay-container .mat-mdc-menu-panel, .cdk-overlay-container .mat-datepicker-content',
+        // Overlays may render outside the classic overlay container.
+        '.mat-mdc-select-panel, .mat-mdc-menu-panel, .mat-datepicker-content',
       ) !== null
     );
   }

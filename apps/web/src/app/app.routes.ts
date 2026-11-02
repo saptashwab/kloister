@@ -81,7 +81,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/admin-settings/admin-holidays').then((m) => m.AdminHolidaysPage),
       },
-      { path: '', pathMatch: 'full', redirectTo: 'general' },
+      { path: '', pathMatch: 'full', redirectTo: 'branding' },
     ],
   },
   {

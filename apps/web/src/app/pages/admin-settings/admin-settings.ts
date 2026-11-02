@@ -5,18 +5,18 @@ import { SettingsStyles } from '../../ui/settings-styles';
 
 /** The admin settings tabs (SPEC §6 Admin). */
 const TABS: readonly { path: string; name: string }[] = [
-  { path: 'general', name: 'General' },
   { path: 'branding', name: 'Branding' },
   { path: 'security', name: 'Security' },
   { path: 'storage', name: 'Storage' },
   { path: 'backups', name: 'Backups' },
   { path: 'logs', name: 'Logs' },
   { path: 'holidays', name: 'Holidays' },
+  { path: 'general', name: 'General' },
 ];
 
 /**
- * The admin settings page: a tab bar (general, branding, security, storage,
- * backups, logs, holidays), each tab its own route below `/admin/settings`.
+ * The admin settings page: a tab bar (branding, security, storage, backups,
+ * logs, holidays, general), each tab its own route below `/admin/settings`.
  *
  * Permissions: the route is guarded for admins; every endpoint behind the
  * tabs is admin-only in the API as well.

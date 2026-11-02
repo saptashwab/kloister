@@ -68,7 +68,7 @@ export class LiveStyles {}
     @if (text(); as t) {
       <span class="chip" [title]="t"><span class="dot" aria-hidden="true"></span>{{ t }}</span>
     }
-    <span class="sr" role="status" aria-live="polite">{{ announcement() }}</span>
+    <span class="sr" aria-live="polite">{{ announcement() }}</span>
   `,
 })
 export class LiveStatusChip {

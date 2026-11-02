@@ -347,6 +347,50 @@ describe('LiveService', () => {
     live.stop();
   });
 
+  it('reports presence only once the API confirmed the followed project', async () => {
+    vi.useFakeTimers();
+    const { live, http } = setup();
+    live.start();
+    http.expectOne('api/v1/events/status').flush({ enabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+    FakeSource.last!.emit(LiveEvent.HELLO, { streamId: 's1' });
+    live.follow('p1');
+    live.report({ itemId: 'i1', action: 'viewing', field: null });
+    await vi.advanceTimersByTimeAsync(2_000);
+    // Only the subscription so far; presence would be refused before it.
+    http.expectNone('api/v1/events/s1/presence');
+    const follows = http.match('api/v1/events/s1/project');
+    for (const f of follows) f.flush(null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(http.expectOne('api/v1/events/s1/presence').request.body).toEqual({
+      itemId: 'i1',
+      action: 'viewing',
+      field: null,
+    });
+    live.stop();
+  });
+
+  it('shows reconnecting when the browser goes offline and reconnects when it is back', async () => {
+    vi.useFakeTimers();
+    const { live, http } = setup();
+    live.start();
+    http.expectOne('api/v1/events/status').flush({ enabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+    const first = FakeSource.last!;
+    first.emit(LiveEvent.HELLO, { streamId: 's1' });
+    window.dispatchEvent(new Event('offline'));
+    expect(first.readyState).toBe(FakeSource.CLOSED);
+    await vi.advanceTimersByTimeAsync(RECONNECTING_AFTER_MS);
+    expect(live.status()).toBe('reconnecting');
+    window.dispatchEvent(new Event('online'));
+    http.expectOne('api/v1/events/status').flush({ enabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeSource.last).not.toBe(first);
+    FakeSource.last!.emit(LiveEvent.HELLO, { streamId: 's2' });
+    expect(live.status()).toBe('live');
+    live.stop();
+  });
+
   it('ends for good when the server says live updates were switched off', async () => {
     vi.useFakeTimers();
     const { live, http } = setup();

@@ -40,7 +40,7 @@
   Personal spaces have none; administrators on a cross-project visit get 404 when subscribing and leave no
   audit entry.
 - The connection chip and the people on the project show in the project header. Admin settings gained a
-  General tab (first and default) for the switch. Live styles load with the project pages, the stream code
+  General tab (after Holidays; Branding stays the landing tab) for the switch. Live styles load with the project pages, the stream code
   after sign-in, so the first page stays under the unchanged budget.
 - No httpd change: the guides describe the `curl -N` check and the one hand-added fallback line.
 - Sessions: the stream, its subscription and presence reports never refresh a session. The refetches that
