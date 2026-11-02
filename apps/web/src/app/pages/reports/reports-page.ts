@@ -91,6 +91,7 @@ export class ReportStyles {}
     <div class="r-head">
       <mat-button-toggle-group
         aria-label="Dashboard"
+        hideSingleSelectionIndicator
         [value]="current()"
         (change)="show($event.value)"
       >

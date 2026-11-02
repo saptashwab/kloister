@@ -143,6 +143,7 @@ export class CalendarStyles {}
       @if (!phone()) {
         <mat-button-toggle-group
           aria-label="Calendar view"
+          hideSingleSelectionIndicator
           [value]="mode()"
           (change)="mode.set($event.value)"
         >

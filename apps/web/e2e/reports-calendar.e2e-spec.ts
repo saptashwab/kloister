@@ -226,6 +226,11 @@ test('a calendar drag keeps the duration, offers Undo and shows on the other per
   await expect(pm.locator('.c-day.holiday')).toContainText('Founders day');
   const bar = pm.locator('button.c-item', { hasText: 'Write the guide' });
   await expect(bar).toBeVisible();
+  // The switch shows the chosen view without a stale check mark, and bars stay one line high.
+  await expect(pm.getByRole('radio', { name: 'Week' })).toBeChecked();
+  await expect(pm.getByRole('radio', { name: 'Month' })).not.toBeChecked();
+  await expect(pm.locator('app-calendar-view .mat-pseudo-checkbox')).toHaveCount(0);
+  expect((await bar.boundingBox())?.height ?? 0).toBeLessThan(32);
   await snap(pm, 'calendar-week');
 
   // Drag from Tuesday (its due day) to Thursday: due moves two days, start too.
@@ -279,6 +284,10 @@ test('My work has a calendar of the Member’s own items', async ({ page }) => {
   await signIn(page, USERS.member);
   await page.goto('/work');
   await page.getByRole('radio', { name: 'Calendar' }).click();
+  await expect(page.getByRole('radio', { name: 'Calendar' })).toBeChecked();
+  await expect(
+    page.locator('mat-button-toggle-group[aria-label="Work view"] .mat-pseudo-checkbox'),
+  ).toHaveCount(0);
   await expect(page.locator('app-calendar-view')).toBeVisible();
   await expect(page.locator('app-skeleton')).toHaveCount(0);
   await snap(page, 'work-calendar');

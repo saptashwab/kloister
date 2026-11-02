@@ -99,6 +99,7 @@ import { WorkCalendar } from '../calendar/work-calendar';
       <div class="row controls" aria-label="Work views and filters">
         <mat-button-toggle-group
           aria-label="Work view"
+          hideSingleSelectionIndicator
           [value]="view()"
           (change)="view.set($event.value)"
         >

@@ -44,9 +44,11 @@ app-calendar-view {
     font-weight: 600;
   }
   .c-week {
-    grid-template-rows: var(--k-size-22px) var(--k-size-18px) repeat(var(--lanes), auto) var(
-        --k-space-2
-      );
+    // Lanes keep their own height; the last row takes any spare height of
+    // the week (the taller week view), so bars never stretch.
+    grid-template-rows:
+      var(--k-size-22px) var(--k-size-18px) repeat(var(--lanes), auto)
+      minmax(var(--k-space-2), 1fr);
     min-height: var(--k-size-96px);
     border-top: var(--k-line) solid var(--k-border);
   }
@@ -112,6 +114,7 @@ app-calendar-view {
 
   .c-item {
     z-index: 2;
+    align-self: start;
     display: block;
     min-width: 0;
     margin: var(--k-size-3px) var(--k-space-1) 0;
