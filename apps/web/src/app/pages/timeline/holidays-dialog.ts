@@ -124,7 +124,7 @@ export interface HolidaysDialogResult {
           <span>to</span>
           <app-date-field
             label="Last day"
-            [value]="end() ?? start()"
+            [value]="end()"
             [min]="start()"
             (valueChange)="end.set($event)"
           />

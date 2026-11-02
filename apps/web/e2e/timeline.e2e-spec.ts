@@ -127,6 +127,8 @@ test('plans by typing, moves dependent items automatically and undoes exactly', 
   const days = cell(page, `${k}-3`, 3);
   await days.click();
   await page.keyboard.press('Enter');
+  // The editor takes focus after the next render; typing before that is lost.
+  await expect(days.locator('input')).toBeFocused();
   await page.keyboard.press('Control+a');
   await page.keyboard.type('5');
   await page.keyboard.press('Tab');
@@ -172,6 +174,7 @@ test('asks before moving on existing projects and lets a PM switch to automatic'
   const due = cell(page, `${k}-3`, 4);
   await due.click();
   await page.keyboard.press('Enter');
+  await expect(due.locator('input')).toBeFocused();
   await page.keyboard.press('Control+a');
   await page.keyboard.type('5 Nov 2026');
   await page.keyboard.press('Enter');
