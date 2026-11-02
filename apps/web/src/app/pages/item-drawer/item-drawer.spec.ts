@@ -29,7 +29,14 @@ const feature: ItemRefDto = {
   type: 'FEATURE',
   title: 'Visible feature',
 };
-const readOnly = { edit: false, move: false, delete: false, deleteCascade: false, annotate: false };
+const readOnly = {
+  edit: false,
+  plan: false,
+  move: false,
+  delete: false,
+  deleteCascade: false,
+  annotate: false,
+};
 
 describe('ItemDrawer', () => {
   async function render(
@@ -160,6 +167,24 @@ describe('ItemDrawer', () => {
     expect(root.textContent).toContain('Ann created this Task');
   });
 
+  it('keeps the title, dates and dependencies plain when the schedule is kept to Leads', async () => {
+    const { root } = await render(
+      makeItem(4, {
+        title: 'Planned',
+        dueDate: '2026-11-06',
+        can: { ...readOnly, edit: true, plan: false, annotate: true },
+      }),
+    );
+    expect(root.querySelector('button.title-btn')).toBeNull();
+    expect(root.querySelector('h1')?.textContent).toContain('Planned');
+    expect(root.querySelectorAll('app-date-field').length).toBe(0);
+    expect(root.textContent).toContain('The plan is set by PMs and Leads');
+    // Due time and the other fields stay editable.
+    expect(root.querySelector('app-time-field, button.k-action')).not.toBeNull();
+    expect(root.querySelector('mat-select[aria-label="Status"]')).not.toBeNull();
+    expect(root.querySelector('mat-select[aria-label="Add a blocking item"]')).toBeNull();
+  });
+
   it('edits the title in place', async () => {
     const item = makeItem(4, { title: 'Old title' });
     const { root, itemsApi, fixture } = await render(item);
@@ -282,7 +307,14 @@ describe('ItemDrawer', () => {
   it('hides delete when the item has children and the caller cannot cascade', async () => {
     const parent = makeItem(4, {
       childCount: 2,
-      can: { edit: true, move: true, delete: true, deleteCascade: false, annotate: true },
+      can: {
+        edit: true,
+        plan: true,
+        move: true,
+        delete: true,
+        deleteCascade: false,
+        annotate: true,
+      },
     });
     const { root, fixture } = await render(parent);
     // The menu stays for moving the card, but without Delete.

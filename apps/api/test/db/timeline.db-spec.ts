@@ -292,7 +292,34 @@ describe('timeline (db)', () => {
       expect((await as('pm', 'GET', url())).statusCode).toBe(200);
     });
 
+    it('keeps the schedule to PMs and Leads unless a PM opens it to Members (M9.2)', async () => {
+      const body = { mode: 'preview', changes: [{ item: items.m, startDate: '2026-11-02' }] };
+      const refused = await as('own', 'POST', url('/reschedule'), body);
+      expect(refused.statusCode).toBe(403);
+      expect(JSON.stringify(refused.json())).toContain('Only PMs and Leads');
+      const setting = { settings: { planLeadsOnly: false } };
+      const project = `/api/v1/projects/${projectId}`;
+      expect((await as('lead', 'PATCH', project, setting)).statusCode).toBe(403);
+      expect((await as('member', 'PATCH', project, setting)).statusCode).toBe(403);
+      const opened = await as('pm', 'PATCH', project, setting);
+      expect((opened.json() as ProjectDto).settings.planLeadsOnly).toBe(false);
+      expect((await as('own', 'POST', url('/reschedule'), body)).statusCode).toBe(200);
+      const audit = await prisma.auditLog.findFirst({
+        where: { action: 'PROJECT_UPDATED' },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(JSON.stringify(audit?.meta)).toContain('settings.planLeadsOnly');
+      // Personal spaces have no such setting.
+      const personal = (await as('pm', 'POST', '/api/v1/me/personal')).json() as ProjectDto;
+      const personalPatch = await as('pm', 'PATCH', `/api/v1/projects/${personal.id}`, setting);
+      expect(personalPatch.statusCode).toBe(400);
+    });
+
     it('never lets a hidden predecessor shape or reveal a plan', async () => {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { settings: { planLeadsOnly: false } },
+      });
       // M starts before hidden P allows, but `own` cannot see P, so M is not snapped.
       const plan = (
         await as('own', 'POST', url('/reschedule'), {

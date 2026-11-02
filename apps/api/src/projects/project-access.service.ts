@@ -421,6 +421,25 @@ export class ProjectAccessService {
   }
 
   /**
+   * Plan rule (M9.2): changing an existing item's title, type, parent,
+   * sprint, dates, half days, pin or dependencies needs the edit rule and,
+   * while the project keeps the plan to PMs and Leads (the default),
+   * `EDIT_ANY_ITEM` or leading the item's team.
+   *
+   * @param access The caller's access.
+   * @param item The item.
+   * @returns True if the caller may change the item's plan.
+   */
+  canPlanItem(access: ProjectAccess, item: ItemFacts): boolean {
+    return (
+      this.canEditItem(access, item) &&
+      (!access.settings.planLeadsOnly ||
+        this.has(access, P.EDIT_ANY_ITEM) ||
+        leadsItemTeam(access, item))
+    );
+  }
+
+  /**
    * Move rule: any visible card with `MOVE_ANY_ITEM`, own/assigned cards
    * with `MOVE_OWN_ITEMS`, or cards of a team the caller leads.
    *
@@ -440,7 +459,9 @@ export class ProjectAccessService {
    * Delete rule (SPEC §3.2, §3.5, §4.1): project PMs and Leads may delete any
    * visible item, with or without cascade; team Leads may delete their
    * team's items without cascade (a subtree may span other teams); Members
-   * only items they created that have no children, never with cascade.
+   * only items they created that have no children, never with cascade, and
+   * only while the project lets Members change the plan (M9.2: deleting an
+   * item changes the plan).
    * Callers allowed here still get 409 `HAS_CHILDREN` for a non-cascade
    * delete of an item with children (SPEC §4.1).
    *
@@ -456,6 +477,7 @@ export class ProjectAccessService {
     if (leadsItemTeam(access, item)) return true;
     return (
       this.has(access, P.DELETE_OWN_ITEMS) &&
+      !access.settings.planLeadsOnly &&
       !item.hasChildren &&
       item.createdById === access.userId
     );

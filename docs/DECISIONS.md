@@ -1,5 +1,21 @@
 # Decisions
 
+## M9.2 plan setting and splitter (2026-11-02)
+
+- Owner decisions: "Only PMs and Leads change the plan" is a project setting, on for all projects including
+  existing ones (the instance is in use; Members lose these edits on upgrade by design), PM can switch it off.
+  Rule: whatever shapes the timeline is locked for Members after creation: title, type, parent, sprint, start,
+  due, half days, pin, dependencies, and deleting items. Kept: creating with any of them, status and checklist
+  (progress reporting, although status decides which items move automatically), due time and the other detail
+  fields. Team Leads count as Leads for their team's items.
+- Stored in the settings JSON, so no migration; a missing or malformed value reads as on. An unchanged value
+  sent with other changes is not a plan change, so existing full-form clients keep working.
+- New item now also offers parent, sprint, start and due, so Members can place an item in the plan when they
+  create it. Timeline rows and board quick-adds stay title-first; with the setting on, their later dates, a
+  title fix or deleting a mistaken item need a PM or Lead (owner decision: titles and deletes are part of the
+  plan). Multi-row paste offers Undo only when the caller may delete every new row.
+- Splitter: one shared vertical scroll keeps rows aligned; the table pane scrolls sideways on its own.
+
 ## Planning: M9.1 holidays (2026-11-02)
 
 - Owner decisions: holidays both instance-wide (admins) and per project (PMs and Leads), whole days only,

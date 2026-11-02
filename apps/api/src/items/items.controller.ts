@@ -115,7 +115,8 @@ export class ItemsController {
 
   /**
    * Edits an item. Permissions: `EDIT_ANY_ITEM`, or `EDIT_OWN_ITEMS` on own
-   * items, or leading the item's team.
+   * items, or leading the item's team; plan fields also need
+   * ProjectAccessService.canPlanItem (M9.2).
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -136,8 +137,9 @@ export class ItemsController {
 
   /**
    * Deletes an item (`?cascade=true` for its subtree). Permissions:
-   * `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items, or
-   * leading the item's team (no cascade).
+   * `DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items while
+   * the project lets Members change the plan (M9.2), or leading the item's
+   * team (no cascade).
    *
    * @param auth The caller.
    * @param access The caller's access.

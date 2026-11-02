@@ -63,6 +63,7 @@ describe('ProjectSettingsPage', () => {
         autoMoveDependents: false,
         useInstanceHolidays: true,
         holidaysReviewedAt: null,
+        planLeadsOnly: true,
       },
       myRole: null,
       myVisibility: 'ALL',

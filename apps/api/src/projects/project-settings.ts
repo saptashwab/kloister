@@ -13,8 +13,9 @@ import type { Prisma } from '../generated/prisma/client.js';
  * the defaults for anything missing or malformed. A bad stored value can
  * therefore never grant a permission (e.g. `membersCanAssignOthers: "yes"`
  * reads as false), a malformed `statusToBucket` entry is dropped, an
- * unknown `labelStyle` reads as the default and a missing
- * `autoMoveDependents` reads as off (projects from before M9).
+ * unknown `labelStyle` reads as the default, a missing
+ * `autoMoveDependents` reads as off (projects from before M9) and a missing
+ * `planLeadsOnly` reads as on (M9.2: the safer reading).
  *
  * @param raw The stored JSON value.
  * @returns Validated settings.
@@ -43,6 +44,10 @@ export function parseProjectSettings(raw: Prisma.JsonValue): ProjectSettings {
       !Number.isNaN(Date.parse(value['holidaysReviewedAt']))
         ? value['holidaysReviewedAt']
         : DEFAULT_PROJECT_SETTINGS.holidaysReviewedAt,
+    planLeadsOnly:
+      typeof value['planLeadsOnly'] === 'boolean'
+        ? value['planLeadsOnly']
+        : DEFAULT_PROJECT_SETTINGS.planLeadsOnly,
   };
 }
 

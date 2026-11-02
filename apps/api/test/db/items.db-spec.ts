@@ -205,6 +205,14 @@ describe('work items (db)', () => {
     return call(app, method, url, { sid, ...(body === undefined ? {} : { body }) });
   }
 
+  /** Lets Members change the plan of their items (M9.2 setting off). */
+  async function openSchedule(): Promise<void> {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { settings: { planLeadsOnly: false } },
+    });
+  }
+
   /**
    * Changes a member's stored visibility directly.
    *
@@ -244,13 +252,19 @@ describe('work items (db)', () => {
       method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
       url: () => string;
       body?: (caller: Caller) => object;
-      setting?: boolean;
+      /** Project settings stored before the request. */
+      settings?: object;
       /** Extra rows the route needs, created before the request. */
       setup?: () => Promise<void>;
       expect: Record<Caller, number>;
     };
     // Non-members get 404; admins who are not members are read-only (403).
     const refusedOutside = { outsider: 404, admin: 403 };
+    /** An open sprint for the sprint rows (M9.2). */
+    let sprintId = '';
+    const withSprint = async (): Promise<void> => {
+      sprintId = (await seedSprint(prisma, projectId, 'S1')).id;
+    };
     const ROWS: Row[] = [
       {
         name: 'view items',
@@ -282,7 +296,109 @@ describe('work items (db)', () => {
         name: 'edit items created by self',
         method: 'PATCH',
         url: () => item(N.mine),
+        body: () => ({ description: '<p>Edited</p>' }),
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'retitle own item (schedule kept to PMs and Leads, the default)',
+        method: 'PATCH',
+        url: () => item(N.mine),
         body: () => ({ title: 'Edited' }),
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'retitle own item (schedule open to Members)',
+        method: 'PATCH',
+        url: () => item(N.mine),
+        body: () => ({ title: 'Edited' }),
+        settings: { planLeadsOnly: false },
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'change dates of an assigned item (default)',
+        method: 'PATCH',
+        url: () => item(N.assigned),
+        body: () => ({ startDate: '2026-11-02', dueDate: '2026-11-04' }),
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'change dates of an assigned item (schedule open to Members)',
+        method: 'PATCH',
+        url: () => item(N.assigned),
+        body: () => ({ startDate: '2026-11-02', dueDate: '2026-11-04' }),
+        settings: { planLeadsOnly: false },
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'move own item under a parent (default)',
+        method: 'PATCH',
+        url: () => item(N.mine),
+        body: () => ({ parentId: itemIds.story }),
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'move own item under a parent (plan open to Members)',
+        method: 'PATCH',
+        url: () => item(N.mine),
+        body: () => ({ parentId: itemIds.story }),
+        settings: { planLeadsOnly: false },
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'change the type of own item (default)',
+        method: 'PATCH',
+        url: () => item(N.mine),
+        body: () => ({ type: 'BUG' }),
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'put own item in a sprint (default)',
+        method: 'PATCH',
+        url: () => item(N.mine),
+        body: () => ({ sprintId }),
+        setup: withSprint,
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'put own item in a sprint (plan open to Members)',
+        method: 'PATCH',
+        url: () => item(N.mine),
+        body: () => ({ sprintId }),
+        setup: withSprint,
+        settings: { planLeadsOnly: false },
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'change only the half days of an assigned item (default)',
+        method: 'PATCH',
+        url: () => item(N.assigned),
+        body: () => ({ startSecondHalf: true }),
+        setup: async () => {
+          await prisma.workItem.update({
+            where: { id: itemIds.assigned },
+            data: { startDate: new Date('2026-11-02'), dueDate: new Date('2026-11-04') },
+          });
+        },
+        expect: { pm: 200, lead: 200, member: 403, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'change the due time and resend unchanged dates (default)',
+        method: 'PATCH',
+        url: () => item(N.assigned),
+        body: () => ({ startDate: '2026-11-02', dueDate: '2026-11-04', dueTime: '17:00' }),
+        setup: async () => {
+          await prisma.workItem.update({
+            where: { id: itemIds.assigned },
+            data: { startDate: new Date('2026-11-02'), dueDate: new Date('2026-11-04') },
+          });
+        },
+        expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'resend an unchanged title with another change',
+        method: 'PATCH',
+        url: () => item(N.mine),
+        body: () => ({ title: `Item ${N.mine}`, priority: 1 }),
         expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
       },
       {
@@ -304,7 +420,7 @@ describe('work items (db)', () => {
         method: 'PATCH',
         url: () => item(N.mine),
         body: () => ({ assigneeIds: [ids.member2] }),
-        setting: true,
+        settings: { membersCanAssignOthers: true },
         expect: { pm: 200, lead: 200, member: 200, viewer: 403, ...refusedOutside },
       },
       {
@@ -342,9 +458,16 @@ describe('work items (db)', () => {
         expect: { pm: 204, lead: 204, member: 403, viewer: 403, ...refusedOutside },
       },
       {
-        name: 'delete own created item without children',
+        name: 'delete own created item without children (default: plan kept to Leads)',
         method: 'DELETE',
         url: () => item(N.mine),
+        expect: { pm: 204, lead: 204, member: 403, viewer: 403, ...refusedOutside },
+      },
+      {
+        name: 'delete own created item without children (plan open to Members)',
+        method: 'DELETE',
+        url: () => item(N.mine),
+        settings: { planLeadsOnly: false },
         expect: { pm: 204, lead: 204, member: 204, viewer: 403, ...refusedOutside },
       },
       {
@@ -390,6 +513,7 @@ describe('work items (db)', () => {
       viewer: 403,
       ...refusedOutside,
     });
+    const open = { planLeadsOnly: false };
     const editAny = (ok: number) => ({
       pm: ok,
       lead: ok,
@@ -454,10 +578,18 @@ describe('work items (db)', () => {
         expect: editOwn(204),
       },
       {
-        name: 'add dependency to own item',
+        name: 'add dependency to own item (default)',
         method: 'POST',
         url: () => `${item(N.mine)}/dependencies`,
         body: () => ({ blockingItemId: itemIds.theirs }),
+        expect: editAny(200),
+      },
+      {
+        name: 'add dependency to own item (schedule open to Members)',
+        method: 'POST',
+        url: () => `${item(N.mine)}/dependencies`,
+        body: () => ({ blockingItemId: itemIds.theirs }),
+        settings: open,
         expect: editOwn(200),
       },
       {
@@ -468,10 +600,18 @@ describe('work items (db)', () => {
         expect: editAny(200),
       },
       {
-        name: 'remove dependency from own item',
+        name: 'remove dependency from own item (default)',
         method: 'DELETE',
         url: () => `${item(N.mine)}/dependencies/${itemIds.theirs}`,
         setup: withDependency,
+        expect: editAny(200),
+      },
+      {
+        name: 'remove dependency from own item (schedule open to Members)',
+        method: 'DELETE',
+        url: () => `${item(N.mine)}/dependencies/${itemIds.theirs}`,
+        setup: withDependency,
+        settings: open,
         expect: editOwn(200),
       },
     );
@@ -489,10 +629,10 @@ describe('work items (db)', () => {
               where: { action: { not: AuditAction.ADMIN_CROSS_PROJECT_ACCESS } },
             }),
           };
-          if (row.setting === true) {
+          if (row.settings !== undefined) {
             await prisma.project.update({
               where: { id: projectId },
-              data: { settings: { membersCanAssignOthers: true } },
+              data: { settings: row.settings },
             });
           }
           const res = await as(caller, row.method, row.url(), row.body?.(caller));
@@ -530,15 +670,19 @@ describe('work items (db)', () => {
       const mine = (await as('member', 'GET', item(N.mine))).json() as WorkItemDetailDto;
       expect(mine.can).toEqual({
         edit: true,
+        plan: false,
         move: true,
-        delete: true,
+        delete: false,
         deleteCascade: false,
         annotate: true,
       });
       const theirs = (await as('member', 'GET', item(N.theirs))).json() as WorkItemDetailDto;
       expect(theirs.can).toMatchObject({ edit: false, move: false, delete: false });
       const lead = (await as('lead', 'GET', item(N.story))).json() as WorkItemDetailDto;
-      expect(lead.can).toMatchObject({ edit: true, delete: true, deleteCascade: true });
+      expect(lead.can).toMatchObject({ edit: true, plan: true, delete: true, deleteCascade: true });
+      await openSchedule();
+      const opened = (await as('member', 'GET', item(N.mine))).json() as WorkItemDetailDto;
+      expect(opened.can).toMatchObject({ edit: true, plan: true, delete: true });
     });
   });
 
@@ -666,6 +810,7 @@ describe('work items (db)', () => {
 
     it('does not accept invisible items as parents, neighbours or blockers', async () => {
       await setScope('member', 'OWN');
+      await openSchedule();
       const parent = await as('member', 'PATCH', item(N.mine), { parentId: itemIds.story });
       expect(parent.statusCode).toBe(400);
       const blocker = await as('member', 'POST', `${item(N.mine)}/dependencies`, {
@@ -687,6 +832,10 @@ describe('work items (db)', () => {
       expect((await as('teamLead', 'PATCH', item(N.teamItem), { title: 'T' })).statusCode).toBe(
         200,
       );
+      // Team Leads change their team's schedule while it is kept to Leads (M9.2).
+      const dated = await as('teamLead', 'PATCH', item(N.teamItem), { dueDate: '2026-11-06' });
+      expect(dated.statusCode).toBe(200);
+      expect((dated.json() as WorkItemDetailDto).can.plan).toBe(true);
       const assign = await as('teamLead', 'PATCH', item(N.teamItem), {
         assigneeIds: [ids.member2],
       });
@@ -1115,7 +1264,9 @@ describe('work items (db)', () => {
       const detail = (await as('pm', 'GET', item(N.mine))).json() as WorkItemDetailDto;
       expect(detail.blockedBy.map((r) => r.number)).toEqual([N.assigned]);
       expect(detail.blocks.map((r) => r.number)).toEqual([N.theirs]);
-      // A Member can manage dependencies of their own items only.
+      // A Member can manage dependencies of their own items only, when the
+      // project lets Members change the schedule.
+      await openSchedule();
       expect(
         (
           await as('member', 'POST', `${item(N.mine)}/dependencies`, {

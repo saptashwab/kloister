@@ -252,7 +252,7 @@ export class ProjectsService {
         'Personal spaces do not have assignments',
       );
     if (access.project.ownerId !== null) {
-      for (const key of ['autoMoveDependents', 'useInstanceHolidays'] as const) {
+      for (const key of ['autoMoveDependents', 'useInstanceHolidays', 'planLeadsOnly'] as const) {
         if (dto.settings?.[key] !== undefined)
           throw invalidField(`settings.${key}`, 'Personal spaces do not have a timeline');
       }
@@ -339,6 +339,16 @@ export class ProjectsService {
             changes['settings.useInstanceHolidays'] = {
               from: settings.useInstanceHolidays,
               to: settingsChange.useInstanceHolidays,
+            };
+          }
+          if (
+            settingsChange.planLeadsOnly !== undefined &&
+            settingsChange.planLeadsOnly !== settings.planLeadsOnly
+          ) {
+            changedSettings.planLeadsOnly = settingsChange.planLeadsOnly;
+            changes['settings.planLeadsOnly'] = {
+              from: settings.planLeadsOnly,
+              to: settingsChange.planLeadsOnly,
             };
           }
           if (Object.keys(changedSettings).length > 0) {

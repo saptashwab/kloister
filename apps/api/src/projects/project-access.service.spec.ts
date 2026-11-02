@@ -379,6 +379,22 @@ describe('ProjectAccessService', () => {
       expect(v.service.canEditItem(v.access, created)).toBe(false);
     });
 
+    it('schedule: kept to PMs and Leads by default, Members own items when opened (M9.2)', async () => {
+      for (const role of ['PM', 'LEAD'] as const) {
+        const { service, access } = await as(role);
+        expect(service.canPlanItem(access, others)).toBe(true);
+      }
+      const kept = await as('MEMBER');
+      expect(kept.service.canPlanItem(kept.access, created)).toBe(false);
+      expect(kept.service.canPlanItem(kept.access, assigned)).toBe(false);
+      const open = await as('MEMBER', { planLeadsOnly: false });
+      expect(open.service.canPlanItem(open.access, created)).toBe(true);
+      expect(open.service.canPlanItem(open.access, assigned)).toBe(true);
+      expect(open.service.canPlanItem(open.access, others)).toBe(false);
+      const v = await as('VIEWER', { planLeadsOnly: false });
+      expect(v.service.canPlanItem(v.access, created)).toBe(false);
+    });
+
     it('move: PM/Lead any card, Member own or assigned only, Viewer never', async () => {
       for (const role of ['PM', 'LEAD'] as const) {
         const { service, access } = await as(role);
@@ -397,7 +413,10 @@ describe('ProjectAccessService', () => {
         const { service, access } = await as(role);
         expect(service.canDeleteItem(access, item({ hasChildren: true }), true)).toBe(true);
       }
-      const m = await as('MEMBER');
+      // Deleting changes the plan, so Members delete only while it is open to them (M9.2).
+      const kept = await as('MEMBER');
+      expect(kept.service.canDeleteItem(kept.access, created, false)).toBe(false);
+      const m = await as('MEMBER', { planLeadsOnly: false });
       expect(m.service.canDeleteItem(m.access, created, false)).toBe(true);
       expect(m.service.canDeleteItem(m.access, created, true)).toBe(false);
       expect(m.service.canDeleteItem(m.access, { ...created, hasChildren: true }, false)).toBe(
@@ -486,6 +505,15 @@ describe('ProjectAccessService', () => {
       const { service } = setup([member(role, visibility, [], teams)]);
       return { service, access: await resolveAs(service) };
     }
+
+    it('a team Lead changes the schedule of their team items only (M9.2)', async () => {
+      const { service, access } = await withTeams('MEMBER', 'ALL', [
+        { teamId: TEAM_A, role: 'LEAD' },
+        { teamId: TEAM_B, role: 'MEMBER' },
+      ]);
+      expect(service.canPlanItem(access, item({ teamId: TEAM_A }))).toBe(true);
+      expect(service.canPlanItem(access, item({ teamId: TEAM_B, assigneeIds: [ME] }))).toBe(false);
+    });
 
     for (const role of ['MEMBER', 'VIEWER'] as const) {
       it(`${role} TEAMS: sees items of their teams only`, async () => {

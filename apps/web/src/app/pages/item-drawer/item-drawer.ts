@@ -85,7 +85,8 @@ const FIELD_NAMES: Record<string, string> = {
  * Every value is edited in place: a click opens a select, date field or text
  * field, the change is saved at once and a toast offers Undo (the reverse
  * PATCH or move). Values the caller cannot change are plain text: editing
- * needs the item's `can.edit` (fields, checklist, dependencies), `can.move`
+ * needs the item's `can.edit` (fields, checklist), `can.plan` (title, type,
+ * parent, sprint, dates, half days, pin, dependencies; M9.2), `can.move`
  * (bucket) or `can.delete`/`deleteCascade`, on an unarchived project.
  * Assigning anyone but yourself also needs `ASSIGN_OTHERS` or leading the
  * item's team. The API checks every change again; its answer (e.g. the
@@ -259,7 +260,7 @@ const FIELD_NAMES: Record<string, string> = {
                   (keydown.escape)="cancelTitle($event)"
                   (blur)="saveTitle($any($event.target))"
                 />
-              } @else if (canEdit()) {
+              } @else if (canPlan()) {
                 <button
                   type="button"
                   class="title-btn"
@@ -411,7 +412,7 @@ const FIELD_NAMES: Record<string, string> = {
 
             <dt>Sprint</dt>
             <dd>
-              @if (canEdit()) {
+              @if (canPlan()) {
                 <mat-select
                   class="k-inline"
                   aria-label="Sprint"
@@ -468,7 +469,7 @@ const FIELD_NAMES: Record<string, string> = {
             <dt>Dates</dt>
             <dd>
               <div class="dates">
-                @if (canEdit()) {
+                @if (canPlan()) {
                   <app-date-field
                     label="Start date"
                     [value]="d.startDate"
@@ -505,6 +506,21 @@ const FIELD_NAMES: Record<string, string> = {
                       <mat-button-toggle [value]="false">Afternoon</mat-button-toggle>
                     </mat-button-toggle-group>
                   }
+                } @else {
+                  <span class="plain">
+                    {{
+                      d.startDate
+                        ? short(d.startDate) + (d.startSecondHalf ? ', afternoon' : '')
+                        : 'No start'
+                    }}
+                    → {{ d.dueDate ? short(d.dueDate) : 'no due date'
+                    }}{{ d.dueTime && !canEdit() ? ', ' + d.dueTime : '' }}
+                  </span>
+                  @if (canEdit()) {
+                    <span class="muted">The plan is set by PMs and Leads</span>
+                  }
+                }
+                @if (canEdit()) {
                   @if (d.dueDate && (d.dueTime || addingTime())) {
                     <app-time-field
                       label="Due time"
@@ -516,22 +532,12 @@ const FIELD_NAMES: Record<string, string> = {
                       Add time
                     </button>
                   }
-                } @else {
-                  <span class="plain">
-                    {{
-                      d.startDate
-                        ? short(d.startDate) + (d.startSecondHalf ? ', afternoon' : '')
-                        : 'No start'
-                    }}
-                    → {{ d.dueDate ? short(d.dueDate) : 'no due date'
-                    }}{{ d.dueTime ? ', ' + d.dueTime : '' }}
-                  </span>
                 }
                 @if (d.startNoEarlierThan; as pin) {
                   <span class="k-pill">
                     <app-icon name="pin" [size]="13" />Pinned: starts no earlier than
                     {{ short(pin.date) }}{{ pin.second ? ', afternoon' : '' }}
-                    @if (canEdit() && isProject()) {
+                    @if (canPlan() && isProject()) {
                       <button type="button" class="k-action" (click)="removePin()">
                         Remove pin
                       </button>
@@ -575,7 +581,7 @@ const FIELD_NAMES: Record<string, string> = {
 
             <dt>Type</dt>
             <dd>
-              @if (canEdit()) {
+              @if (canPlan()) {
                 <mat-select
                   class="k-inline"
                   aria-label="Type"
@@ -594,7 +600,7 @@ const FIELD_NAMES: Record<string, string> = {
 
             <dt>Parent</dt>
             <dd>
-              @if (canEdit() && d.type !== epic) {
+              @if (canPlan() && d.type !== epic) {
                 <mat-select
                   class="k-inline"
                   aria-label="Parent"
@@ -657,7 +663,7 @@ const FIELD_NAMES: Record<string, string> = {
                   <a class="ref-title" href="" (click)="openItem($event, r.number)">{{
                     r.title
                   }}</a>
-                  @if (canEdit()) {
+                  @if (canPlan()) {
                     <button
                       type="button"
                       class="k-icon-btn sm"
@@ -682,7 +688,7 @@ const FIELD_NAMES: Record<string, string> = {
                 <p class="muted">No dependencies.</p>
               }
             </div>
-            @if (canEdit()) {
+            @if (canPlan()) {
               <mat-select
                 class="k-inline add-ref"
                 aria-label="Add a blocking item"
@@ -857,10 +863,15 @@ export class ItemDrawer {
     () => this.ctx.project()?.settings.labelStyle ?? LabelStyle.SOLID,
   );
 
-  /** Fields, checklist and dependencies are editable. */
+  /** Fields and the checklist are editable. */
   protected readonly canEdit = computed(() => {
     const d = this.detail();
     return d !== null && this.ctx.canEdit(d);
+  });
+  /** Title, type, parent, sprint, dates, half days, pin and dependencies are editable (M9.2). */
+  protected readonly canPlan = computed(() => {
+    const d = this.detail();
+    return d !== null && this.ctx.canPlan(d);
   });
   /** The bucket is editable. */
   protected readonly canMove = computed(() => {

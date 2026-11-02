@@ -1348,7 +1348,7 @@
             "content": { "application/json": { "schema": { "type": "object" } } }
           }
         },
-        "summary": "Edits an item. Permissions: `EDIT_ANY_ITEM`, or `EDIT_OWN_ITEMS` on own\nitems, or leading the item's team.",
+        "summary": "Edits an item. Permissions: `EDIT_ANY_ITEM`, or `EDIT_OWN_ITEMS` on own\nitems, or leading the item's team; plan fields also need\nProjectAccessService.canPlanItem (M9.2).",
         "tags": ["Items"]
       },
       "delete": {
@@ -1377,7 +1377,7 @@
           }
         ],
         "responses": { "204": { "description": "" } },
-        "summary": "Deletes an item (`?cascade=true` for its subtree). Permissions:\n`DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items, or\nleading the item's team (no cascade).",
+        "summary": "Deletes an item (`?cascade=true` for its subtree). Permissions:\n`DELETE_ANY_ITEM`, or `DELETE_OWN_ITEMS` on own childless items while\nthe project lets Members change the plan (M9.2), or leading the item's\nteam (no cascade).",
         "tags": ["Items"]
       }
     },
@@ -2824,7 +2824,7 @@
             "content": { "application/json": { "schema": { "type": "object" } } }
           }
         },
-        "summary": "Previews or applies a date change with its dependent moves.\nPermissions: `EDIT_ANY_ITEM` or `EDIT_OWN_ITEMS`; each requested item\nmust be visible (404) and editable (403).",
+        "summary": "Previews or applies a date change with its dependent moves.\nPermissions: `EDIT_ANY_ITEM` or `EDIT_OWN_ITEMS`; each requested item\nmust be visible (404) and its plan changeable by the caller (403,\nProjectAccessService.canPlanItem).",
         "tags": ["Timeline"]
       }
     },
@@ -4004,6 +4004,10 @@
           "useInstanceHolidays": {
             "type": "boolean",
             "description": "The timeline uses the instance-wide holidays (M9.1)."
+          },
+          "planLeadsOnly": {
+            "type": "boolean",
+            "description": "Only PMs and Leads change the plan of existing items (M9.2)."
           }
         }
       },

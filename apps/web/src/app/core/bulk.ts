@@ -73,8 +73,9 @@ export function planBulk(
   for (const item of items) {
     switch (field) {
       case 'sprint':
+        // Sprints shape the plan (M9.2), so they need `can.plan`.
         if (item.sprintId === target) plan.unchanged.push(item);
-        else if (!item.can.edit) plan.skipped.push(item);
+        else if (!item.can.plan) plan.skipped.push(item);
         else plan.steps.push({ item, kind: 'update', request: { sprintId: target } });
         break;
       case 'bucket':

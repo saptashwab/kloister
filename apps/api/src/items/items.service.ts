@@ -72,6 +72,44 @@ export interface UpdateItemOptions {
   auditMeta?: Prisma.InputJsonObject;
 }
 
+/** Refusal when the project keeps the plan to PMs and Leads (M9.2). */
+export const PLAN_LEADS_ONLY = 'Only PMs and Leads can change the plan in this project';
+
+/**
+ * Whether an update changes an item's plan (M9.2): its title, type, parent,
+ * sprint, dates, half days or pin, which shape the timeline. Fields sent
+ * unchanged do not count, so a form that sends every field still works for
+ * Members.
+ *
+ * @param current The stored item.
+ * @param dto The requested change.
+ * @param options Internal pin change.
+ * @returns True if a plan field changes.
+ */
+function plansChange(current: ItemRow, dto: UpdateItemDto, options: UpdateItemOptions): boolean {
+  const differs = <T>(next: T | undefined, now: T): boolean => next !== undefined && next !== now;
+  const pinNow =
+    current.startNoEarlierThan === null
+      ? null
+      : `${fromDbDate(current.startNoEarlierThan)}/${current.startNoEarlierThanSecondHalf}`;
+  return (
+    differs(dto.title, current.title) ||
+    differs(dto.type, current.type) ||
+    differs(dto.parentId, current.parentId) ||
+    differs(dto.sprintId, current.sprintId) ||
+    differs(dto.startDate, fromDbDate(current.startDate)) ||
+    differs(dto.dueDate, fromDbDate(current.dueDate)) ||
+    differs(dto.startSecondHalf, current.startSecondHalf) ||
+    differs(dto.dueFirstHalf, current.dueFirstHalf) ||
+    differs(
+      options.pin === undefined
+        ? undefined
+        : options.pin && `${options.pin.date}/${options.pin.second}`,
+      pinNow,
+    )
+  );
+}
+
 /**
  * Work items (SPEC §4, §4.1, §4.2, §8 `items`): listing, reading, creating,
  * editing, moving and deleting items, with the hierarchy and bucket/status
@@ -360,7 +398,10 @@ export class ItemsService {
    *
    * Permissions: 404 unless visible; 403 unless the caller may edit it
    * (`EDIT_ANY_ITEM`, own items with `EDIT_OWN_ITEMS`, or leading its
-   * team). Changing assignees other than yourself needs `ASSIGN_OTHERS` or
+   * team). Changing the title, type, parent, sprint, dates, half days or pin
+   * needs
+   * {@link ProjectAccessService.canPlanItem} (M9.2). Changing assignees
+   * other than yourself needs `ASSIGN_OTHERS` or
    * leading the item's team; changing the team follows
    * {@link ProjectAccessService.canSetTeam}; a new parent must be visible.
    *
@@ -394,6 +435,11 @@ export class ItemsService {
 
       // Permission-type rules first, so a forbidden change is a 403 even if
       // other fields are invalid.
+      if (
+        plansChange(current, dto, options) &&
+        !this.access.canPlanItem(access, itemFacts(current))
+      )
+        throw forbidden(PLAN_LEADS_ONLY);
       const teamId = dto.teamId === undefined ? current.teamId : dto.teamId;
       if (!this.access.canSetTeam(access, current.teamId, teamId, false)) {
         throw forbidden('You cannot move items into or out of this team');
@@ -714,8 +760,8 @@ export class ItemsService {
    *
    * Permissions: 404 unless visible; then project PMs and Leads may delete
    * any item, with or without cascade; team Leads their team's items without
-   * cascade; Members items they created that have no children (403
-   * otherwise). 409 `HAS_CHILDREN` for a non-cascade delete of a parent.
+   * cascade; Members items they created that have no children, while the
+   * project lets Members change the plan (M9.2; 403 otherwise). 409 `HAS_CHILDREN` for a non-cascade delete of a parent.
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -987,6 +1033,7 @@ export class ItemsService {
     const facts = itemFacts(row);
     return {
       edit: this.access.canEditItem(access, facts),
+      plan: this.access.canPlanItem(access, facts),
       move: this.access.canMoveItem(access, facts),
       delete: this.access.canDeleteItem(access, facts, false),
       deleteCascade: this.access.canDeleteItem(access, facts, true),

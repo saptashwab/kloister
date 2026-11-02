@@ -614,6 +614,32 @@ DECISIONS apply.
   icon links in the drawer header rather than menu items, so read-only drawers
   keep their previous controls.
 
+## 15. Plan kept to PMs and Leads, and the splitter (M9.2, owner request 2026-11-02)
+
+Owner decisions: a project setting, "Only PMs and Leads change the plan", on by default and for existing
+projects, so assignees cannot quietly change the timeline. While on, only PMs, Leads and the item's team Leads
+change anything of an existing item that shapes the timeline: title, type, parent, sprint, start, due, half days,
+pin and dependencies, and only they delete items. Members still set these when creating an item and keep
+progress and detail fields: status, checklist, due time, assignees (assignment rule), labels, priority, bucket,
+description, notes and attachments. A PM can switch it off.
+
+- Data: `planLeadsOnly` in `Project.settings` (JSON, no migration; a missing value reads as on, the safer
+  reading). Changing it is audited like other settings.
+- API: `ProjectAccessService.canPlanItem` (edit rule plus `EDIT_ANY_ITEM` or team Lead while the setting is on).
+  Item PATCH refuses a changed title, type, parent, sprint, date, half or pin with 403 before validation; values
+  sent unchanged pass, so full forms keep working. Dependency add/remove and timeline reschedule need it for the
+  requested item, and the planner moves only dependents the caller may reschedule. Members' own-item delete
+  needs the setting off. Item capabilities gain `plan`.
+- Web: the drawer shows title, dates, type, parent, sprint and dependencies as text with "The plan is set by PMs
+  and Leads"; the timeline locks the Title, Start, Days, Due, Pred., Type and Sprint cells, bar dragging,
+  indent/outdent, shift dates and links for such rows; bulk sprint skips them; the board's sprint view does not
+  drag them; Project settings › General has the switch. New item offers parent, sprint, start and due, so
+  Members can plan an item when they create it.
+- Splitter: see SPEC §6.4. The table's cells shift inside a clipped pane (`overflow-x: clip`, so focus cannot
+  scroll a single row out of line) and a slim scrollbar under the table drives the shift.
+- Tests: access unit tests, settings parsing, item and timeline database permission rows for both setting
+  values and team Leads, drawer and timeline unit tests, a browser scenario.
+
 ## 14. Holidays (M9.1, owner request 2026-11-02)
 
 Owner decisions: holidays both instance-wide (admins) and per project (PMs and

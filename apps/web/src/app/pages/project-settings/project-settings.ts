@@ -196,6 +196,10 @@ import { ProjectTeamsComponent } from './project-teams';
                     <mat-checkbox formControlName="useInstanceHolidays">
                       Use the instance-wide holidays on the timeline
                     </mat-checkbox>
+                    <mat-checkbox formControlName="planLeadsOnly">
+                      Only PMs and Leads change the plan (titles, types, parents, sprints, dates and
+                      dependencies of existing items)
+                    </mat-checkbox>
                   }
 
                   <button
@@ -225,6 +229,13 @@ import { ProjectTeamsComponent } from './project-teams';
                         ? 'move automatically'
                         : 'move after a confirmation'
                     }}.
+                  </p>
+                  <p>
+                    {{
+                      project.settings.planLeadsOnly
+                        ? 'Only PMs and Leads change the plan of existing items.'
+                        : 'Members change the plan of their own items.'
+                    }}
                   </p>
                 }
               }
@@ -493,6 +504,7 @@ export class ProjectSettingsPage implements OnInit {
     membersCanAssignOthers: [false],
     autoMoveDependents: [false],
     useInstanceHolidays: [true],
+    planLeadsOnly: [true],
   });
 
   /**
@@ -575,15 +587,28 @@ export class ProjectSettingsPage implements OnInit {
   protected async saveGeneral(): Promise<void> {
     const project = this.project();
     if (project === null) return;
-    const { name, description, membersCanAssignOthers, autoMoveDependents, useInstanceHolidays } =
-      this.generalForm.getRawValue();
+    const {
+      name,
+      description,
+      membersCanAssignOthers,
+      autoMoveDependents,
+      useInstanceHolidays,
+      planLeadsOnly,
+    } = this.generalForm.getRawValue();
     await this.run(async () => {
       const saved = await this.api.update(project.id, {
         name,
         description,
         ...(project.ownerId !== null
           ? {}
-          : { settings: { membersCanAssignOthers, autoMoveDependents, useInstanceHolidays } }),
+          : {
+              settings: {
+                membersCanAssignOthers,
+                autoMoveDependents,
+                useInstanceHolidays,
+                planLeadsOnly,
+              },
+            }),
       });
       // Saved: the form shows the stored values again.
       this.generalForm.markAsPristine();
@@ -725,6 +750,7 @@ export class ProjectSettingsPage implements OnInit {
       membersCanAssignOthers: project.settings.membersCanAssignOthers,
       autoMoveDependents: project.settings.autoMoveDependents,
       useInstanceHolidays: project.settings.useInstanceHolidays,
+      planLeadsOnly: project.settings.planLeadsOnly,
     });
   }
 

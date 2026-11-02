@@ -13,6 +13,7 @@ describe('project settings', () => {
         autoMoveDependents: false,
         useInstanceHolidays: true,
         holidaysReviewedAt: null,
+        planLeadsOnly: true,
       });
     }
   });
@@ -20,6 +21,11 @@ describe('project settings', () => {
   it('reads automatic moving only when it is a boolean (M9)', () => {
     expect(parseProjectSettings({ autoMoveDependents: true }).autoMoveDependents).toBe(true);
     expect(parseProjectSettings({ autoMoveDependents: 'yes' }).autoMoveDependents).toBe(false);
+  });
+
+  it('keeps the schedule to PMs and Leads unless explicitly off (M9.2)', () => {
+    expect(parseProjectSettings({ planLeadsOnly: false }).planLeadsOnly).toBe(false);
+    expect(parseProjectSettings({ planLeadsOnly: 'no' }).planLeadsOnly).toBe(true);
   });
 
   it('reads a known label style and defaults an unknown one', () => {

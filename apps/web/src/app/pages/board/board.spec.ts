@@ -205,6 +205,7 @@ describe('BoardPage', () => {
   it('offers quick-add and dragging only where the caller may act', async () => {
     const readOnly = {
       edit: false,
+      plan: false,
       move: false,
       delete: false,
       deleteCascade: false,

@@ -150,6 +150,11 @@ export class ProjectSettingsChangeDto implements Partial<ProjectSettings> {
   @OmittableNotNull()
   @IsBoolean()
   useInstanceHolidays?: boolean;
+
+  /** Only PMs and Leads change the plan of existing items (M9.2). */
+  @OmittableNotNull()
+  @IsBoolean()
+  planLeadsOnly?: boolean;
 }
 
 /** Body of `PATCH /projects/:id`. */

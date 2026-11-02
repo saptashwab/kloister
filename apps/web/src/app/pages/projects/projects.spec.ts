@@ -21,6 +21,7 @@ const project: ProjectDto = {
     autoMoveDependents: false,
     useInstanceHolidays: true,
     holidaysReviewedAt: null,
+    planLeadsOnly: true,
   },
   myRole: 'LEAD',
   myVisibility: 'ALL',

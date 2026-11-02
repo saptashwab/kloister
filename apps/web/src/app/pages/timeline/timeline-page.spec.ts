@@ -37,9 +37,20 @@ interface TimelineInternals {
   setType(item: WorkItemDetailDto, type: string): Promise<void>;
   resizeKey(event: KeyboardEvent, column: { id: string; width: number }): void;
   setDensity(density: 'compact' | 'two' | 'three'): void;
+  setPane(width: number | null): void;
+  gridPane(): number;
+  gridWidth(): number;
+  gridShift(): number;
 }
 
-const readOnly = { edit: false, move: false, delete: false, deleteCascade: false, annotate: false };
+const readOnly = {
+  edit: false,
+  plan: false,
+  move: false,
+  delete: false,
+  deleteCascade: false,
+  annotate: false,
+};
 const epicRef = { id: 'i1', number: 1, key: 'KLO-1', type: 'EPIC' as const, title: 'Launch' };
 
 describe('TimelinePage (M9)', () => {
@@ -204,6 +215,46 @@ describe('TimelinePage (M9)', () => {
     page.startEdit(1, 1, null);
     expect(root.querySelector('.cell input[aria-label^="Title"]')).toBeNull();
     expect(root.querySelector('.bar .edge')).toBeNull();
+  });
+
+  it('keeps titles, dates and links to Leads when the schedule is kept to them', async () => {
+    const own = { ...readOnly, edit: true, plan: false, move: true, annotate: true };
+    const mine = { ...b, can: own };
+    const { root, page, itemsApi, fixture } = await render([epic, a, mine]);
+    page.startEdit(2, 1, null);
+    page.startEdit(2, 2, null);
+    await settle(fixture);
+    expect(root.querySelector('.cell input[aria-label^="Title"]')).toBeNull();
+    expect(root.querySelector('.cell input[aria-label^="Start"]')).toBeNull();
+    // Only the Lead-editable row gets drag handles.
+    expect(root.querySelectorAll('.bar .edge').length).toBe(2);
+    page.selectClick(new MouseEvent('click'), 1);
+    page.selectClick(new MouseEvent('click', { shiftKey: true }), 2);
+    await page.linkInOrder();
+    await settle(fixture);
+    expect(itemsApi.addDependency).not.toHaveBeenCalled();
+    expect(root.textContent).toContain('KLO-3: only PMs and Leads change its plan');
+  });
+
+  it('narrows the table with the splitter and scrolls a focused cell into view', async () => {
+    const { page, root, fixture } = await render([epic, a, b]);
+    const full = page.gridWidth();
+    page.setPane(300);
+    await settle(fixture);
+    expect(page.gridPane()).toBe(300);
+    expect(root.querySelector('.gscroll')).not.toBeNull();
+    expect(localStorage.getItem('kloister.timeline.pane')).toBe('300');
+    // Focusing the last column shifts the table so the cell shows.
+    page.focusCell(1, 5, false);
+    expect(page.gridShift()).toBeGreaterThan(0);
+    page.focusCell(1, 0, false);
+    expect(page.gridShift()).toBe(0);
+    // As wide as the columns (or wider) fits them again.
+    page.setPane(full + 50);
+    await settle(fixture);
+    expect(page.gridPane()).toBe(full);
+    expect(root.querySelector('.gscroll')).toBeNull();
+    page.setPane(null);
   });
 
   it('changes types within the hierarchy, resizes columns and wraps titles', async () => {

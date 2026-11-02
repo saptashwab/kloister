@@ -23,7 +23,14 @@ interface BacklogInternals {
 }
 
 const hiddenEpic: ItemRefDto = { id: 'i1', number: 1, key: 'KLO-1', type: 'EPIC', title: 'Secret' };
-const readOnly = { edit: false, move: false, delete: false, deleteCascade: false, annotate: false };
+const readOnly = {
+  edit: false,
+  plan: false,
+  move: false,
+  delete: false,
+  deleteCascade: false,
+  annotate: false,
+};
 
 describe('BacklogPage', () => {
   async function render(items: WorkItemDetailDto[]) {

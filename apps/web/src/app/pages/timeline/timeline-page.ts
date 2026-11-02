@@ -120,6 +120,17 @@ interface Column {
   edit: 'text' | 'menu' | null;
 }
 
+/** Columns that change an item's plan, kept to PMs and Leads by default (M9.2). */
+const PLAN_COLUMNS: readonly ColumnId[] = [
+  'title',
+  'start',
+  'days',
+  'due',
+  'pred',
+  'type',
+  'sprint',
+];
+
 /** Every column; the first eight are shown by default. */
 const COLUMNS: Column[] = [
   { id: 'key', label: '#', width: 68, edit: null },
@@ -153,6 +164,10 @@ const OPTIONAL = COLUMNS.filter(
 const COLUMNS_KEY = 'kloister.timeline.columns';
 /** Storage key of the dragged column widths. */
 const WIDTHS_KEY = 'kloister.timeline.widths';
+/** Storage key of the plan table's width beside the bars. */
+const PANE_KEY = 'kloister.timeline.pane';
+/** Narrowest the splitter makes the plan table. */
+const MIN_PANE = 160;
 /** Storage key of the row height choice. */
 const DENSITY_KEY = 'kloister.timeline.rows';
 /** Row heights: one line, or titles wrapping to two or three lines. */
@@ -506,10 +521,14 @@ interface BarDraft {
           }
         </span>
       </div>
-      <div class="scroller" #scroller>
-        <div class="canvas" [style.width.px]="gridWidth() + barsWidth()">
+      <div class="scroller" #scroller (wheel)="gridWheel($event)">
+        <div
+          class="canvas"
+          [style.width.px]="gridPane() + barsWidth()"
+          [style.--tl-gx]="-gridShift() + 'px'"
+        >
           <div class="row head">
-            <div class="cells" role="presentation">
+            <div class="cells" role="presentation" [style.width.px]="gridPane()">
               <div class="cell" [style.width.px]="check">
                 <span class="visually-hidden">Select</span>
               </div>
@@ -540,6 +559,20 @@ interface BarDraft {
               <div class="cell" [style.width.px]="check">
                 <span class="visually-hidden">Actions</span>
               </div>
+              <span
+                class="split"
+                role="separator"
+                tabindex="0"
+                aria-orientation="vertical"
+                aria-label="Resize the plan table beside the bars"
+                [attr.aria-valuenow]="gridPane()"
+                [attr.aria-valuemin]="minPane()"
+                [attr.aria-valuemax]="gridWidth()"
+                title="Drag, or use the arrow keys, to share the width with the bars"
+                (pointerdown)="splitStart($event)"
+                (keydown)="splitKey($event)"
+                (dblclick)="setPane(null)"
+              ></span>
             </div>
             <div class="scale" [style.width.px]="barsWidth()" style="position: relative">
               @for (s of sprintBands(); track s.id) {
@@ -601,7 +634,13 @@ interface BarDraft {
                 [class.flash]="flash() === r.node.id"
                 [attr.aria-selected]="r.node.item ? selected().has(r.node.id) : null"
               >
-                <div class="cells">
+                <div class="cells" [style.width.px]="gridPane()">
+                  <span
+                    class="split"
+                    aria-hidden="true"
+                    (pointerdown)="splitStart($event)"
+                    (dblclick)="setPane(null)"
+                  ></span>
                   <div class="cell" role="gridcell" [style.width.px]="check">
                     @if (r.node.item) {
                       <mat-checkbox
@@ -747,8 +786,8 @@ interface BarDraft {
 
           @if (canCreate()) {
             <div class="row add">
-              <div class="cells" [style.width.px]="gridWidth()">
-                <div class="cell" [style.width.px]="gridWidth()" style="gap: 8px">
+              <div class="cells" [style.width.px]="gridPane()">
+                <div class="cell" [style.width.px]="gridPane()" style="gap: 8px">
                   <app-icon name="plus" />
                   <input
                     #adder
@@ -764,7 +803,7 @@ interface BarDraft {
             </div>
           }
 
-          <div class="layer" [style.left.px]="gridWidth()" [style.width.px]="barsWidth()">
+          <div class="layer" [style.left.px]="gridPane()" [style.width.px]="barsWidth()">
             @for (h of holidayBlocks(); track h.id) {
               <div class="holiday" [style.left.px]="h.left" [style.width.px]="h.width"></div>
             }
@@ -780,6 +819,17 @@ interface BarDraft {
               }
             </svg>
           </div>
+          @if (gridPane() < gridWidth()) {
+            <div
+              #gridScroll
+              class="gscroll"
+              aria-hidden="true"
+              [style.width.px]="gridPane()"
+              (scroll)="gridX.set($any($event.target).scrollLeft)"
+            >
+              <div [style.width.px]="gridWidth()"></div>
+            </div>
+          }
         </div>
       </div>
     }
@@ -920,12 +970,14 @@ interface BarDraft {
           <button mat-menu-item type="button" (click)="focusAdd(it)">Add row below</button>
         }
         @if (ctx.canEdit(it)) {
-          <button mat-menu-item type="button" (click)="outlineOne(index, 1)">Indent</button>
-          <button mat-menu-item type="button" (click)="outlineOne(index, -1)">Outdent</button>
-          <button mat-menu-item type="button" (click)="reschedule([{ item: it.id }])">
-            Reschedule from predecessors
-          </button>
-          @if (it.startNoEarlierThan) {
+          @if (ctx.canPlan(it)) {
+            <button mat-menu-item type="button" (click)="outlineOne(index, 1)">Indent</button>
+            <button mat-menu-item type="button" (click)="outlineOne(index, -1)">Outdent</button>
+            <button mat-menu-item type="button" (click)="reschedule([{ item: it.id }])">
+              Reschedule from predecessors
+            </button>
+          }
+          @if (it.startNoEarlierThan && ctx.canPlan(it)) {
             <button
               mat-menu-item
               type="button"
@@ -1019,6 +1071,7 @@ export class TimelinePage implements OnInit {
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly adder = viewChild<ElementRef<HTMLInputElement>>('adder');
+  private readonly gridScroll = viewChild<ElementRef<HTMLElement>>('gridScroll');
   private readonly editor = viewChild<ElementRef<HTMLInputElement>>('editor');
   private readonly menuAnchor = viewChild('menuAnchor', { read: MatMenuTrigger });
 
@@ -1107,6 +1160,13 @@ export class TimelinePage implements OnInit {
   protected readonly widths = signal<Partial<Record<ColumnId, number>>>(loadWidths());
   /** Row height: compact, or titles wrapping to two or three lines. */
   protected readonly density = signal<Density>(loadDensity());
+  /**
+   * Width of the plan table beside the bars set with the splitter
+   * (remembered per browser), or null to fit every column.
+   */
+  protected readonly paneWidth = signal<number | null>(loadPane());
+  /** Sideways scroll of the plan table inside a narrowed pane, in px. */
+  protected readonly gridX = signal(0);
   /** Row height in px; grid rows, bar tracks and links share it. */
   protected readonly rowHeight = computed(() => ROW_HEIGHT[this.density()]);
   /** Lines a wrapped title may take. */
@@ -1129,6 +1189,19 @@ export class TimelinePage implements OnInit {
   );
   protected readonly gridWidth = computed(
     () => CHECK * 2 + this.columns().reduce((w, c) => w + c.width, 0),
+  );
+  /** Narrowest the plan table can be made. */
+  protected readonly minPane = computed(() => Math.min(MIN_PANE, this.gridWidth()));
+  /** Width the plan table takes: its columns, or less when the splitter narrows it. */
+  protected readonly gridPane = computed(() => {
+    const pane = this.paneWidth();
+    return pane === null
+      ? this.gridWidth()
+      : Math.max(this.minPane(), Math.min(this.gridWidth(), pane));
+  });
+  /** How far the table's cells are shifted left, never past its last column. */
+  protected readonly gridShift = computed(() =>
+    Math.max(0, Math.min(this.gridX(), this.gridWidth() - this.gridPane())),
   );
   protected readonly filtered = computed(
     () =>
@@ -1605,13 +1678,14 @@ export class TimelinePage implements OnInit {
   }
 
   /**
-   * Whether the caller may change an item's dates here.
+   * Whether the caller may change an item's dates here (M9.2: the plan may
+   * be kept to PMs and Leads).
    *
    * @param item The item.
    * @returns True when editable on an unarchived project.
    */
   protected canEditDates(item: WorkItemDto): boolean {
-    return this.ctx.canEdit(item);
+    return this.ctx.canPlan(item);
   }
 
   /**
@@ -1624,6 +1698,7 @@ export class TimelinePage implements OnInit {
   protected editable(row: TimelineRow, column: Column): boolean {
     const item = row.node.item;
     if (item === null || column.edit === null || !this.ctx.canEdit(item)) return false;
+    if (PLAN_COLUMNS.includes(column.id) && !this.ctx.canPlan(item)) return false;
     if (row.summary !== null && ['start', 'days', 'due'].includes(column.id)) return false;
     return true;
   }
@@ -1654,7 +1729,7 @@ export class TimelinePage implements OnInit {
     const el = this.scroller()?.nativeElement;
     if (plan === null || el === undefined) return;
     const days = dayNumber(plan.finish.dueDate) - dayNumber(plan.start.date) + 1;
-    const room = el.clientWidth - this.gridWidth() - 60;
+    const room = el.clientWidth - this.gridPane() - 60;
     this.zoom.set(days * 22 <= room ? 'week' : days * 7 <= room ? 'month' : 'quarter');
     this.scrollToDay(dayNumber(plan.start.date));
   }
@@ -1726,6 +1801,7 @@ export class TimelinePage implements OnInit {
       col: Math.max(0, Math.min(cols - 1, col)),
     };
     this.focus.set(next);
+    this.revealColumn(next.col);
     if (focusDom)
       afterNextRender(() => document.getElementById(`c-${next.row}-${next.col}`)?.focus(), {
         injector: this.injector,
@@ -2401,7 +2477,11 @@ export class TimelinePage implements OnInit {
         return;
       }
     }
-    if (rows.length > 1) {
+    // Undo deletes the rows, so it is offered only when the caller may
+    // (Members may not while the plan is kept to PMs and Leads).
+    if (rows.length > 1 && !created.every((i) => i.can.delete)) {
+      this.toast.show(`${created.length} rows created`);
+    } else if (rows.length > 1) {
       this.toast.show(`${created.length} rows created`, async () => {
         // Children first, so every delete is an ordinary one without cascade.
         const kept: string[] = [];
@@ -2584,7 +2664,7 @@ export class TimelinePage implements OnInit {
     const rows = this.rows();
     const item = rows[index]?.node.item;
     if (item === undefined || item === null) return 'Choose a row first';
-    if (!this.ctx.canEdit(item)) return `${item.key}: you cannot change this item`;
+    if (!this.ctx.canPlan(item)) return `${item.key}: only PMs and Leads change its plan`;
     const target = direction === 1 ? indentTarget(rows, index) : outdentTarget(rows, index);
     if ('error' in target) return `${item.key}: ${target.error}`;
     try {
@@ -2623,6 +2703,10 @@ export class TimelinePage implements OnInit {
       const [pred, succ] = [items[i - 1], items[i]];
       if (this.edges().some((e) => e.blockingItemId === pred.id && e.blockedItemId === succ.id))
         continue;
+      if (!this.ctx.canPlan(succ)) {
+        problems.push(`${succ.key}: only PMs and Leads change its plan`);
+        continue;
+      }
       try {
         await this.api.addDependency(project.id, succ.id, { blockingItemId: pred.id });
         linked.push(succ.id);
@@ -2648,7 +2732,13 @@ export class TimelinePage implements OnInit {
       (e) => chosen.has(e.blockingItemId) && chosen.has(e.blockedItemId),
     );
     const problems: string[] = [];
+    const byId = new Map(this.ctx.items().map((i) => [i.id, i]));
     for (const e of links) {
+      const blocked = byId.get(e.blockedItemId);
+      if (blocked !== undefined && !this.ctx.canPlan(blocked)) {
+        problems.push(`${blocked.key}: only PMs and Leads change its plan`);
+        continue;
+      }
       try {
         await this.api.removeDependency(project.id, e.blockedItemId, e.blockingItemId);
       } catch (error) {
@@ -2681,7 +2771,7 @@ export class TimelinePage implements OnInit {
     const cal = this.calendar();
     const changes: RescheduleChangeRequest[] = [];
     for (const item of this.selectedItems()) {
-      if (!this.ctx.canEdit(item) || (item.startDate === null && item.dueDate === null)) continue;
+      if (!this.ctx.canPlan(item) || (item.startDate === null && item.dueDate === null)) continue;
       const start =
         item.startDate === null
           ? null
@@ -2890,6 +2980,113 @@ export class TimelinePage implements OnInit {
   }
 
   /**
+   * Sets the plan table's width beside the bars, or fits every column with
+   * null, and remembers it.
+   *
+   * @param width Width in px, or null.
+   * @param remember Store it now (false while dragging).
+   */
+  protected setPane(width: number | null, remember = true): void {
+    // A pane as wide as the columns fits them, also after columns change.
+    const pane =
+      width === null || width >= this.gridWidth()
+        ? null
+        : Math.round(Math.max(this.minPane(), width));
+    this.paneWidth.set(pane);
+    if (pane === null) this.gridX.set(0);
+    // A scrollbar that appears now starts at 0; show the current shift on it.
+    afterNextRender(
+      () => {
+        const bar = this.gridScroll()?.nativeElement;
+        if (bar !== undefined) bar.scrollLeft = this.gridShift();
+      },
+      { injector: this.injector },
+    );
+    if (remember) store(PANE_KEY, pane);
+  }
+
+  /**
+   * Scrolls a narrowed table sideways with a trackpad or Shift+wheel over its
+   * cells, so overlay scrollbars (which may be hidden) are not needed.
+   *
+   * @param event The wheel event.
+   */
+  protected gridWheel(event: WheelEvent): void {
+    const max = this.gridWidth() - this.gridPane();
+    const delta = event.deltaX !== 0 ? event.deltaX : event.shiftKey ? event.deltaY : 0;
+    if (max <= 0 || delta === 0) return;
+    if (!(event.target instanceof Element) || event.target.closest('.cells') === null) return;
+    event.preventDefault();
+    const next = Math.max(0, Math.min(max, this.gridShift() + delta));
+    this.gridX.set(next);
+    const bar = this.gridScroll()?.nativeElement;
+    if (bar !== undefined) bar.scrollLeft = next;
+  }
+
+  /**
+   * Starts dragging the splitter between the plan table and the bars.
+   *
+   * @param event The pointer event.
+   */
+  protected splitStart(event: PointerEvent): void {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const handle = event.target as HTMLElement;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const start = this.gridPane();
+    const move = (e: PointerEvent) => this.setPane(start + e.clientX - startX, false);
+    const up = () => {
+      store(PANE_KEY, this.paneWidth());
+      handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', up);
+      handle.removeEventListener('pointercancel', up);
+    };
+    handle.addEventListener('pointermove', move);
+    handle.addEventListener('pointerup', up);
+    handle.addEventListener('pointercancel', up);
+  }
+
+  /**
+   * Moves the splitter from the keyboard: arrows by 16 px, with Shift by
+   * 64 px; Home fits every column.
+   *
+   * @param event The key event.
+   */
+  protected splitKey(event: KeyboardEvent): void {
+    const step = event.shiftKey ? 64 : 16;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.setPane(this.gridPane() + (event.key === 'ArrowLeft' ? -step : step));
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      this.setPane(null);
+    }
+  }
+
+  /**
+   * Scrolls a narrowed plan table so a column is in view.
+   *
+   * @param col Column index.
+   */
+  private revealColumn(col: number): void {
+    const pane = this.gridPane();
+    const columns = this.columns();
+    if (pane >= this.gridWidth() || columns[col] === undefined) return;
+    // The first column brings the selection checkboxes back too.
+    const start = CHECK + columns.slice(0, col).reduce((w, c) => w + c.width, 0);
+    const left = col === 0 ? 0 : start;
+    const right = start + columns[col].width;
+    const shift = this.gridShift();
+    const next = left < shift ? left : right > shift + pane ? right - pane : shift;
+    if (next === shift) return;
+    this.gridX.set(next);
+    const bar = this.gridScroll()?.nativeElement;
+    if (bar !== undefined) bar.scrollLeft = next;
+  }
+
+  /**
    * Chooses the row height and remembers it.
    *
    * @param density Compact, or titles on two or three lines.
@@ -2973,6 +3170,18 @@ function loadWidths(): Partial<Record<ColumnId, number>> {
       out[id as ColumnId] = clampWidth(width);
   }
   return out;
+}
+
+/**
+ * The remembered plan table width, or null to fit every column.
+ *
+ * @returns Width in px, or null.
+ */
+function loadPane(): number | null {
+  const value = loadStored<unknown>(PANE_KEY, null);
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? Math.round(value)
+    : null;
 }
 
 /**

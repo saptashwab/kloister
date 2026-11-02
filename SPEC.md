@@ -93,9 +93,10 @@ kloister/
 | Duplicate fully visible items within the same space | ✔ | ✔ | ✔ | ✘ |
 | Edit any item | ✔ | ✔ | ✘ | ✘ |
 | Edit items assigned to or created by self | ✔ | ✔ | ✔ | ✘ |
+| Change the plan of existing items: title, type, parent, sprint, dates, half days, pin, dependencies | ✔ | ✔ | Own/assigned, only when the project setting allows (default off) | ✘ |
 | Assign items to others | ✔ | ✔ | Project setting (default off) | ✘ |
 | Move cards between buckets | ✔ | ✔ | Own/assigned only | ✘ |
-| Delete items | ✔ | ✔ | Own created, no children | ✘ |
+| Delete items | ✔ | ✔ | Own created, no children, only when the project setting allows (default off) | ✘ |
 | Notes and attachments on visible items | ✔ | ✔ | ✔ | ✘ |
 | Manage buckets, labels, sprints | ✔ | ✔ | ✘ | ✘ |
 | Manage members, roles, visibility | ✔ | ✘ | ✘ | ✘ |
@@ -105,6 +106,15 @@ kloister/
 | Excel / offline export of visible data | ✔ | ✔ | ✔ | ✔ |
 
 A project must always have at least one PM; removing or demoting the last PM is rejected.
+
+Plan setting (M9.2, owner decision 2026-11-02): "Only PMs and Leads change the plan" is on for every project,
+including projects from before it, and only a PM switches it off. While it is on, Members cannot change the plan
+of existing items (title, type, parent, sprint, dates, half days, pin, dependencies; on the timeline also
+indenting, outdenting and linking) or delete items, since each of these changes the timeline. They still set
+any of these when creating an item, and still edit the due time, status, checklist, assignees (within the
+assignment rule), labels, priority, bucket, description, notes and attachments of their own items. Team Leads
+keep their Lead rights on their team's items (3.5). Dependent items move only where the caller may change the
+plan.
 
 Duplication requires the ordinary create permission, full visibility of the source and the normal creation,
 assignment and destination-scope checks. A title-only ancestor is not a readable source. Excel/offline export
@@ -276,7 +286,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **Sprints**: create and edit, set active, sprint board (the board filtered to one sprint), close sprint with an option to move unfinished items
 - **Timeline** (projects only, M9): plan grid and bars over the same items (6.4)
 - **Project settings** (PM), one tab each from M8.5 (General, Members, Teams, Buckets, Labels): general, members (role and visibility per member), teams (optional), buckets (with rules),
-  labels, label style, statusToBucket map, ADO export settings, automatic moving of dependent items (6.4, M9)
+  labels, label style, statusToBucket map, ADO export settings, automatic moving of dependent items (6.4, M9),
+  who changes the plan (3.2, M9.2)
 - **Notifications**: bell with unread count, polled every 60s. Notification types:
   assigned to you, mentioned, due tomorrow, overdue, status change on items you created. Due tomorrow and overdue also
   cover the owner's personal tasks.
@@ -441,6 +452,10 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   Changing a project holiday keeps affected Not started items' working days through the reschedule flow.
   Instance holiday changes never move items; the timeline offers the project's PMs and Leads to keep
   durations or keep dates. Holidays are shaded on the timeline and listed in the Excel Timeline sheet.
+- Splitter (M9.2): a separator between the plan table and the bars shares the width between them, by pointer or
+  arrow keys, and is remembered per browser. A narrowed table gets its own horizontal scrollbar while the bars
+  keep theirs; vertical scrolling stays shared so rows line up, and moving the cell focus scrolls the table to
+  the focused column. Double-click or Home fits every column again.
 
 ## 7. ADO CSV transfers (M8; simplified in M8.1)
 

@@ -640,7 +640,7 @@ export function keepDurations(
 ): RescheduleChangeRequest[] {
   const changes: RescheduleChangeRequest[] = [];
   for (const item of items) {
-    if (item.status !== 'NOT_STARTED' || !item.can.edit) continue;
+    if (item.status !== 'NOT_STARTED' || !item.can.plan) continue;
     if (item.startDate === null || item.dueDate === null) continue;
     const touches = ranges.some(
       (r) => r.startDate <= item.dueDate! && r.endDate >= item.startDate!,

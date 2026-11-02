@@ -7,15 +7,16 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { type ProjectAccess, ProjectAccessService } from '../projects/project-access.service.js';
 import { itemFacts } from './item.mapper.js';
 import type { AddDependencyDto } from './items.dto.js';
-import { ItemsService } from './items.service.js';
+import { ItemsService, PLAN_LEADS_ONLY } from './items.service.js';
 
 /**
  * "Blocked by" dependencies between items of one project (SPEC §4
  * `WorkItemDependency`). Dependencies may cross teams and never form a
  * cycle. They are managed from the blocked item.
  *
- * Permissions: the caller must be able to edit the blocked item (404 if
- * invisible, 403 if not editable) and see the blocking item (400 otherwise,
+ * Permissions: the caller must be able to change the blocked item's
+ * plan (404 if invisible, 403 otherwise; see
+ * ProjectAccessService.canPlanItem) and see the blocking item (400 otherwise,
  * the same answer as for an unknown item).
  */
 @Injectable()
@@ -52,7 +53,7 @@ export class DependenciesService {
   ): Promise<WorkItemDetailDto> {
     const row = await serializable(this.prisma, async (tx) => {
       const item = await this.items.findVisible(tx, access, ref);
-      if (!this.access.canEditItem(access, itemFacts(item))) throw forbidden();
+      if (!this.access.canPlanItem(access, itemFacts(item))) throw forbidden(PLAN_LEADS_ONLY);
       if (dto.blockingItemId === item.id) {
         throw invalidField('blockingItemId', 'An item cannot block itself');
       }
@@ -127,7 +128,7 @@ export class DependenciesService {
   ): Promise<WorkItemDetailDto> {
     const row = await serializable(this.prisma, async (tx) => {
       const item = await this.items.findVisible(tx, access, ref);
-      if (!this.access.canEditItem(access, itemFacts(item))) throw forbidden();
+      if (!this.access.canPlanItem(access, itemFacts(item))) throw forbidden(PLAN_LEADS_ONLY);
       const dependency = await tx.workItemDependency.findFirst({
         where: {
           blockedItemId: item.id,

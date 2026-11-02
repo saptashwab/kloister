@@ -222,6 +222,17 @@ export class ProjectContext {
   }
 
   /**
+   * Reports whether the item's title, dates, half days, pin and dependencies
+   * may be changed (M9.2).
+   *
+   * @param item The item.
+   * @returns True when the API reported `can.plan` and the project is not archived.
+   */
+  canPlan(item: WorkItemDto): boolean {
+    return this.writable() && item.can.plan;
+  }
+
+  /**
    * Reports whether the card may be dragged between buckets.
    *
    * @param item The item.

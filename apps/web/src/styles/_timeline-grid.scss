@@ -35,6 +35,44 @@ app-timeline {
     flex: none;
     background: var(--k-surface);
     border-right: var(--k-line) solid var(--k-border-strong);
+    // A narrowed table scrolls sideways on its own (M9.2): cells shift by
+    // --tl-gx and are clipped; clip, unlike hidden, cannot be scrolled by focus.
+    overflow-x: clip;
+  }
+  .cells > .cell {
+    transform: translateX(var(--tl-gx, 0));
+  }
+  .add .cells > .cell {
+    transform: none;
+  }
+  // Splitter between the plan table and the bars.
+  .split {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 6px;
+    cursor: col-resize;
+    touch-action: none;
+    outline: none;
+  }
+  .split:hover,
+  .split:focus-visible {
+    background: var(--k-primary);
+  }
+  // The table's own scrollbar, under it at the bottom of the view.
+  .gscroll {
+    position: sticky;
+    left: 0;
+    bottom: 0;
+    z-index: 5;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: var(--k-surface);
+    border-top: var(--k-line) solid var(--k-border);
+  }
+  .gscroll > div {
+    height: var(--k-space-3);
   }
   .head {
     position: sticky;

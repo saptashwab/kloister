@@ -20,7 +20,7 @@ import { serializable } from '../common/transactions.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { itemFacts, type ItemRow, toItemRef } from '../items/item.mapper.js';
 import { HolidaysService } from '../holidays/holidays.service.js';
-import { ItemsService } from '../items/items.service.js';
+import { ItemsService, PLAN_LEADS_ONLY } from '../items/items.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { type ProjectAccess, ProjectAccessService } from '../projects/project-access.service.js';
 import type { RescheduleChangeDto, RescheduleDto } from './timeline.dto.js';
@@ -77,7 +77,9 @@ export class TimelineService {
    * moved items also name the item that triggered the move.
    *
    * Permissions: `EDIT_ANY_ITEM` or `EDIT_OWN_ITEMS` (guard); every
-   * requested item must be visible (404) and editable (403).
+   * requested item must be visible (404) and its plan changeable by the
+   * caller (403, {@link ProjectAccessService.canPlanItem}); dependent items
+   * move only where the caller could change them too.
    *
    * @param auth The caller.
    * @param access The caller's access.
@@ -97,7 +99,7 @@ export class TimelineService {
         requested.push(await this.items.findVisible(tx, access, change.item));
       }
       for (const row of requested) {
-        if (!this.access.canEditItem(access, itemFacts(row))) throw forbidden();
+        if (!this.access.canPlanItem(access, itemFacts(row))) throw forbidden(PLAN_LEADS_ONLY);
       }
 
       const rows = await tx.workItem.findMany({
@@ -221,7 +223,7 @@ export class TimelineService {
       ...datesOf(row),
       status: row.status,
       pin: pinOf(row),
-      editable: this.access.canEditItem(access, itemFacts(row)),
+      editable: this.access.canPlanItem(access, itemFacts(row)),
     };
   }
 

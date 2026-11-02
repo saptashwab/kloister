@@ -218,6 +218,13 @@ export interface ProjectSettings {
   useInstanceHolidays: boolean;
   /** When the project's PMs or Leads last reviewed instance holiday changes, or null (M9.1). */
   holidaysReviewedAt: string | null;
+  /**
+   * Only PMs, Leads and the item's team Leads change an existing item's
+   * plan: title, type, parent, sprint, dates, half days, pin and
+   * dependencies (M9.2; default on, also for projects from before it).
+   * Members still set them when creating.
+   */
+  planLeadsOnly: boolean;
 }
 
 /**
@@ -245,6 +252,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   autoMoveDependents: false,
   useInstanceHolidays: true,
   holidaysReviewedAt: null,
+  planLeadsOnly: true,
 };
 
 /** A project as the API returns it, from the caller's point of view. */

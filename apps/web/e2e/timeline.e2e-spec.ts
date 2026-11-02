@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { BucketDto, ProjectDto, UserDto, WorkItemDetailDto } from '@kloister/shared';
-import { signIn, USERS } from './support';
+import { ITEMS, PROJECT_KEY, signIn, USERS } from './support';
 
 // The project timeline (SPEC §6.4, M9) against the real API: grid editing,
 // automatic and confirmed dependent moves, selection, keyboard use, links to
@@ -327,4 +327,35 @@ test('admins add and remove instance holidays; others cannot use them', async ({
   await page.context().clearCookies();
   await signIn(page, USERS.pm);
   expect((await page.request.get('api/v1/admin/holidays')).status()).toBe(403);
+});
+
+test('Members keep the schedule to PMs and Leads; the splitter narrows the table', async ({
+  page,
+}) => {
+  await signIn(page, USERS.member);
+  await page.goto(`/p/${PROJECT_KEY}/timeline`);
+  const key = `${PROJECT_KEY}-${ITEMS.taskA}`;
+  // The Member's own task: its title and dates are not editable cells.
+  const title = cell(page, key, 1);
+  await title.dblclick();
+  await expect(title.locator('input')).toHaveCount(0);
+  const res = await page.request.patch(`api/v1/projects/${PROJECT_KEY}/items/${ITEMS.taskA}`, {
+    headers,
+    data: { title: 'Renamed by a Member' },
+  });
+  expect(res.status()).toBe(403);
+  // The splitter shares the width; a narrowed table gets its own scrollbar.
+  const split = page.getByRole('separator', { name: 'Resize the plan table beside the bars' });
+  await split.focus();
+  await page.keyboard.press('Shift+ArrowLeft');
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page.locator('.gscroll')).toBeVisible();
+  await snap(page, 'timeline-splitter');
+  await page.keyboard.press('Home');
+  await expect(page.locator('.gscroll')).toHaveCount(0);
+  // The drawer shows the dates as text and keeps the due time editable.
+  await cell(page, key, 0).getByRole('link').click();
+  const drawer = page.getByRole('dialog', { name: 'Item details', exact: true });
+  await expect(drawer.getByText('The plan is set by PMs and Leads')).toBeVisible();
+  await expect(drawer.getByRole('textbox', { name: 'Due date' })).toHaveCount(0);
 });

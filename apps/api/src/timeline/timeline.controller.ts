@@ -48,7 +48,8 @@ export class TimelineController {
   /**
    * Previews or applies a date change with its dependent moves.
    * Permissions: `EDIT_ANY_ITEM` or `EDIT_OWN_ITEMS`; each requested item
-   * must be visible (404) and editable (403).
+   * must be visible (404) and its plan changeable by the caller (403,
+   * ProjectAccessService.canPlanItem).
    *
    * @param auth The caller.
    * @param access The caller's access.

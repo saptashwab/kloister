@@ -990,14 +990,16 @@ export class BoardPage implements OnInit, PersonFilter {
 
   /**
    * Reports whether a card can be dragged in the current view: moving
-   * between buckets needs `can.move`; the other views change fields and need
+   * between buckets needs `can.move`; the sprint view changes the plan and
+   * needs `can.plan` (M9.2); the other views change fields and need
    * `can.edit`.
    *
    * @param item The card.
    * @returns True if dragging is offered.
    */
   protected canDrag(item: WorkItemDto): boolean {
-    return this.groupBy() === 'bucket' ? this.ctx.canMove(item) : this.ctx.canEdit(item);
+    if (this.groupBy() === 'bucket') return this.ctx.canMove(item);
+    return this.groupBy() === 'sprint' ? this.ctx.canPlan(item) : this.ctx.canEdit(item);
   }
 
   /**

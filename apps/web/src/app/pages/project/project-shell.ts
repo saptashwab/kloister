@@ -4,7 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
-import { type CreateItemRequest, ProjectPermission } from '@kloister/shared';
+import { type CreateItemRequest, ItemType, ProjectPermission, SprintState } from '@kloister/shared';
 import { filter, firstValueFrom, map } from 'rxjs';
 import { errorMessage } from '../../core/api';
 import { ItemsApiService } from '../../core/items-api.service';
@@ -210,8 +210,8 @@ export class ProjectShellPage {
   }
 
   /**
-   * Asks for a new item's type, title and bucket, creates it and opens it in
-   * the drawer beside the board.
+   * Asks for a new item's type, title and bucket (and optionally parent,
+   * sprint and dates), creates it and opens it in the drawer beside the board.
    *
    * @returns Resolves once created and opened.
    */
@@ -221,7 +221,14 @@ export class ProjectShellPage {
     const ref = this.dialog.open<NewItemDialog, NewItemData, CreateItemRequest | null>(
       NewItemDialog,
       {
-        data: { buckets: this.ctx.buckets() },
+        data: {
+          buckets: this.ctx.buckets(),
+          parents: this.ctx
+            .items()
+            .filter((i) => i.type !== ItemType.TASK && i.type !== ItemType.BUG)
+            .map((i) => ({ id: i.id, key: i.key, title: i.title, type: i.type })),
+          sprints: this.ctx.sprints().filter((s) => s.state !== SprintState.CLOSED),
+        },
         width: 'var(--k-size-460px)',
         maxWidth: 'calc(100vw - var(--k-space-8))',
         enterAnimationDuration: dialogMotion(),

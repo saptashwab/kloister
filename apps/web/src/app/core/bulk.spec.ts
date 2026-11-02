@@ -11,6 +11,7 @@ describe('bulk edits', () => {
   });
   const readOnly = {
     edit: false,
+    plan: false,
     move: false,
     delete: false,
     deleteCascade: false,

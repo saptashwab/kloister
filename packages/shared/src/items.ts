@@ -157,8 +157,14 @@ export interface ItemRefDto {
 
 /** What the caller may do with an item; the UI uses this only to hide controls. */
 export interface ItemCapabilitiesDto {
-  /** Edit fields, checklist, labels and dependencies. */
+  /** Edit fields, checklist and labels. */
   edit: boolean;
+  /**
+   * Change the title, type, parent, sprint, dates, half days, pin and
+   * dependencies (M9.2): `edit` unless the project keeps the plan to PMs
+   * and Leads.
+   */
+  plan: boolean;
   /** Move the card between and within buckets. */
   move: boolean;
   /** Delete the item (without cascade). */
