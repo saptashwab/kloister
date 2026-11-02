@@ -44,7 +44,7 @@ server streams as expected and names the one-line fallback, which needs the owne
 | Timeline holidays             | Project and instance holiday changes                                                       | The instance-change notice appears without a reload                 |
 | Not live                      | Help, admin users and settings, audit log, ADO transfer pages, exports                     | Unchanged                                                           |
 
-Presence ("Ann is viewing this item") is out of scope for M10 (section 10).
+Presence (who else is looking at or editing an item) is part of M10 at the owner's request (section 4.5).
 
 ## 4. Behaviour and visual design
 
@@ -83,6 +83,24 @@ Presence ("Ann is viewing this item") is out of scope for M10 (section 10).
   "Offline. Changes show when you are back." Screens keep working; saves behave as today.
 - On reconnect the open project reloads once, so nothing missed while offline stays missing.
 - The status is announced politely to screen readers only when it changes to offline and back.
+
+### 4.5 Who else is here (presence)
+
+- Item details: the drawer header shows the avatars of the other people who have the same item open, with "Ann
+  is viewing" on hover. While someone edits a field, it reads "Ann is editing Due date", and that field shows a
+  small avatar beside it, so two people notice before they overwrite each other.
+- Timeline, board and backlog: a row or card someone else has open shows a small avatar at its edge; a cell or
+  bar someone is editing or dragging gets a thin outline in a neutral colour with their initials. The project
+  header shows the people currently on the project's pages (at most four avatars, then "+3").
+- Presence is a hint, never a lock: anyone may still edit. The conflict notice in section 4.3 remains the
+  safeguard.
+- It is quiet: presence appears after someone has stayed about two seconds (so passing clicks do not flicker)
+  and disappears about 30 seconds after they leave, close the tab or lose the connection.
+- Only people and items the viewer could already see are shown: presence for an item reaches only viewers who
+  can see that item, and only project members appear. Personal spaces have no presence. Administrators on a
+  cross-project visit neither see nor show presence.
+- People can hide their own presence in their account settings ("Show others when I am viewing an item",
+  default on); the admin "Live updates" switch turns presence off with everything else.
 
 ## 5. Technical design
 
@@ -146,7 +164,18 @@ Presence ("Ann is viewing this item") is out of scope for M10 (section 10).
 - Every API request carries an `X-Client-Id` header (a random id per tab), stored with the audit payload so a
   tab can skip its own echoes.
 
-### 5.5 Sessions
+### 5.5 Presence
+
+- The page reports what the tab is doing through the stream's control route:
+  `PUT /api/v1/events/:streamId/presence` with `{ itemId, field }` (both nullable) when an item is opened, a
+  field or cell edit starts or ends, or a drag starts or ends; at most once a second per tab.
+- Presence lives only in API memory (a map per project, with expiry); it is never stored, audited or exported.
+  The API sends `presence` events (user id, item id, field, viewing or editing) to the project's other streams
+  that pass `canViewItem` for that item, after the two-second delay, and a removal on leave or expiry.
+- With several API processes, presence travels on the same PostgreSQL notification channel as a separate,
+  non-audited message kind.
+
+### 5.6 Sessions
 
 - The stream never extends a session: it does not update `lastSeenAt`. At each heartbeat the server checks the
   session's idle and absolute deadlines and closes the stream when expired; the client then shows the usual
@@ -160,8 +189,10 @@ Presence ("Ann is viewing this item") is out of scope for M10 (section 10).
 | `PUT /api/v1/events/:streamId/project`     | Body `{ projectId: string \| null }`; 404 for a project the caller cannot see; 404 for another user's stream |
 | `GET /api/v1/projects/:id/items?ids=a,b,…` | Existing list route gains an `ids` filter (at most 100), scoped as usual                                     |
 
+| `PUT /api/v1/events/:streamId/presence` | Body `{ itemId: string \| null, field: string \| null }`; the item must be visible (404 otherwise) |
+
 Event kinds: `hello`, `item-changed`, `item-removed`, `links-changed`, `board-changed` (buckets, labels,
-sprints, teams, holidays), `access-changed`, `notification`, `project-resync`, `resync`.
+sprints, teams, holidays), `access-changed`, `notification`, `presence`, `project-resync`, `resync`.
 
 ## 7. Deployment
 
@@ -197,7 +228,6 @@ No change. Settings use the existing `AppSetting` store.
 
 ## 10. Out of scope (later)
 
-- Presence and "Ann is viewing / editing this item".
 - Live cursors, collaborative text editing of descriptions.
 - Live updates for admin pages, the audit log, ADO transfer pages and exports.
 - Live updates during an admin's cross-project visit.
@@ -213,9 +243,14 @@ No change. Settings use the existing `AppSetting` store.
    server?
 4. Highlight: soft highlight with "Changed by Ann just now" on hover (recommended), or highlight only without a
    name?
+5. Presence: show who is viewing and who is editing which field (recommended), or viewing only? And may people
+   hide their own presence in account settings (recommended: yes, default shown)?
 
 ## 12. Verification
 
+- Presence: unit tests for the delay, expiry and per-item visibility filter; a browser test where the Member
+  sees the PM's avatar in the drawer and "is editing Due date", and a viewer without access to the item sees
+  nothing.
 - Unit: event mapping (every audited action is either mapped or explicitly not live), fan-out filter per role
   and scope (OWN, BUCKETS, TEAMS, team Lead, Viewer, personal space, admin non-member), coalescing and resync
   threshold, client batching, busy-item deferral, echo skipping, status chip states.

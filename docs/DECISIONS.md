@@ -6,8 +6,9 @@
   My work, sprints and settings effects. Server-Sent Events rather than WebSockets (one-way traffic, plain
   proxying, no extra Apache module); PostgreSQL LISTEN/NOTIFY published from the audited write so only committed
   changes are announced; events carry ids and visibility facts only, and the client refetches through the scoped
-  API. Open questions (httpd fallback line, conflict notice, admin switch default, highlight text) await the
-  owner; no implementation yet.
+  API. Presence (who is viewing or editing an item) moved into M10 at the owner's request; it is kept in API
+  memory only and filtered per item. Open questions (httpd fallback line, conflict notice, admin switch
+  default, highlight text, presence detail) await the owner; no implementation yet.
 
 ## M9.3 own items until scheduled, suggested changes (2026-11-02)
 
