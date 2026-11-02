@@ -1,7 +1,8 @@
 # M9: project Timeline
 
-Planning baseline: 2026-11-02. Status: drafted from the owner's decisions of
-2026-11-02 (section 9); waiting for owner approval before any implementation.
+Planning baseline: 2026-11-02. Status: the owner settled every open question on
+2026-11-02 (section 9), including the additive migration in section 7.
+Implementation starts when the owner says go.
 SPEC §1, §6, §6.2, §6.4 and §10 carry the agreed behaviour; this plan adds the
 detail and the file list.
 
@@ -13,9 +14,13 @@ detail and the file list.
 - The timeline is a view, not a separate plan. Every row is an ordinary work item;
   rows created or edited here appear on the board, backlog, sprints, My work,
   exports and ADO transfers straight away, and the other way round.
+- It should feel like filling in a spreadsheet, with scheduling built in the way
+  Microsoft Project does it: dependent items follow their predecessors
+  automatically, earlier or later, unless someone deliberately pinned a later
+  start.
 - No breaking change (the instance is in use). Existing routes, deep links and
-  responses keep working; API changes are additive; no table changes are needed
-  (section 7). Permissions do not widen anywhere.
+  responses keep working; API changes are additive; the one migration is
+  additive (section 7). Permissions do not widen anywhere.
 - Projects only. Personal spaces do not get a timeline in M9 (section 10).
 - Reuse the M4.5 foundation: tokens only, `ui/` pieces, Angular Material and the
   CDK first. No third-party Gantt library. The whole timeline is a lazy route,
@@ -95,24 +100,58 @@ opens over it at `/p/:key/timeline/items/:number`, as it does under `/backlog`.
 
 ### 3.2 Dates and duration
 
-- Only start and due are stored. Duration is computed in **working days**
-  (Monday to Friday, both ends counted, no holiday calendar).
+- Durations are in **working days** (Monday to Friday, no holiday calendar), in
+  steps of **half a day**. Each working day has a morning and an afternoon half;
+  there are no working hours.
+- Stored per item:
+  - `startDate`, plus the new `startAfternoon` flag (default false: the item
+    starts in the morning);
+  - `dueDate`, plus the existing due time (M8.5). A due time of exactly 12:00
+    means the item finishes at midday. No due time, or any other due time, means
+    it finishes at the end of that day.
+  - Duration itself is not stored; it is computed from those.
+- Duration is the number of working half days from the start half to the finish
+  half, both included, divided by two. Examples: Monday morning to Monday midday
+  is 0.5; Monday afternoon to Tuesday midday is 1; Monday morning to Friday end of
+  day is 5.
 - Any two of Start, Duration and Due set the third:
-  - changing Duration keeps Start and sets Due;
+  - changing Duration keeps Start and sets Due (and a 12:00 due time when the
+    finish falls at midday, or no due time when it falls at the end of a day);
   - changing Due keeps Start and recomputes Duration;
   - changing Start keeps Duration and moves Due.
+- A typed duration must be at least 0.5 and a multiple of 0.5. Start and Due cells
+  accept a date, optionally followed by AM or PM ("4 Nov PM").
 - With only a due date, the row shows a due marker, not a bar. With only a start
   date, it shows a start marker.
-- Duration is the number of Monday-to-Friday days from Start to Due, both
-  included. A typed duration must be at least 1. Due becomes the nth working day
-  counted from Start, or from the next Monday when Start is a weekend day.
 - A start or due date entered on a Saturday or Sunday is kept as entered, since
-  dates are free-form elsewhere in the app. Durations count only the working days
-  between, so a weekend-only span shows 0.
-- Dates the timeline computes (section 4) always land on working days.
-- Due time (M8.5) is ignored by the timeline; the bar is day-level. The drawer and
-  board keep showing it.
+  dates are free-form elsewhere in the app. Durations count only the working half
+  days between, so a weekend-only span shows 0. When a duration is counted from a
+  weekend start, counting begins on the next Monday morning.
+- Dates the timeline computes (section 4) always land on working half days.
+- A due time other than 12:00 that someone set in the drawer is kept when the item
+  moves; the timeline treats that item as finishing at the end of the day.
 - Dates use the app's one date format and the M8.5 day-first entry.
+
+### 3.2.1 Totals for parents and the whole plan
+
+- Summary rows: an Epic, Feature or Story with visible dated descendants shows,
+  read-only and marked as a summary, the span of those descendants:
+  - Start is the earliest start, and Due the latest finish;
+  - Duration is the working days between them (the time the work takes from
+    first start to last finish, not the sum of the parts).
+- An optional **Work** column, hidden by default, shows the sum of the durations
+  of a row's leaf descendants (its own duration for a leaf), for comparing effort
+  with elapsed time.
+- A summary row's own stored dates, if it has any, show as a thin outline bar
+  behind its summary bracket and stay editable in the drawer. If the descendants
+  run past them, the row gets a warning. Summary values are computed for display
+  and never written back.
+- Plan total: the toolbar shows the plan's span, for example "4 Nov 2026 – 19 Mar
+  2027 · 98.5 working days", computed over every dated row the caller can see.
+  When filters are active it says so ("filtered") and covers the matching rows
+  only.
+- All totals are computed in the browser from the rows the caller can see, so
+  hidden items never affect them.
 
 ### 3.3 Bars (right)
 
@@ -120,22 +159,49 @@ opens over it at `/p/:key/timeline/items/:number`, as it does under `/backlog`.
   sprint bands with the sprint name; weekends shaded in week zoom.
 - Bars use type colours from the tokens, with the status shown by a fill pattern
   and in the accessible name, never by colour alone. Done items are muted.
-- Epics and Features with children show a summary bracket over the span of their
-  visible children, computed for display and never written back. A parent with
-  its own dates shows its own bar as well; children running past it get a warning.
+- Summary rows (3.2.1) show a bracket over their descendants' span, labelled
+  with its duration.
 - Arrows link each visible predecessor to its successor. A successor starting
-  before its predecessor's due date is drawn as a conflict (warning colour and
-  icon, explained on hover and in the accessible name).
+  before its predecessor finishes is drawn as a conflict (warning colour and
+  icon, explained on hover and in the accessible name). With automatic
+  scheduling, conflicts remain only where an item could not move (4.2).
+- A pinned start (4.1) shows a pin icon at the bar's start.
 - Overdue open items use the existing overdue style.
 - Dragging a bar moves both dates; dragging an end changes one date; both snap to
-  days. Every drag has a keyboard equivalent: each bar is focusable (reached from
-  its row), Left/Right moves it by a working day and Shift+Left/Right changes its
-  duration; nothing is saved until Enter, and Escape restores it. Alt+arrows are
+  half days. Every drag has a keyboard equivalent: each bar is focusable (reached
+  from its row), Left/Right moves it by half a working day and Shift+Left/Right
+  changes its duration by half a day; nothing is saved until Enter, and Escape
+  restores it. Alt+arrows are
   avoided because browsers use them for history. Drags and keyboard moves go
   through the same reschedule flow (section 4).
 - Grid and bars scroll together vertically (CDK virtual scroll, one row height).
   Horizontally the bars scroll on their own; "Today" and "Fit plan" buttons
   reposition them.
+
+### 3.3.1 Links between the timeline, the board and the drawer
+
+- Spreadsheet editing in the grid stays the main and fastest way to enter and
+  update the plan. Clicking a title, date or other cell selects it for editing,
+  exactly as in 3.1. The drawer is an extra way in, for what the grid does not
+  show, such as the description, checklist, notes and files.
+- The row's key (a link) and an "Open details" icon at the row's end open the
+  item's drawer at `/p/:key/timeline/items/:number`, as do a double click on a
+  bar and Enter on a focused key cell or bar. Single clicks on bars select them
+  for dragging.
+- Everything editable in the drawer is editable there, under the usual
+  permissions, and changes show in the row straight away. That includes Epics
+  and Features, which may have no card on the board. The grid keeps its place
+  while the drawer is open. Title-only ancestors do not open, as elsewhere.
+- The drawer opened from the timeline offers **Show on board**: it opens the
+  board with the item's drawer (`/p/:key/items/:number`), scrolls to the card and
+  highlights it. This is offered only when the item has a bucket and the board's
+  filters would show it; otherwise it explains why (for example "No bucket").
+- From the board, the backlog and any drawer, **Show on timeline** (card menu
+  and drawer actions) opens `/p/:key/timeline?item=<number>`. The timeline
+  expands the item's ancestors, clears filters that would hide it (and says so),
+  scrolls the row and its bar into view, and highlights it.
+- These links are plain routes with the existing guards: an item outside the
+  caller's visibility answers "not found", as deep links already do.
 
 ### 3.4 Toolbar and filters
 
@@ -155,23 +221,41 @@ opens over it at `/p/:key/timeline/items/:number`, as it does under `/backlog`.
 
 ## 4. Moving dependent items (rescheduling)
 
-### 4.1 Rule
+### 4.1 Rule (as soon as possible, with pins)
 
-- A dependency is finish-to-start with no lag. After a change, an open
-  successor that starts on or before the due date of its latest constraining
-  predecessor moves to start on the next working day after that due date. It
-  keeps its duration in working days.
+- A dependency is finish-to-start with no lag. An item's **earliest start** is the
+  next working half day after the latest finish among its constraining
+  predecessors: a predecessor finishing at midday lets its successor start that
+  afternoon; one finishing at the end of a day lets it start the next working
+  morning.
 - Only predecessors with a due date constrain their successors; a start-only
-  predecessor does not.
-- A successor with only a due date keeps only a due date: its due date moves to
-  the next working day after the predecessor's due date.
-- Moves only push successors later. Moving a predecessor earlier never pulls its
-  successors earlier automatically. "Reschedule from predecessors" (row menu and
-  bulk selection) sets each chosen item's start to the earliest allowed working
-  day and keeps its duration, with the same preview.
-- The push continues along the chain (successors of successors). It stops at any
-  item that is not moved: items with no dates, Done items, title-only ancestors,
-  and items the caller cannot see or cannot edit (4.2).
+  predecessor does not. Predecessors constrain whatever their status, including
+  Done.
+- A successor is scheduled to start at the later of its earliest start and its
+  pin (below). This moves it **later or earlier**, like Microsoft Project, and it
+  keeps its duration. A successor with only a due date keeps only a due date,
+  placed at the first working half day it can finish.
+- **Pins.** When someone types or drags a start date for an item that has
+  constraining predecessors, and that start is later than its earliest start,
+  the start is recorded as the item's pin, "start no earlier than". Example: A
+  precedes B and C. B was dragged to start later than A's finish allows. When A
+  moves earlier, C follows it, but B stays at its pinned start. If A later grows
+  past B's pin, B is pushed later, and it returns to the pin if A shrinks again.
+  - Typing or dragging a start earlier than the earliest start is not kept: the
+    item starts at its earliest start, and the toast or dialog says why ("Starts
+    after KLO-12 finishes").
+  - Pins show as a pin icon in the Start cell and on the bar. "Remove pin" (row
+    menu and drawer) lets the item move to its earliest start.
+  - A pin on an item with no constraining predecessors has no effect, and it is
+    kept.
+- The planner moves only Not started items. In progress, Blocked and Done items
+  have already started, so they keep their dates; a resulting overlap shows as a
+  conflict.
+- The planner continues along the chain (successors of successors). It stops at
+  any item it does not move: items with no dates, items already started, title-only
+  ancestors, and items the caller cannot see or cannot edit (4.2).
+- Items with no predecessors are never moved by the planner; their dates are as
+  entered.
 - Moving a parent's own dates never moves its children.
 
 ### 4.2 Who sees what, and permissions
@@ -190,38 +274,45 @@ opens over it at `/p/:key/timeline/items/:number`, as it does under `/backlog`.
   Any conflict that remains shows as a warning to whoever can see both ends.
 - Nothing about the plan or its conflicts widens anyone's reach.
 
-### 4.3 Confirm (default)
+### 4.3 Automatic or confirmed
 
-- When a date change would move other items, a dialog lists every proposed move
-  (key, title, old and new dates) and offers **Move N items**, **Change only this
-  item** and Cancel. Applying is one transaction. The toast then offers Undo.
+- Each project has one switch, **Move dependent items automatically**:
+  - **On** (the default for new projects): changes move dependent items straight
+    away, with no dialog. A toast says "Moved N dependent items", with Undo and a
+    link that shows the list.
+  - **Off** (existing projects, until a PM switches it on): a dialog lists every
+    proposed move (key, title, old and new dates) and offers **Move N items**,
+    **Change only this item** and Cancel. For PMs only, it also offers **Always
+    move dependent items in this project**, which applies the moves and switches
+    the project on.
+- Either way, applying is one transaction, with Undo in the toast.
 - Undo is all or nothing: it restores the previous dates of every item the
   change touched, but only if none of them has changed since. Any later change,
   even an unrelated one such as a status change, refuses the whole Undo with
-  "Can't undo: KLO-15 has changed since", and nothing changes.
-- For PMs only, the dialog also offers **Always move dependent items in this
-  project**: ticking it applies the moves and switches the project to automatic
-  mode (4.4). The same switch is in Project settings › General (PM only).
+  "Can't undo: KLO-15 has changed since", and nothing changes. Undo also restores
+  the pins the change set or removed.
 
-### 4.4 Automatic (opt-in per project)
+### 4.4 The switch, and what triggers the planner
 
-- With automatic mode on, date changes in that project move dependent items
-  without the dialog, under the same rule and the same permission limits (4.2), for
-  every editor. A toast says "Moved N dependent items" with Undo and a link that
-  shows the list. Edits that would leave conflicts the caller cannot fix still
-  apply and show the warning.
-- Stored as a flat key, `Project.settings.autoMoveDependents` (boolean, default
-  false), in the existing settings JSON, so there is no migration. The settings
-  merge is shallow and unknown keys are dropped, so the key is added to
-  `parseProjectSettings`, the shared `ProjectSettings` type and
-  `ProjectSettingsChangeDto`. Changing it is a PM project setting, audited as
-  `PROJECT_UPDATED` like the others.
-- Which edits move dependent items (confirmed, or automatically when the switch
-  is on): date edits on the timeline and in the project item drawer, the only
-  screens with date fields. Nothing else moves them: backlog bulk edits, My work,
-  duplication, ADO imports (incoming dates are applied as reviewed, SPEC §7),
-  personal spaces and direct item PATCH calls all change only the item they
-  name. PATCH keeps its current behaviour.
+- The switch is stored as a flat key, `Project.settings.autoMoveDependents`
+  (boolean), in the existing settings JSON. The settings merge is shallow and
+  unknown keys are dropped, so the key is added to `parseProjectSettings`, the
+  shared `ProjectSettings` type and `ProjectSettingsChangeDto`.
+  - A missing key means off, so existing projects keep their current behaviour.
+  - Project creation writes `true`.
+  - It is a PM setting in Project settings › General, audited as
+    `PROJECT_UPDATED` like the others.
+- The planner runs after:
+  - date or duration edits on the timeline and in the project item drawer, the
+    only screens with date fields;
+  - adding or removing a predecessor;
+  - removing a pin.
+- Nothing else moves dependent items: backlog bulk edits, My work, duplication,
+  status changes, ADO imports (incoming dates are applied as reviewed, SPEC §7),
+  personal spaces and direct item PATCH calls all change only the item they name.
+  PATCH keeps its current behaviour.
+- The resulting conflicts show on the timeline. "Reschedule" in the row menu or
+  on a bulk selection runs the planner for the chosen items.
 
 ### 4.5 Audit and notifications
 
@@ -246,8 +337,10 @@ project key. For a personal space, both endpoints return 404.
   auditing admins who are not members.
 
 - `POST /projects/:id/timeline/reschedule` takes
-  `{ changes: [{ item, startDate?, dueDate? }], mode, expect? }`, where `mode` is
-  `preview`, `apply` or `only`.
+  `{ changes: [{ item, startDate?, startAfternoon?, dueDate?, dueTime?, pin? }],
+mode, expect? }`, where `mode` is `preview`, `apply` or `only`, and `pin` is
+  `keep`, `set` or `remove`. With no `pin` given, the server applies the pin rule
+  in 4.1.
   - Every `item` (uuid or number) is first resolved through the caller's scope.
     An item the caller cannot see returns 404 before any version or plan check,
     so a 409 never confirms that a hidden item exists. The caller must be able
@@ -272,9 +365,12 @@ project key. For a personal space, both endpoints return 404.
   - The response lists every changed item.
 - Archived projects refuse `apply`, `only` and the automatic-mode switch, like
   any other write.
-- The existing item PATCH is unchanged.
-- Working-day arithmetic lives once in `@kloister/shared` and is used by the API
-  (moves) and the web (duration, preview display).
+- The existing item PATCH is unchanged. Item responses gain the additive
+  `startAfternoon` and `startNoEarlierThan` fields; the drawer shows a pin
+  under the start date.
+- Working-half-day arithmetic and the planner's rules live once in
+  `@kloister/shared` and are used by the API (moves) and the web (durations,
+  totals, preview display).
 
 ## 6. Export
 
@@ -282,8 +378,12 @@ project key. For a personal space, both endpoints return 404.
   timeline alike, gains a **Timeline** sheet. Rows follow the timeline order with
   Excel outline levels (collapsible groups, summary rows above) and an indented
   title; columns Key, Title, Type, Assignees, Status, Start, Duration (working
-  days, a value, not a formula), Due, Predecessors (keys of readable predecessors
-  only), Sprint; then one column per week from the earliest start to the latest
+  days, in halves, as a value, not a formula), Due, Work, Half days ("starts
+  afternoon", "ends midday" where they apply), Start no earlier than,
+  Predecessors (keys of readable predecessors only), Sprint. Summary rows carry
+  their span as in 3.2.1, and a first "Plan" row and the Summary sheet give the
+  plan's total span and working days.
+- After those columns comes one column per week, from the earliest start to the latest
   due, with a header row of week-start dates and a sprint row. A row's weeks are
   filled in its type colour, with a status character in the first cell so status is
   not colour-only; a today column is outlined. Frozen panes keep the headers and
@@ -299,8 +399,17 @@ project key. For a personal space, both endpoints return 404.
 
 ## 7. Data model
 
-- No new tables or columns. Dates and dependencies exist; the automatic-mode
-  switch is a key in `Project.settings`; the reschedule batch id is audit `meta`.
+- One additive migration on `WorkItem`, approved by the owner on 2026-11-02:
+  - `startAfternoon Boolean @default(false)`: the item starts in the afternoon;
+  - `startNoEarlierThan DateTime? @db.Date` and
+    `startNoEarlierThanAfternoon Boolean @default(false)`: the pin (4.1).
+- Existing rows get morning starts and no pins, so nothing changes for them.
+- A half-day finish reuses the existing `dueTime` (720, i.e. 12:00).
+- The automatic switch is a key in `Project.settings`, and the reschedule batch
+  id is audit `meta`.
+- ADO transfers stay date-only: the start half and pins are not exported, an
+  import that changes a start date keeps any pin, and the half-day fields are
+  left alone.
 - Dependency types (start-to-start and so on), lag, milestones, baselines and a
   holiday calendar are out of scope (section 10) and would be additive later.
 
@@ -310,6 +419,8 @@ API (`apps/api/src/`):
 
 - `timeline/timeline.module.ts`, `timeline.controller.ts`, `timeline.service.ts`,
   `timeline.dto.ts`, `reschedule.ts` (pure move planner) with `*.spec.ts`.
+- `prisma/schema.prisma` and one additive migration (section 7); item DTOs,
+  mapper and PATCH validation accept the new fields.
 - `items/snapshot-format.ts`, `snapshots.service.ts`: the Timeline sheet.
 - `projects/project-settings.ts`, `projects.dto.ts` and the shared
   `ProjectSettings` type: `autoMoveDependents`.
@@ -327,25 +438,45 @@ Web (`apps/web/src/app/`):
 - `core/timeline-logic.ts` (outline building, row order, summary spans,
   conflicts, indent/outdent rules, paste parsing) with unit tests.
 - Project shell tab and route; Project settings › General switch; drawer date
-  fields use the reschedule flow.
-- `e2e/timeline.e2e-spec.ts`: create by typing and pasting, indent/outdent, two
-  of three date fields, predecessors, confirm dialog, PM-only automatic switch,
-  Undo, Member/Viewer limits, hidden-item non-disclosure, keyboard-only use,
-  phone/tablet, light/dark screenshots, export download.
+  fields (with AM/PM and the pin) use the reschedule flow; "Show on board" and
+  "Show on timeline" in the drawer, card menu and backlog row menu.
+- `e2e/timeline.e2e-spec.ts` covers:
+  - creating items by typing and by pasting, indent and outdent;
+  - the two-of-three date fields, half days, predecessors, pins, and moves both
+    earlier and later;
+  - summary and plan totals;
+  - the confirm dialog on an existing project, automatic moving on a new one,
+    the PM-only switch and Undo;
+  - board/timeline/drawer links;
+  - Member and Viewer limits and hidden-item non-disclosure;
+  - keyboard-only use;
+  - phone, tablet and light/dark screenshots;
+  - the export download.
 
 Docs: SPEC (done in planning), Help & FAQ article "Plan with the timeline",
 README feature list, DESIGN (timeline bars, conflict style), DECISIONS.
 
 ## 9. Owner decisions (2026-11-02)
 
-- Build the timeline as a project tab over existing items; no Gantt library; no
-  silent cascading by default.
-- Dependent items move after a confirmation by default, with an opt-in automatic
-  mode per project; PMs can switch it on from the confirmation dialog itself.
-- Durations are working days (Monday to Friday).
+- Build the timeline as a project tab over existing items, with no Gantt
+  library.
+- Scheduling works like Microsoft Project, with as little friction as filling in
+  a spreadsheet:
+  - dependent items move earlier as well as later;
+  - a deliberately later start is kept as a pin;
+  - automatic moving is on for new projects;
+  - existing projects keep the confirmation until a PM switches it on, which
+    PMs can do from the dialog itself.
+- Durations are working days (Monday to Friday) in half-day steps.
+- Parent rows show their total span, and the toolbar shows the plan's total
+  working days.
+- Timeline rows and bars open the item's drawer, for viewing and editing.
+  Timeline, board and drawer link to each other ("Show on board", "Show on
+  timeline").
 - It is a new milestone, M9.
 - The Excel export from the board (and other project screens) must include this
-  timeline format.
+  timeline format, and every project workbook gets the Timeline sheet.
+- Date edits in the item drawer follow the same rule as the timeline.
 - Recommended and accepted: finish-to-start only, no lag; projects only; grid-only
   at phone width; visibility rules unchanged.
 
@@ -361,14 +492,10 @@ README feature list, DESIGN (timeline bars, conflict style), DECISIONS.
 - Transferring dependency links through ADO CSV files (ADO's CSV import cannot
   create them; dates do transfer).
 
-## 11. Open questions for approval
+## 11. Open questions
 
-1. Date edits in the item drawer also move dependent items (confirmed, or
-   automatically), not only edits on the timeline (4.4). Recommended, so the two
-   screens with date fields follow one rule. The board has no date fields.
-2. Moves only push later; pulling earlier is an explicit action (4.1).
-3. The Timeline sheet is added to every project workbook, not offered as a
-   separate export option (6).
+None. The owner settled all three earlier questions on 2026-11-02 (section 9).
+Implementation starts when the owner says go.
 
 ## 12. Verification
 

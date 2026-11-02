@@ -35,6 +35,30 @@
   - the grid follows the ARIA grid keyboard pattern and suppresses single-key
     shortcuts;
   - the working-day and indent edge cases are defined.
+- Owner decisions, second round (2026-11-02):
+  - The earlier "moves only push later" proposal is rejected: it would add the
+    kind of friction that sends planners back to Microsoft Project. Dependent
+    items now follow their predecessors earlier as well as later. A start that
+    someone typed or dragged later than its predecessors allow is kept as a
+    "start no earlier than" pin, which removes the separate "Reschedule from
+    predecessors" step.
+  - Only Not started items move: started items keep their real dates.
+  - Automatic moving is on for new projects. Existing projects keep the
+    confirmation until a PM switches it on, so the instance in use sees no
+    behaviour change.
+  - Durations are in half working days. This takes one additive migration on
+    `WorkItem`: `startAfternoon`, plus the pin columns `startNoEarlierThan` and
+    `startNoEarlierThanAfternoon`. The owner approved the migration. A midday
+    finish reuses `dueTime` 12:00.
+  - Epics, Features and Stories show their span as summary values. An optional
+    Work column sums leaf durations, and the toolbar and workbook show the
+    plan's total working days. All of these are display-only and use visible
+    items only.
+  - Timeline rows open the item drawer. The drawer, board cards and backlog
+    rows link between board and timeline ("Show on board", "Show on
+    timeline").
+  - Drawer date edits follow the same scheduling, and every project workbook
+    gets the Timeline sheet.
 
 ## v1.2.1 date entry and due-time list (2026-10-26)
 

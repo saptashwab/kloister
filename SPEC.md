@@ -20,7 +20,7 @@ applied after installation through admin theme settings.
 - Work items: Epic → Feature → User Story → Task, plus Bug; any level optional
 - Kanban board with buckets, status, labels, assignees, due dates, checklists, notes, attachments
 - Sprints, backlog/hierarchy view
-- Project timeline: a spreadsheet-like plan grid with bars, working-day durations and dependent-item moves (6.4, M9)
+- Project timeline: a spreadsheet-like plan grid with bars, half-day working durations, totals and automatic scheduling of dependent items (6.4, M9)
 - In-app notifications only
 - My work: everything assigned to the user across their projects, plus their personal tasks, as a list or a status board
 - A private personal space per user for personal tasks (boards, buckets, labels, checklists), visible to its owner only
@@ -173,6 +173,7 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 - **WorkItem**: projectId, number (per-project sequence), type (`EPIC|FEATURE|STORY|TASK|BUG`), parentId,
   title, description (sanitized HTML), status (`NOT_STARTED|IN_PROGRESS|BLOCKED|DONE`), priority (1–4),
   bucketId (required for STORY/TASK/BUG; optional for EPIC/FEATURE), sprintId, teamId (nullable), startDate,
+  startAfternoon (M9), startNoEarlierThan and startNoEarlierThanAfternoon (timeline pin, M9),
   dueDate, dueTime (optional minutes after midnight, wall-clock with no time zone; needs a dueDate; M8.5),
   position (fractional index for ordering), createdById, completedAt
 - **WorkItemAssignee**: workItemId, userId (many-to-many)
@@ -332,7 +333,7 @@ Theming uses CSS custom properties only. Default palette is neutral (slate/indig
   references and private audit metadata must not leak through related sheets.
 - From M9, project workbooks (from any project screen) also contain a Timeline sheet (6.4): rows in timeline
   order with Excel outline levels, key, title, type, assignees, status, start, working-day duration, due,
-  readable predecessors and sprint, then one column per week filled for each row's dates, with status also
+  readable predecessors, pins and sprint, with summary rows and a plan row giving spans and working days, then one column per week filled for each row's dates, with status also
   shown as text. The week range is capped at 156 weeks; a longer plan states the cap and omitted range on the
   Summary sheet and the Timeline sheet. My work and personal-space workbooks have no Timeline sheet.
 - Use filters, frozen headers, wrapped text, suitable column widths and clear date formatting. Preserve all
@@ -384,27 +385,36 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
 - A Timeline tab in every project (not personal spaces): a grid of the project's visible items in hierarchy
   order on the left, bars on a week/month/quarter scale on the right, with a today line and sprint bands.
   It is a view over ordinary work items: rows created or edited here appear everywhere else, and the reverse.
+  Entering a plan should feel like filling in a spreadsheet, with scheduling built in like Microsoft Project.
 - Grid columns: key, title (indented, expand/collapse), type, assignees, start, duration, due, predecessors,
-  status; bucket, sprint, team and priority optional. Spreadsheet-style keyboard editing, rows saved on leaving
-  the row, new rows below the current one, indent/outdent setting the parent within SPEC 4.1 (the type
+  status; bucket, sprint, team, priority and work optional. Spreadsheet-style keyboard editing, rows saved on
+  leaving the row, new rows below the current one, indent/outdent setting the parent within SPEC 4.1 (the type
   defaults to the allowed child), and multi-line paste creating rows after a preview. Predecessors are item
   numbers and use the existing dependency rules.
-- Only start and due dates are stored. Duration is in working days (Monday to Friday, both ends counted, no
-  holiday calendar); any two of start, duration and due set the third. Due time is ignored by the timeline.
-- Epics and Features show a display-only span of their visible children; their own dates are never derived
-  or written back. Dependencies are finish-to-start with no lag; a successor starting on or before a
-  predecessor's due date is shown as a conflict. Bars can be moved and resized by pointer and keyboard.
-- Dependent items: after a date change, open successors (and theirs) that would start on or before the due
-  date of their latest visible predecessor move to the next working day after it, keeping their duration.
-  Moves only push later; pulling earlier is an explicit "Reschedule from predecessors" action. Done items,
-  undated items, title-only ancestors and items the caller cannot see or edit never move, and the chain stops
-  at them; a parent's dates never move its children.
-- By default a dialog lists the proposed moves before applying them (move them, change only this item, or
-  cancel). Applying is one transaction and checks that nothing changed since the preview; Undo afterwards is
-  all or nothing. A per-project automatic mode (`Project.settings.autoMoveDependents`, default off, PM only,
-  audited) applies the moves without the dialog for every editor, with Undo; PMs can switch it on from that
-  dialog or in Project settings. Only date edits on the timeline and in the project item drawer move dependent
-  items; item PATCH, bulk edits, duplication, My work and ADO imports change only the item they name.
+- Durations are working days (Monday to Friday, no holiday calendar) in half-day steps; any two of start,
+  duration and due set the third. An item starts in the morning or, with `startAfternoon`, the afternoon; it
+  finishes at midday when its due time is 12:00 and at the end of the day otherwise.
+- Totals: Epics, Features and Stories with dated visible descendants show their span (earliest start, latest
+  finish, working days between) as read-only summary values, with an optional work column summing leaf
+  durations; the toolbar shows the plan's span and working days. Totals are display-only, never written back,
+  and computed from visible rows only. Bars can be moved and resized by pointer and keyboard.
+- Links: spreadsheet editing in the grid stays the main way to edit; the row key, an open icon and bars open the item's drawer for everything else; the drawer offers "Show on
+  board" for items with a bucket, and board cards, backlog rows and the drawer offer "Show on timeline", which
+  scrolls to and highlights the row.
+- Scheduling: dependencies are finish-to-start with no lag. A Not started item with predecessors starts at the
+  next working half day after its latest visible predecessor with a due date finishes, or at its pin if that is
+  later, and keeps its duration; it moves earlier as well as later. Typing or dragging a start later than its
+  predecessors allow records a pin (`startNoEarlierThan`, "start no earlier than"); an earlier start snaps to
+  the earliest allowed start. In progress, Blocked and Done items, undated items, title-only ancestors and items
+  the caller cannot see or edit never move, and the chain stops at them; a parent's dates never move its
+  children; items without predecessors keep their dates.
+- The planner runs after date or duration edits on the timeline and in the project item drawer, predecessor
+  changes and pin removal. Item PATCH, bulk edits, duplication, status changes, My work and ADO imports change
+  only the item they name. ADO transfers stay date-only.
+- Per-project switch `Project.settings.autoMoveDependents` (PM only, audited): on for new projects, off (missing)
+  for existing ones. On: moves apply at once with Undo. Off: a dialog lists the moves (move them, change only
+  this item, or cancel), and offers PMs "Always move dependent items in this project". Applying is one
+  transaction that checks nothing changed since the preview; Undo is all or nothing.
 - Moves are planned only over items the caller can see and may edit. Visible items the caller cannot edit stay
   in place and are listed as unchanged; items the caller cannot see are never moved, listed, counted or hinted
   at (including in activity history), and the timeline shows only dependency links whose both ends are
@@ -706,7 +716,7 @@ Postgres binaries and data stay in standard PGDG locations (`/usr/pgsql-<ver>`, 
 | M8 | Selective ADO CSV export and import, per-project process mappings, durable IDs, reconciliation and reviewed conflicts; documentation-based tests and operator acceptance (v1.1) |
 | M8.1 | ADO transfer fidelity fixes, Quick/Detailed review modes (7.6), profile setup from a sample ADO export, readable review screens, preview expiry; fixtures and manual import checks from a disposable Azure DevOps Services organization |
 | M8.5 | App-wide UI/UX fixes from the 2026-10-23 review ([plan](docs/M8.5-PLAN.md)): stacked-card phone layouts for wide tables, a readable Audit log, one date picker and date format, Project settings in section tabs, Projects list counts and last activity, a page-actions area for Export…, a lighter My work status control, the drawer's board order, branded sign-in pages, an optional due time; no breaking change, additive API only |
-| M9 | Project timeline (6.4, [plan](docs/M9-PLAN.md)): plan grid with spreadsheet-style entry, working-day durations, predecessors, bars with sprint bands, confirmed or opt-in automatic moving of dependent items, the Timeline sheet in project Excel snapshots (6.2); permission and non-disclosure tests, browser coverage incl. keyboard and phone; no breaking change, additive API only |
+| M9 | Project timeline (6.4, [plan](docs/M9-PLAN.md)): plan grid with spreadsheet-style entry, half-day working durations, summary and plan totals, predecessors and pins, bars with sprint bands, automatic (or confirmed) scheduling of dependent items, links between timeline, board and drawer, one additive migration, the Timeline sheet in project Excel snapshots (6.2); permission and non-disclosure tests, browser coverage incl. keyboard and phone; no breaking change, additive API only |
 
 ---
 
