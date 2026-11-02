@@ -13,6 +13,10 @@ const SHIELD = 'M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z';
  */
 export const ICONS = {
   board: 'M4 4h6v16H4zM14 4h6v10h-6z',
+  timeline: 'M4 6h9M8 12h10M6 18h7',
+  pin: 'M9 4h6l-1 6 3 3H7l3-3zM12 13v7',
+  indent: 'M21 6H11M21 12H11M21 18H11M4 9l3 3-3 3',
+  outdent: 'M21 6H11M21 12H11M21 18H11M7 9l-3 3 3 3',
   backlog: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   sprints: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4',
   settings:

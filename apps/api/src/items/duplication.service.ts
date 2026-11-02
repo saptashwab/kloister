@@ -108,7 +108,9 @@ export class DuplicationService {
                 ...(dto.keepDates === true
                   ? {
                       startDate: source.startDate,
+                      startSecondHalf: source.startSecondHalf,
                       dueDate: source.dueDate,
+                      dueFirstHalf: source.dueFirstHalf,
                       dueTime: source.dueTime,
                     }
                   : {}),

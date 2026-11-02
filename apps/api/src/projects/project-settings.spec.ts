@@ -10,8 +10,14 @@ describe('project settings', () => {
         membersCanAssignOthers: false,
         statusToBucket: {},
         labelStyle: 'SOLID',
+        autoMoveDependents: false,
       });
     }
+  });
+
+  it('reads automatic moving only when it is a boolean (M9)', () => {
+    expect(parseProjectSettings({ autoMoveDependents: true }).autoMoveDependents).toBe(true);
+    expect(parseProjectSettings({ autoMoveDependents: 'yes' }).autoMoveDependents).toBe(false);
   });
 
   it('reads a known label style and defaults an unknown one', () => {

@@ -199,10 +199,16 @@ export interface WorkItemDto {
   teamId: string | null;
   /** `YYYY-MM-DD`, or null. */
   startDate: string | null;
+  /** The item starts in the 2nd half of its start date (timeline, M9). */
+  startSecondHalf: boolean;
   /** `YYYY-MM-DD`, or null. */
   dueDate: string | null;
+  /** The item finishes after the 1st half of its due date (timeline, M9). */
+  dueFirstHalf: boolean;
   /** Optional due time `HH:MM` on the due date, or null (M8.5). */
   dueTime: string | null;
+  /** "Start no earlier than" pin set on the timeline, or null (M9). */
+  startNoEarlierThan: { date: string; second: boolean } | null;
   /** Order within the bucket, ascending. */
   position: number;
   /** Creator's user id. */
@@ -269,8 +275,12 @@ export interface CreateItemRequest {
   teamId?: string | null;
   /** `YYYY-MM-DD`. */
   startDate?: string | null;
+  /** Starts in the 2nd half of the start date; default false (M9). */
+  startSecondHalf?: boolean;
   /** `YYYY-MM-DD`. */
   dueDate?: string | null;
+  /** Finishes after the 1st half of the due date; default false (M9). */
+  dueFirstHalf?: boolean;
   /** `HH:MM` on the due date; needs a due date. */
   dueTime?: string | null;
   /** Assignees: project members. */
@@ -303,8 +313,12 @@ export interface UpdateItemRequest {
   teamId?: string | null;
   /** New start date, or null. */
   startDate?: string | null;
+  /** Starts in the 2nd half of the start date (M9); reset when the start date is cleared. */
+  startSecondHalf?: boolean;
   /** New due date, or null; clearing it also clears the due time. */
   dueDate?: string | null;
+  /** Finishes after the 1st half of the due date (M9); reset when the due date is cleared. */
+  dueFirstHalf?: boolean;
   /** New due time `HH:MM`, or null; needs a due date. */
   dueTime?: string | null;
   /** The full new assignee list. */

@@ -2,15 +2,24 @@ import type { MoveItemRequest, UpdateItemRequest, WorkItemDto } from '@kloister/
 import { errorMessage } from './api';
 import { NONE } from './board-logic';
 
-// Backlog bulk edits (SPEC §6: set sprint, bucket or assignee for many
-// items). They run as one ordinary request per item (PATCH or move), so
+// Backlog and timeline bulk edits (SPEC §6: set sprint, bucket or assignee
+// for many items; §6.4 adds status, priority, labels and adding an
+// assignee). They run as one ordinary request per item (PATCH or move), so
 // every item goes through exactly the same API checks as a single edit, and
 // one refused item does not undo the others. Items whose capabilities rule
 // the change out are skipped without a request; the API remains the
 // authority for the rest.
 
 /** What a bulk edit sets. */
-export type BulkField = 'sprint' | 'bucket' | 'assignee';
+export type BulkField =
+  | 'sprint'
+  | 'bucket'
+  | 'assignee'
+  | 'assigneeAdd'
+  | 'status'
+  | 'priority'
+  | 'labelAdd'
+  | 'labelRemove';
 
 /** One request of a bulk edit. */
 export type BulkStep =
@@ -73,8 +82,48 @@ export function planBulk(
         else if (!item.can.move || target === null) plan.skipped.push(item);
         else plan.steps.push({ item, kind: 'move', request: { bucketId: target } });
         break;
-      case 'assignee': {
-        const next = target === null ? [] : [target];
+      case 'status':
+        if (item.status === value) plan.unchanged.push(item);
+        else if (!item.can.edit) plan.skipped.push(item);
+        else
+          plan.steps.push({
+            item,
+            kind: 'update',
+            request: { status: value as WorkItemDto['status'] },
+          });
+        break;
+      case 'priority':
+        if (item.priority === Number(value)) plan.unchanged.push(item);
+        else if (!item.can.edit) plan.skipped.push(item);
+        else plan.steps.push({ item, kind: 'update', request: { priority: Number(value) } });
+        break;
+      case 'labelAdd':
+      case 'labelRemove': {
+        const has = item.labelIds.includes(value);
+        if (has === (field === 'labelAdd')) plan.unchanged.push(item);
+        else if (!item.can.edit) plan.skipped.push(item);
+        else
+          plan.steps.push({
+            item,
+            kind: 'update',
+            request: {
+              labelIds: has
+                ? item.labelIds.filter((id) => id !== value)
+                : [...item.labelIds, value],
+            },
+          });
+        break;
+      }
+      case 'assignee':
+      case 'assigneeAdd': {
+        const next =
+          field === 'assigneeAdd'
+            ? target === null || item.assigneeIds.includes(target)
+              ? item.assigneeIds
+              : [...item.assigneeIds, target]
+            : target === null
+              ? []
+              : [target];
         // Assigning or unassigning anyone but yourself needs ASSIGN_OTHERS
         // or leading the item's team (SPEC §3.2, §3.5).
         const touched = [

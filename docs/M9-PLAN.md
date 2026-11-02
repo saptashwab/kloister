@@ -48,8 +48,10 @@ opens over it at `/p/:key/timeline/items/:number`, as it does under `/backlog`.
 ### 3.1 Grid (left)
 
 - Columns: `#` (item key), Title (indented by outline level, with expand/collapse),
-  Type, Assignees, Start, Duration, Due, Predecessors, Status. Bucket, Sprint,
-  Team and Priority are optional columns, hidden by default; the column choice is
+  Start, Duration, Due, Predecessors, Assignees and Status (icon and word,
+  editable). Type, Bucket, Sprint, Team, Priority, Work and **Progress**
+  (checklist ticks such as `3/5` for leaves; done and total children for
+  parents) are optional columns, hidden by default; the column choice is
   remembered per viewer in local storage (a convenience only).
 - Rows follow the backlog's order: hierarchy, then `position`. Items without a
   parent are top-level rows. Ancestors shown as read-only titles (SPEC §3.3) keep
@@ -207,12 +209,62 @@ opens over it at `/p/:key/timeline/items/:number`, as it does under `/backlog`.
 - These links are plain routes with the existing guards: an item outside the
   caller's visibility answers "not found", as deep links already do.
 
+### 3.3.2 Sprints for selected rows (owner request, 2026-11-02)
+
+- Rows can be selected together: a checkbox per row, Shift+click for a range,
+  Ctrl+click to add or remove one, and Space on a focused row. A selection bar
+  shows the count with **Set sprint…**, **New sprint from selection** and
+  Clear.
+- **Set sprint…** assigns every selected row to an open sprint, or to none.
+- **New sprint from selection** (PMs and Leads, who manage sprints) proposes a
+  sprint covering the selected rows' span (earliest start to latest finish,
+  widened to whole days) with an editable name, creates it, then assigns the
+  rows.
+- With rows selected, clicking a sprint band assigns them to that sprint.
+- These use the existing sprint and item endpoints, one item update per row, as
+  the backlog's bulk edits do. Rows the caller may not edit, and title-only
+  ancestors, are skipped and listed afterwards; failures are reported per row.
+  No API change.
+
+### 3.3.3 Other actions on selected rows (owner request, 2026-11-02)
+
+- The selection bar also offers **Assign…** (add people to, or replace the
+  assignees of, every selected row, under the existing assignment rule),
+  **Set status…**, **Shift dates…** (move the selected rows by a number of
+  working days, earlier or later, with dependent items following as in §4) and
+  **Delete…**.
+- Status changes follow the project's status-to-bucket rule and notify as
+  usual. Items set to In progress, Blocked or Done stop moving with their
+  predecessors (§4.1).
+- Delete asks first, listing the rows, and cannot be undone. Each row follows
+  the ordinary delete rules; items with children need cascade rights (PMs and
+  Leads) and an explicit "and their children" choice. Rows the caller may not
+  change are skipped and listed.
+- **Indent** and **Outdent** move every selected row one level, in display
+  order; a row whose parent is also selected moves with it, so subtrees stay
+  whole. Rows that cannot move are skipped with the reason.
+- **Link in order** makes each selected row a predecessor of the next one in
+  display order (like Microsoft Project's link tasks); **Unlink** removes the
+  links among the selected rows. Dependent items then follow as in §4.
+- **Set priority**, **Add label** / **Remove label** and **Move to bucket**
+  complete the bar. Bulk duplicate and setting a team are left out (the
+  duplicate dialog already handles copies; teams have narrow permission rules).
+- Selections can be contiguous (Shift+click) or scattered (Ctrl+click).
+- Like the sprint actions these use the existing endpoints, one request per
+  row; there is no new API.
+
 ### 3.4 Toolbar and filters
 
 - The board's filters (assignee, label, sprint, type, team, text) apply; filtering
   keeps the ancestors of matching rows as context, like the backlog.
 - Expand all / Collapse all, zoom, Today, Fit plan, Show Done, column chooser and
   the page header's Export… (section 6).
+
+### 3.4.1 Keyboard shortcuts
+
+- The timeline's keys are listed in the app's keyboard-shortcuts dialog (`?`)
+  under a Timeline heading, and in the Help article. Toolbar and selection-bar
+  buttons show their shortcut in the tooltip, for example "Indent (Ctrl+])".
 
 ### 3.5 Widths and roles
 
@@ -482,6 +534,8 @@ README feature list, DESIGN (timeline bars, conflict style), DECISIONS.
   plan totals strip above, and the week zoom by default.
 - Parent rows show their total span, and the toolbar shows the plan's total
   working days.
+- Rows can be selected together to set a sprint, create a sprint from their
+  span, or assign them by clicking a sprint band (3.3.2).
 - Timeline rows and bars open the item's drawer, for viewing and editing.
   Timeline, board and drawer link to each other ("Show on board", "Show on
   timeline").
@@ -516,3 +570,36 @@ The usual gate: `npm ci && npm run format:check && npm run lint && npm run build
 browser tests run in CI. Mock visual checks at phone, tablet and desktop widths in
 light and dark themes, including a 500-item plan for scrolling and drag
 performance. Independent review against SPEC and this plan before the commit.
+
+## 13. Implementation notes
+
+Where the implementation differs from the sections above, these notes and
+DECISIONS apply.
+
+- `GET /projects/:id/timeline` returns the visible links only. The rows come from
+  the project's item list, which the project screens already load, so items are
+  not fetched twice.
+- Grid cells save when the edit is committed (Enter, Tab or leaving the cell), not
+  when the row loses focus; a new row is created when its title is committed.
+  Neither saves per keystroke.
+- There is no draggable splitter or virtual scrolling: the column chooser
+  narrows the grid, and rows render in one scroll area with the grid kept in
+  view while the bars scroll sideways.
+- Board cards and backlog rows have no menus of their own, so "Show on timeline"
+  is in the item drawer's actions, one click from either. "Show on board" opens
+  the item over the board.
+- Bulk Assign replaces the assignees from the selection bar; adding one is under
+  More…. A pasted list is previewed in a confirmation dialog.
+- The Excel Timeline sheet uses ISO dates like the Items sheet and marks the
+  current week in its header as "(today)" instead of outlining it.
+- The Timeline sheet lists readable items only: a child whose parent the caller
+  cannot see becomes a top-level row there, rather than sitting under a
+  title-only parent row. The Summary sheet always names the plan's span.
+- Typing Days for an item with only a due date starts it on that date and moves
+  the due date out. Moves of dependent items name the first requested item as
+  their trigger, also when several items were changed together (Shift dates,
+  Link in order).
+- `apply` after a preview compares the dependent moves' dates with the preview;
+  a changed pin or kept list alone does not refuse it.
+- A date edit that names no halves (an ADO import, a bulk edit) never fails on
+  them: an impossible same-day order finishes the item at the end of the day.

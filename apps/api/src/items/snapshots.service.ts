@@ -1,3 +1,4 @@
+import { timelineSheet, type TimelineSheetItem } from './snapshot-timeline.js';
 import { createHash } from 'node:crypto';
 import type { ReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
@@ -241,6 +242,10 @@ export class SnapshotsService {
         rows: [],
       },
     };
+    // Project workbooks also get the Timeline sheet (SPEC §6.2, §6.4); My work
+    // and personal spaces do not.
+    const timelineItems: TimelineSheetItem[] | null =
+      project !== undefined && project.project.ownerId === null ? [] : null;
     const { default: JSZip } = await import('jszip');
     const zip = new JSZip();
     const fileSources: Readable[] = [];
@@ -283,6 +288,23 @@ export class SnapshotsService {
         'Checklists; Notes; Dependencies; Files; Activity (linked by Item)',
         item.dueTime ?? '',
       ]);
+      timelineItems?.push({
+        id: item.id,
+        parentId: item.parentId,
+        number: item.number,
+        key: item.key,
+        title: item.title,
+        type: item.type,
+        status: item.status,
+        assignees: row.assignees.map((a) => a.projectMember.user.displayName).join('\n'),
+        sprint: row.sprint?.name ?? '',
+        startDate: item.startDate,
+        startSecondHalf: item.startSecondHalf,
+        dueDate: item.dueDate,
+        dueFirstHalf: item.dueFirstHalf,
+        pin: item.startNoEarlierThan,
+        predecessors: item.blockedBy.map((b) => b.key),
+      });
       for (const line of item.checklistItems)
         tables['Checklists']?.rows.push([
           item.key,
@@ -367,6 +389,24 @@ export class SnapshotsService {
           `<li><a href="items/${itemKey}/index.html">${escapeHtml(item.key)} ${escapeHtml(item.title)}</a></li>`,
         );
       }
+    }
+    if (timelineItems !== null && project !== undefined) {
+      const sprints = await this.prisma.sprint.findMany({
+        where: { projectId: project.project.id },
+        orderBy: { startDate: 'asc' },
+      });
+      const sheet = timelineSheet(
+        timelineItems,
+        sprints.map((s) => ({
+          name: s.name,
+          startDate: s.startDate.toISOString().slice(0, 10),
+          endDate: s.endDate.toISOString().slice(0, 10),
+        })),
+        new Date().toISOString().slice(0, 10),
+      );
+      tables['Timeline'] = { headers: sheet.headers, rows: sheet.rows, layout: sheet.layout };
+      tables['Summary']?.rows.push(['Timeline plan', sheet.rows[0]?.[1] ?? '']);
+      if (sheet.note !== null) tables['Summary']?.rows.push(['Timeline sheet', sheet.note]);
     }
     const workbook = await snapshotWorkbook(tables);
     if (query.offline !== true) return workbook;

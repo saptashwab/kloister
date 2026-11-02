@@ -15,9 +15,10 @@ import {
 } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
 import { MatDialog } from '@angular/material/dialog';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import {
   ALLOWED_PARENT_TYPES,
   ItemStatus,
@@ -41,6 +42,7 @@ import { dueState, dueText, revertMove, shortDate, undoFields } from '../../core
 import { ItemsApiService } from '../../core/items-api.service';
 import { PRIORITY_LABELS, SPRINT_STATE_LABELS, TYPE_LABELS } from '../../core/labels';
 import { ProjectContext } from '../../core/project-context';
+import { RescheduleFlow } from '../../core/reschedule';
 import { forDisplay, type Mentionable } from '../../core/rich-text';
 import { SessionStore } from '../../core/session.store';
 import { Shortcuts } from '../../core/shortcuts';
@@ -104,7 +106,9 @@ const FIELD_NAMES: Record<string, string> = {
     CdkTrapFocus,
     DateField,
     TimeField,
+    MatButtonToggleModule,
     MatMenuModule,
+    RouterLink,
     MatSelectModule,
     Avatar,
     Icon,
@@ -166,7 +170,7 @@ const FIELD_NAMES: Record<string, string> = {
         @if (detail(); as source) {
           <app-item-copy-action [item]="source" />
         }
-        @if (canDelete() || canReorder()) {
+        @if (canDelete() || canReorder() || isProject()) {
           <button
             type="button"
             class="k-icon-btn"
@@ -176,6 +180,23 @@ const FIELD_NAMES: Record<string, string> = {
             <app-icon name="more" [size]="17" [stroke]="3" />
           </button>
           <mat-menu #more="matMenu">
+            @if (isProject() && detail(); as it) {
+              @if (onTimeline()) {
+                @if (it.bucketId) {
+                  <a mat-menu-item [routerLink]="['/p', ctx.project()?.key, 'items', it.number]">
+                    <app-icon name="board" />&nbsp;Show on board
+                  </a>
+                }
+              } @else {
+                <a
+                  mat-menu-item
+                  [routerLink]="['/p', ctx.project()?.key, 'timeline']"
+                  [queryParams]="{ item: it.number }"
+                >
+                  <app-icon name="timeline" />&nbsp;Show on timeline
+                </a>
+              }
+            }
             @if (canReorder()) {
               <button
                 mat-menu-item
@@ -444,15 +465,39 @@ const FIELD_NAMES: Record<string, string> = {
                   <app-date-field
                     label="Start date"
                     [value]="d.startDate"
-                    (valueChange)="save({ startDate: $event })"
+                    (valueChange)="saveDates({ startDate: $event })"
                   />
+                  @if (d.startDate) {
+                    <mat-button-toggle-group
+                      class="k-segmented halves"
+                      aria-label="Starts in"
+                      hideSingleSelectionIndicator
+                      [value]="d.startSecondHalf"
+                      (change)="saveDates({ startSecondHalf: $event.value })"
+                    >
+                      <mat-button-toggle [value]="false">Morning</mat-button-toggle>
+                      <mat-button-toggle [value]="true">Afternoon</mat-button-toggle>
+                    </mat-button-toggle-group>
+                  }
                   <span class="muted" aria-hidden="true">→</span>
                   <app-date-field
                     label="Due date"
                     [value]="d.dueDate"
                     [min]="d.startDate"
-                    (valueChange)="save({ dueDate: $event })"
+                    (valueChange)="saveDates({ dueDate: $event })"
                   />
+                  @if (d.dueDate) {
+                    <mat-button-toggle-group
+                      class="k-segmented halves"
+                      aria-label="Finishes in"
+                      hideSingleSelectionIndicator
+                      [value]="d.dueFirstHalf"
+                      (change)="saveDates({ dueFirstHalf: $event.value })"
+                    >
+                      <mat-button-toggle [value]="true">Morning</mat-button-toggle>
+                      <mat-button-toggle [value]="false">Afternoon</mat-button-toggle>
+                    </mat-button-toggle-group>
+                  }
                   @if (d.dueDate && (d.dueTime || addingTime())) {
                     <app-time-field
                       label="Due time"
@@ -466,9 +511,24 @@ const FIELD_NAMES: Record<string, string> = {
                   }
                 } @else {
                   <span class="plain">
-                    {{ d.startDate ? short(d.startDate) : 'No start' }} →
-                    {{ d.dueDate ? short(d.dueDate) : 'no due date'
+                    {{
+                      d.startDate
+                        ? short(d.startDate) + (d.startSecondHalf ? ', afternoon' : '')
+                        : 'No start'
+                    }}
+                    → {{ d.dueDate ? short(d.dueDate) : 'no due date'
                     }}{{ d.dueTime ? ', ' + d.dueTime : '' }}
+                  </span>
+                }
+                @if (d.startNoEarlierThan; as pin) {
+                  <span class="k-pill">
+                    <app-icon name="pin" [size]="13" />Pinned: starts no earlier than
+                    {{ short(pin.date) }}{{ pin.second ? ', afternoon' : '' }}
+                    @if (canEdit() && isProject()) {
+                      <button type="button" class="k-action" (click)="removePin()">
+                        Remove pin
+                      </button>
+                    }
                   </span>
                 }
                 @if (due(); as due) {
@@ -719,6 +779,13 @@ export class ItemDrawer {
   private readonly dialogs = inject(Dialogs);
   private readonly matDialog = inject(MatDialog);
   private readonly annotations = inject(AnnotationsApiService);
+  private readonly flow = inject(RescheduleFlow);
+  /** Projects have a timeline; personal spaces do not (SPEC §6.4). */
+  protected readonly isProject = computed(() => this.ctx.project()?.ownerId === null);
+  /** The drawer is open over the timeline. */
+  protected onTimeline(): boolean {
+    return this.router.url.includes('/timeline/');
+  }
   private readonly panel = viewChild.required<ElementRef<HTMLElement>>('panel');
 
   /** Item number from the route (`items/:number`). */
@@ -1071,6 +1138,37 @@ export class ItemDrawer {
       () => this.api.update(this.projectId(), d.id, change),
       `${names.join(', ')} saved`,
     );
+  }
+
+  /**
+   * Saves start and due changes. In a project they go through the reschedule
+   * flow, so dependent items follow (SPEC §6.4); personal spaces save them
+   * directly.
+   *
+   * @param change Date fields to change.
+   * @returns Resolves once saved.
+   */
+  protected async saveDates(change: UpdateItemRequest): Promise<void> {
+    const d = this.detail();
+    if (d === null) return;
+    if (!this.isProject()) {
+      await this.save(change);
+      return;
+    }
+    const result = await this.flow.change([{ item: d.id, ...change }]);
+    if (result !== null) await this.reload();
+  }
+
+  /**
+   * Removes the item's pin; it then starts as early as its predecessors allow.
+   *
+   * @returns Resolves once done.
+   */
+  protected async removePin(): Promise<void> {
+    const d = this.detail();
+    if (d === null) return;
+    const result = await this.flow.change([{ item: d.id, pin: 'remove' }]);
+    if (result !== null) await this.reload();
   }
 
   /**

@@ -2,7 +2,7 @@ import { Routes } from '@angular/router';
 import { adminGuard, authGuard, guestGuard, signedInGuard } from './core/auth.guards';
 
 /**
- * Loads the item drawer, shown beside the board or the backlog.
+ * Loads the item drawer, shown beside the board, the backlog or the timeline.
  *
  * @returns The drawer component.
  */
@@ -119,6 +119,12 @@ export const routes: Routes = [
       {
         path: 'backlog',
         loadComponent: () => import('./pages/backlog/backlog').then((m) => m.BacklogPage),
+        children: [{ path: 'items/:number', loadComponent: itemDrawer }, ...NO_DRAWER],
+      },
+      {
+        // Project timeline (SPEC §6.4); personal spaces have none (the API answers 404).
+        path: 'timeline',
+        loadComponent: () => import('./pages/timeline/timeline-page').then((m) => m.TimelinePage),
         children: [{ path: 'items/:number', loadComponent: itemDrawer }, ...NO_DRAWER],
       },
       {

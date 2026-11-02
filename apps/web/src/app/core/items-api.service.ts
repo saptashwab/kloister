@@ -1,6 +1,9 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  RescheduleRequest,
+  RescheduleResultDto,
+  TimelineDto,
   AddDependencyRequest,
   AuditEntryDto,
   BucketDto,
@@ -539,6 +542,31 @@ export class ItemsApiService {
   deleteSprint(projectId: string, sprintId: string): Promise<void> {
     return firstValueFrom(
       this.http.delete<void>(apiUrl(`projects/${projectId}/sprints/${sprintId}`)),
+    );
+  }
+  /**
+   * Lists the dependency links whose both ends the caller can see (SPEC §6.4).
+   *
+   * @param projectId Project id.
+   * @returns The links.
+   */
+  timeline(projectId: string): Promise<TimelineDto> {
+    return firstValueFrom(this.http.get<TimelineDto>(apiUrl(`projects/${projectId}/timeline`)));
+  }
+
+  /**
+   * Previews or applies a date change with its dependent moves (SPEC §6.4).
+   *
+   * @param projectId Project id.
+   * @param request Changes and mode.
+   * @returns The plan and the changed items.
+   */
+  reschedule(projectId: string, request: RescheduleRequest): Promise<RescheduleResultDto> {
+    return firstValueFrom(
+      this.http.post<RescheduleResultDto>(
+        apiUrl(`projects/${projectId}/timeline/reschedule`),
+        request,
+      ),
     );
   }
 

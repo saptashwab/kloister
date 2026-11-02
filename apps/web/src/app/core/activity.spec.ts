@@ -93,4 +93,30 @@ describe('describeActivity', () => {
       ),
     ).toEqual(['ticked a checklist line']);
   });
+
+  it('describes timeline half days, pins and dependent moves (M9)', () => {
+    expect(
+      describeActivity(
+        entry('ITEM_UPDATED', {
+          changes: {
+            startSecondHalf: { from: false, to: true },
+            startNoEarlierThan: { from: null, to: { date: '2026-11-09', second: false } },
+          },
+          rescheduleId: 'r1',
+          rescheduleTriggerId: 'i9',
+        }),
+        names,
+      ),
+    ).toEqual([
+      'changed the start half from morning to afternoon',
+      'changed the pinned start from none to 2026-11-09',
+      'moved with KLO-9',
+    ]);
+    expect(
+      describeActivity(
+        entry('ITEM_UPDATED', { changes: {}, rescheduleTriggerId: null, redacted: true }),
+        names,
+      ),
+    ).toEqual(['moved with a dependency change']);
+  });
 });

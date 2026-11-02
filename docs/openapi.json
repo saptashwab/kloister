@@ -2633,6 +2633,48 @@
         "tags": ["Notifications"]
       }
     },
+    "/api/v1/projects/{id}/timeline": {
+      "get": {
+        "operationId": "TimelineController_get",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Lists the dependency links whose both ends the caller can see.\nPermissions: any member and admin, within scope.",
+        "tags": ["Timeline"]
+      }
+    },
+    "/api/v1/projects/{id}/timeline/reschedule": {
+      "post": {
+        "operationId": "TimelineController_reschedule",
+        "parameters": [
+          {
+            "name": "X-Requested-With",
+            "in": "header",
+            "required": true,
+            "schema": { "type": "string", "enum": ["kloister"] },
+            "description": "Required by the CSRF guard, including sign-in."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/RescheduleDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": { "application/json": { "schema": { "type": "object" } } }
+          }
+        },
+        "summary": "Previews or applies a date change with its dependent moves.\nPermissions: `EDIT_ANY_ITEM` or `EDIT_OWN_ITEMS`; each requested item\nmust be visible (404) and editable (403).",
+        "tags": ["Timeline"]
+      }
+    },
     "/api/v1/projects/{id}/items/{item}/notes": {
       "get": {
         "operationId": "NotesController_list",
@@ -3801,6 +3843,10 @@
             "type": "string",
             "description": "Label style for the whole project (SPEC §4, §6).",
             "enum": ["SOLID", "TINTED", "COVER"]
+          },
+          "autoMoveDependents": {
+            "type": "boolean",
+            "description": "Timeline date changes move dependent items without asking (SPEC §6.4)."
           }
         }
       },
@@ -4065,7 +4111,15 @@
             "format": "uuid"
           },
           "startDate": { "type": "string", "nullable": true, "description": "Start date." },
+          "startSecondHalf": {
+            "type": "boolean",
+            "description": "Starts in the 2nd half of the start date (M9)."
+          },
           "dueDate": { "type": "string", "nullable": true, "description": "Due date." },
+          "dueFirstHalf": {
+            "type": "boolean",
+            "description": "Finishes after the 1st half of the due date (M9)."
+          },
           "dueTime": {
             "type": "string",
             "nullable": true,
@@ -4139,10 +4193,18 @@
             "nullable": true,
             "description": "New start date, or null."
           },
+          "startSecondHalf": {
+            "type": "boolean",
+            "description": "Starts in the 2nd half of the start date (M9)."
+          },
           "dueDate": {
             "type": "string",
             "nullable": true,
             "description": "New due date, or null."
+          },
+          "dueFirstHalf": {
+            "type": "boolean",
+            "description": "Finishes after the 1st half of the due date (M9)."
           },
           "dueTime": {
             "type": "string",
@@ -4270,6 +4332,101 @@
           }
         },
         "required": ["copies"]
+      },
+      "HalfDayDto": {
+        "type": "object",
+        "properties": {
+          "date": { "type": "string", "description": "`YYYY-MM-DD`." },
+          "second": { "type": "boolean", "description": "The 2nd half." }
+        },
+        "required": ["date", "second"]
+      },
+      "RescheduleChangeDto": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "type": "string",
+            "description": "Item uuid or per-project number.",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "New start date, or null."
+          },
+          "startSecondHalf": { "type": "boolean", "description": "Starts in the 2nd half." },
+          "dueDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "New due date, or null."
+          },
+          "dueFirstHalf": { "type": "boolean", "description": "Finishes after the 1st half." },
+          "pin": {
+            "type": "string",
+            "description": "Pin handling.",
+            "enum": ["auto", "keep", "set", "remove"]
+          },
+          "pinTo": {
+            "nullable": true,
+            "description": "An exact pin to restore (Undo), or null for none.",
+            "type": "object",
+            "allOf": [{ "$ref": "#/components/schemas/HalfDayDto" }]
+          }
+        },
+        "required": ["item"]
+      },
+      "ScheduleDatesDto": {
+        "type": "object",
+        "properties": {
+          "startDate": {
+            "type": "string",
+            "nullable": true,
+            "description": "Start date, or null."
+          },
+          "startSecondHalf": { "type": "boolean", "description": "Starts in the 2nd half." },
+          "dueDate": { "type": "string", "nullable": true, "description": "Due date, or null." },
+          "dueFirstHalf": { "type": "boolean", "description": "Finishes after the 1st half." }
+        },
+        "required": ["startDate", "startSecondHalf", "dueDate", "dueFirstHalf"]
+      },
+      "PreviewedChangeDto": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Item id.", "minLength": 1, "maxLength": 64 },
+          "to": {
+            "description": "Dates shown.",
+            "allOf": [{ "$ref": "#/components/schemas/ScheduleDatesDto" }]
+          }
+        },
+        "required": ["id", "to"]
+      },
+      "RescheduleDto": {
+        "type": "object",
+        "properties": {
+          "changes": {
+            "description": "Changes asked for.",
+            "minItems": 1,
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/RescheduleChangeDto" }
+          },
+          "mode": {
+            "type": "string",
+            "description": "Preview, apply, or apply only the changes.",
+            "enum": ["preview", "apply", "only"]
+          },
+          "expect": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Versions the caller saw, by item id."
+          },
+          "previewed": {
+            "description": "The moves a preview showed.",
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PreviewedChangeDto" }
+          }
+        },
+        "required": ["changes", "mode"]
       },
       "CreateNoteDto": {
         "type": "object",

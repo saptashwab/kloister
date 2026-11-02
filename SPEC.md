@@ -403,6 +403,13 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
 - Links: spreadsheet editing in the grid stays the main way to edit; the row key, an open icon and bars open the item's drawer for everything else; the drawer offers "Show on
   board" for items with a bucket, and board cards, backlog rows and the drawer offer "Show on timeline", which
   scrolls to and highlights the row.
+- Sprints: rows can be multi-selected to set a sprint (or none), to create a sprint spanning the selection (PMs and
+  Leads) and assign the rows, or to assign them by clicking a sprint band; existing endpoints and permissions apply,
+  and rows the caller may not edit are skipped and reported. The same selection can be assigned, given a status,
+  shifted by working days (dependent items follow), indented or outdented, linked in order or unlinked, given a
+  priority, labels or a bucket, or deleted after a confirmation, each under the existing rules.
+- Status is a default grid column; Progress (checklist ticks, or done and total children for parents) is optional.
+  Timeline keys appear in the keyboard-shortcuts dialog and in button tooltips.
 - Scheduling: dependencies are finish-to-start with no lag. A Not started item with predecessors starts at the
   next working half day after its latest visible predecessor with a due date finishes, or at its pin if that is
   later, and keeps its duration; it moves earlier as well as later. Typing or dragging a start later than its

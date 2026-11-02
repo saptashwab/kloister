@@ -11,6 +11,7 @@ import {
   type Page,
   requiresBucket,
   SprintState,
+  startsAfterFinish,
   type WorkItemDetailDto,
   type WorkItemDto,
 } from '@kloister/shared';
@@ -62,6 +63,14 @@ import {
 
 /** A JSON-safe before/after pair for audit entries. */
 type Change = { from: Prisma.InputJsonValue | null; to: Prisma.InputJsonValue | null };
+
+/** Internal extras of {@link ItemsService.update} for timeline reschedules (SPEC §6.4). */
+export interface UpdateItemOptions {
+  /** New "start no earlier than" pin; null removes it, undefined leaves it. */
+  pin?: { date: string; second: boolean } | null;
+  /** Merged into the audit entry, e.g. the reschedule id and triggering item. */
+  auditMeta?: Prisma.InputJsonObject;
+}
 
 /**
  * Work items (SPEC §4, §4.1, §4.2, §8 `items`): listing, reading, creating,
@@ -172,7 +181,8 @@ export class ItemsService {
    *
    * Permissions: 404 unless the item is visible to the caller. For callers
    * with a restricted scope, references to items they cannot see (blockers,
-   * former or new parents) are replaced by null and marked `redacted`.
+   * former or new parents, the item that triggered a timeline move) are
+   * replaced by null and marked `redacted`.
    *
    * @param access The caller's access.
    * @param ref Item uuid or number.
@@ -243,6 +253,10 @@ export class ItemsService {
     assertDateOrder(startDate, dueDate);
     const dueTime = dto.dueTime ?? null;
     assertTimeHasDate(dueDate, dueTime);
+    // A half belongs to its date; without the date it reads as the default.
+    const startSecondHalf = startDate !== null && (dto.startSecondHalf ?? false);
+    const dueFirstHalf = dueDate !== null && (dto.dueFirstHalf ?? false);
+    assertHalfOrder(startDate, startSecondHalf, dueDate, dueFirstHalf);
 
     // Read committed: taking the next number locks the project row, which
     // serializes creates without making concurrent creates fail. References
@@ -302,7 +316,9 @@ export class ItemsService {
           sprintId: dto.sprintId ?? null,
           teamId,
           startDate: startDate === null ? null : toDbDate(startDate),
+          startSecondHalf,
           dueDate: dueDate === null ? null : toDbDate(dueDate),
+          dueFirstHalf,
           dueTime: toDbTime(dueTime),
           position: first === null ? POSITION_STEP : first.position - POSITION_STEP,
           createdById: auth.user.id,
@@ -352,7 +368,9 @@ export class ItemsService {
    * @param access The caller's access.
    * @param ref Item uuid or number.
    * @param dto Fields to change.
-   * @param transaction Existing transaction for an atomic reviewed transfer.
+   * @param transaction Existing transaction for an atomic reviewed transfer
+   *   or timeline reschedule.
+   * @param options Internal pin change and audit detail of a reschedule.
    * @returns The updated item.
    */
   async update(
@@ -361,6 +379,7 @@ export class ItemsService {
     ref: string,
     dto: UpdateItemDto,
     transaction?: Prisma.TransactionClient,
+    options: UpdateItemOptions = {},
   ): Promise<WorkItemDetailDto> {
     const projectId = access.project.id;
     const work = async (tx: Prisma.TransactionClient) => {
@@ -461,6 +480,39 @@ export class ItemsService {
         note('dueDate', fromDbDate(current.dueDate), dueDate);
         data.dueDate = dueDate === null ? null : toDbDate(dueDate);
       }
+      // Halves reset with their date, so a cleared date never keeps one.
+      const startSecondHalf =
+        startDate !== null && (dto.startSecondHalf ?? current.startSecondHalf);
+      let dueFirstHalf = dueDate !== null && (dto.dueFirstHalf ?? current.dueFirstHalf);
+      // A date change that does not name the halves (an ADO import, a bulk
+      // edit) never fails on them: the finish moves to the end of the day.
+      const halvesNamed = dto.startSecondHalf !== undefined || dto.dueFirstHalf !== undefined;
+      if (!halvesNamed && startsAfterFinish({ startDate, startSecondHalf, dueDate, dueFirstHalf }))
+        dueFirstHalf = false;
+      assertHalfOrder(startDate, startSecondHalf, dueDate, dueFirstHalf);
+      if (startSecondHalf !== current.startSecondHalf) {
+        note('startSecondHalf', current.startSecondHalf, startSecondHalf);
+        data.startSecondHalf = startSecondHalf;
+      }
+      if (dueFirstHalf !== current.dueFirstHalf) {
+        note('dueFirstHalf', current.dueFirstHalf, dueFirstHalf);
+        data.dueFirstHalf = dueFirstHalf;
+      }
+      if (options.pin !== undefined) {
+        const pinBefore =
+          current.startNoEarlierThan === null
+            ? null
+            : {
+                date: fromDbDate(current.startNoEarlierThan)!,
+                second: current.startNoEarlierThanSecondHalf,
+              };
+        const pin = options.pin;
+        if (pin?.date !== pinBefore?.date || pin?.second !== pinBefore?.second) {
+          note('startNoEarlierThan', pinBefore, pin);
+          data.startNoEarlierThan = pin === null ? null : toDbDate(pin.date);
+          data.startNoEarlierThanSecondHalf = pin?.second ?? false;
+        }
+      }
       // Clearing the due date clears the time; a new time needs a date.
       if (dto.dueTime !== undefined) assertTimeHasDate(dueDate, dto.dueTime);
       const dueTime =
@@ -537,6 +589,7 @@ export class ItemsService {
       await this.record(tx, auth, access, AuditAction.ITEM_UPDATED, current.id, {
         number: current.number,
         changes,
+        ...options.auditMeta,
       });
       const updated = await tx.workItem.findUniqueOrThrow({
         where: { id: current.id },
@@ -1051,17 +1104,20 @@ function parentChange(meta: Record<string, unknown>): Record<string, unknown> | 
 }
 
 /**
- * Ids of other items an activity entry refers to: a blocker, or a former
- * or new parent.
+ * Ids of other items an activity entry refers to: a blocker, a former or
+ * new parent, or the item whose timeline change moved this one (M9).
  *
  * @param meta Audit entry detail.
  * @returns Item ids.
  */
 function itemRefsIn(meta: Record<string, unknown>): string[] {
   const parent = parentChange(meta);
-  return [meta['blockingItemId'], parent?.['from'], parent?.['to']].filter(
-    (id): id is string => typeof id === 'string',
-  );
+  return [
+    meta['blockingItemId'],
+    meta['rescheduleTriggerId'],
+    parent?.['from'],
+    parent?.['to'],
+  ].filter((id): id is string => typeof id === 'string');
 }
 
 /**
@@ -1080,6 +1136,10 @@ function redactItemRefs(
   if (hidden(meta['blockingItemId'])) {
     out['blockingItemId'] = null;
     out['blockingNumber'] = null;
+    out['redacted'] = true;
+  }
+  if (hidden(meta['rescheduleTriggerId'])) {
+    out['rescheduleTriggerId'] = null;
     out['redacted'] = true;
   }
   const parent = parentChange(meta);
@@ -1250,6 +1310,26 @@ export function assertDateOrder(startDate: string | null, dueDate: string | null
   // ISO calendar dates compare correctly as strings.
   if (startDate !== null && dueDate !== null && dueDate < startDate) {
     throw invalidField('dueDate', 'The due date is before the start date');
+  }
+}
+
+/**
+ * Rejects a same-day item that would start in the 2nd half and finish after
+ * the 1st (SPEC §6.4).
+ *
+ * @param startDate Start date.
+ * @param startSecondHalf Starts in the 2nd half.
+ * @param dueDate Due date.
+ * @param dueFirstHalf Finishes after the 1st half.
+ */
+export function assertHalfOrder(
+  startDate: string | null,
+  startSecondHalf: boolean,
+  dueDate: string | null,
+  dueFirstHalf: boolean,
+): void {
+  if (startsAfterFinish({ startDate, startSecondHalf, dueDate, dueFirstHalf })) {
+    throw invalidField('dueFirstHalf', 'The item would finish before it starts');
   }
 }
 

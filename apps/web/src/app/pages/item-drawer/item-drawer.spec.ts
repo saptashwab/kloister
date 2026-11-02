@@ -6,6 +6,7 @@ import { makeBucket, makeItem, makeMember, makeProject, settle } from '../../../
 import { AnnotationsApiService } from '../../core/annotations-api.service';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
+import { RescheduleFlow } from '../../core/reschedule';
 import { ProjectsApiService } from '../../core/projects-api.service';
 import { SessionStore } from '../../core/session.store';
 import { Dialogs } from '../../ui/dialogs';
@@ -80,6 +81,7 @@ describe('ItemDrawer', () => {
       providers: [
         provideRouter([]),
         ProjectContext,
+        RescheduleFlow,
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
         { provide: AnnotationsApiService, useValue: annotationsApi },
@@ -139,7 +141,8 @@ describe('ItemDrawer', () => {
     expect(root.querySelectorAll('mat-select').length).toBe(0);
     expect(root.querySelectorAll('app-date-field, app-time-field').length).toBe(0);
     expect(root.querySelector('dl.fields')?.textContent).toContain('Bob');
-    expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
+    // Only read-only navigation is offered (M9: Show on timeline).
+    expect(root.querySelector('[aria-label="More actions"]')).not.toBeNull();
     expect(root.querySelector('input[aria-label="New checklist line"]')).toBeNull();
     expect(root.querySelector('app-rich-text-editor')).toBeNull();
   });
@@ -179,8 +182,13 @@ describe('ItemDrawer', () => {
     expect(root.querySelector('mat-select[aria-label="Position in bucket"]')).toBeNull();
     root.querySelector<HTMLButtonElement>('[aria-label="More actions"]')?.click();
     await settle(fixture);
-    const items = [...document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item')];
+    const items = [...document.querySelectorAll<HTMLButtonElement>('.mat-mdc-menu-item')].filter(
+      (b) => b.tagName === 'BUTTON',
+    );
     const label = (b: HTMLButtonElement) => b.textContent?.trim() ?? '';
+    expect(document.querySelector('a.mat-mdc-menu-item')?.textContent).toContain(
+      'Show on timeline',
+    );
     expect(items.map(label).slice(0, 2)).toEqual([
       'Move to top of bucket',
       'Move to bottom of bucket',
@@ -351,7 +359,6 @@ describe('ItemDrawer', () => {
     const project = makeProject({ archivedAt: '2026-10-01T00:00:00.000Z' });
     const { root } = await render(makeItem(4), [], project);
     expect(root.querySelector('app-rich-text-editor')).toBeNull();
-    expect(root.querySelector('[aria-label="More actions"]')).toBeNull();
     expect(root.querySelectorAll('mat-select').length).toBe(0);
   });
 });

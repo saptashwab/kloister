@@ -9,6 +9,7 @@ import { filter, firstValueFrom, map } from 'rxjs';
 import { errorMessage } from '../../core/api';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
+import { RescheduleFlow } from '../../core/reschedule';
 import { Shortcuts } from '../../core/shortcuts';
 import { Skeleton } from '../../ui/feedback';
 import { Icon, type IconName } from '../../ui/icon';
@@ -20,8 +21,8 @@ import { SnapshotAction } from '../../ui/snapshot-action';
 
 /**
  * Frame of one project (`/p/:key/…`, DESIGN §7): breadcrumb, project name,
- * "New item", tabs for the board, backlog, sprints and settings, and the
- * page itself.
+ * "New item", tabs for the board, backlog, timeline (projects only), sprints
+ * and settings, and the page itself.
  *
  * It provides the {@link ProjectContext} its pages share. Every member (and
  * every admin) can open each tab; the pages hide controls the caller lacks
@@ -38,7 +39,7 @@ import { SnapshotAction } from '../../ui/snapshot-action';
     Icon,
     Skeleton,
   ],
-  providers: [ProjectContext, PageActions],
+  providers: [ProjectContext, PageActions, RescheduleFlow],
   styles: `
     .head {
       padding: var(--k-size-14px) var(--k-gutter) 0;
@@ -94,16 +95,18 @@ import { SnapshotAction } from '../../ui/snapshot-action';
       }
       <nav mat-tab-nav-bar mat-stretch-tabs="false" [tabPanel]="panel" aria-label="Project views">
         @for (tab of tabs; track tab.path) {
-          <a
-            mat-tab-link
-            [routerLink]="
-              tab.path === ''
-                ? ['/p', project.key ?? 'personal']
-                : ['/p', project.key ?? 'personal', tab.path]
-            "
-            [active]="activeTab() === tab.path"
-            ><span class="tab"><app-icon [name]="tab.icon" />{{ tab.label }}</span></a
-          >
+          @if (!tab.projectOnly || project.ownerId === null) {
+            <a
+              mat-tab-link
+              [routerLink]="
+                tab.path === ''
+                  ? ['/p', project.key ?? 'personal']
+                  : ['/p', project.key ?? 'personal', tab.path]
+              "
+              [active]="activeTab() === tab.path"
+              ><span class="tab"><app-icon [name]="tab.icon" />{{ tab.label }}</span></a
+            >
+          }
         }
         @if (ctx.has(adoPermission) && project.ownerId === null) {
           <a mat-tab-link [routerLink]="['/p', project.key, 'ado']" [active]="activeTab() === 'ado'"
@@ -144,9 +147,15 @@ export class ProjectShellPage {
   protected readonly error = signal('');
 
   /** Tabs in display order; `''` is the board. */
-  protected readonly tabs: { path: string; label: string; icon: IconName }[] = [
+  protected readonly tabs: {
+    path: string;
+    label: string;
+    icon: IconName;
+    projectOnly?: boolean;
+  }[] = [
     { path: '', label: 'Board', icon: 'board' },
     { path: 'backlog', label: 'Backlog', icon: 'backlog' },
+    { path: 'timeline', label: 'Timeline', icon: 'timeline', projectOnly: true },
     { path: 'sprints', label: 'Sprints', icon: 'sprints' },
     { path: 'settings', label: 'Settings', icon: 'settings' },
   ];
@@ -225,10 +234,10 @@ export class ProjectShellPage {
       const item = await this.items.create(project.id, request);
       this.ctx.upsert(item);
       this.toast.show(`${item.key} created`);
-      const onBacklog = this.activeTab() === 'backlog';
+      const tab = this.activeTab();
       await this.router.navigate(
-        onBacklog
-          ? ['/p', project.key ?? 'personal', 'backlog', 'items', item.number]
+        tab === 'backlog' || tab === 'timeline'
+          ? ['/p', project.key ?? 'personal', tab, 'items', item.number]
           : ['/p', project.key ?? 'personal', 'items', item.number],
       );
     } catch (error) {

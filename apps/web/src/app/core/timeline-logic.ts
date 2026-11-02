@@ -1,0 +1,550 @@
+import {
+  endSlot,
+  isAllowedParent,
+  ItemType,
+  type PlanEdge,
+  type ScheduleDates,
+  scheduleSpan,
+  type ScheduleSpan,
+  startSlot,
+  type WorkItemDto,
+} from '@kloister/shared';
+import { flattenTree, type TreeNode } from './board-logic';
+import { parseDay } from './format';
+
+// Pure logic of the project timeline (SPEC §6.4, docs/M9-PLAN.md §3):
+// rows with summary spans, typed dates and durations, the bar scale and
+// geometry, conflicts, indenting and pasted rows. The page renders it.
+
+/** Zoom levels of the bar area. */
+export type TimelineZoom = 'week' | 'month' | 'quarter';
+
+/** Pixels per calendar day at each zoom. */
+export const DAY_WIDTH: Record<TimelineZoom, number> = { week: 22, month: 7, quarter: 2.4 };
+
+/** One rendered row. */
+export interface TimelineRow {
+  /** Tree node (item, or a title-only ancestor). */
+  node: TreeNode;
+  /** Nesting depth, 0 for roots. */
+  depth: number;
+  /** Span of the visible dated descendants, for rows with children. */
+  summary: ScheduleSpan | null;
+}
+
+/** Month abbreviations, as in `formatDay`. */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * Flattens the tree into rows and works out each parent's summary span from
+ * its visible dated descendants without children (docs/M9-PLAN.md §3.2.1).
+ *
+ * @param roots Tree roots.
+ * @param collapsed Ids of collapsed rows.
+ * @returns Rows in display order.
+ */
+export function timelineRows(roots: TreeNode[], collapsed: ReadonlySet<string>): TimelineRow[] {
+  const spans = new Map<string, ScheduleSpan | null>();
+  const leaves = (node: TreeNode): ScheduleDates[] =>
+    node.children.flatMap((c) =>
+      c.children.length > 0 ? leaves(c) : c.item === null ? [] : [c.item],
+    );
+  const walk = (list: TreeNode[]) => {
+    for (const node of list) {
+      if (node.children.length > 0) spans.set(node.id, scheduleSpan(leaves(node)));
+      walk(node.children);
+    }
+  };
+  walk(roots);
+  return flattenTree(roots, collapsed).map(({ node, depth }) => ({
+    node,
+    depth,
+    summary: spans.get(node.id) ?? null,
+  }));
+}
+
+/**
+ * The span of the whole plan: every visible dated item without visible
+ * children.
+ *
+ * @param items Visible items.
+ * @returns The span, or null without dates.
+ */
+export function planSpan(items: readonly WorkItemDto[]): ScheduleSpan | null {
+  const parents = new Set(items.map((i) => i.parentId).filter((id) => id !== null));
+  return scheduleSpan(items.filter((i) => !parents.has(i.id)));
+}
+
+/**
+ * A short date for grid cells: "5 Nov", with the year when it is not the
+ * current one.
+ *
+ * @param date `YYYY-MM-DD`.
+ * @param today `YYYY-MM-DD`.
+ * @returns The text.
+ */
+export function shortDay(date: string, today: string): string {
+  const [y, m, d] = date.split('-').map(Number) as [number, number, number];
+  const base = `${d} ${MONTHS[m - 1]}`;
+  return date.slice(0, 4) === today.slice(0, 4) ? base : `${base} ${y}`;
+}
+
+/**
+ * A start as the grid shows it: the date, plus ", 2nd half" when it starts
+ * in the 2nd half.
+ *
+ * @param dates The item's dates.
+ * @param today `YYYY-MM-DD`.
+ * @returns The text, or empty without a start.
+ */
+export function startText(dates: ScheduleDates, today: string): string {
+  if (dates.startDate === null) return '';
+  return `${shortDay(dates.startDate, today)}${dates.startSecondHalf ? ', 2nd half' : ''}`;
+}
+
+/**
+ * A due date as the grid shows it: the date, plus ", 1st half" when it
+ * finishes after the 1st half.
+ *
+ * @param dates The item's dates.
+ * @param today `YYYY-MM-DD`.
+ * @returns The text, or empty without a due date.
+ */
+export function dueText(dates: ScheduleDates, today: string): string {
+  if (dates.dueDate === null) return '';
+  return `${shortDay(dates.dueDate, today)}${dates.dueFirstHalf ? ', 1st half' : ''}`;
+}
+
+/**
+ * Reads a typed date with an optional half: any `parseDay` format, or a day
+ * and month without the year ("5 Nov", this year), optionally followed by
+ * "1st", "2nd", "1st half", "2nd half", "H1" or "H2".
+ *
+ * @param text What the person typed.
+ * @param today `YYYY-MM-DD`, for the year.
+ * @returns The date and the half (1, 2, or null when not given), or null.
+ */
+export function parseHalfDay(
+  text: string,
+  today: string,
+): { date: string; half: 1 | 2 | null } | null {
+  let value = text.trim().replace(/,/g, ' ').replace(/\s+/g, ' ');
+  let half: 1 | 2 | null = null;
+  const suffix = /\s*(?:(1st|2nd)(?:\s*half)?|h([12]))$/i.exec(value);
+  if (suffix !== null) {
+    half = (suffix[1] ?? suffix[2] ?? '').startsWith('1') ? 1 : 2;
+    value = value.slice(0, suffix.index).trim();
+  }
+  const date =
+    parseDay(value) ??
+    (/^\d{1,2}\s+[A-Za-z]{3,}\.?$/.test(value) ? parseDay(`${value} ${today.slice(0, 4)}`) : null);
+  return date === null ? null : { date, half };
+}
+
+/**
+ * A duration as the grid shows it: "4", "2.5".
+ *
+ * @param days Working days.
+ * @returns The text.
+ */
+export function durationText(days: number): string {
+  return Number.isInteger(days) ? String(days) : days.toFixed(1);
+}
+
+/**
+ * Reads a typed duration in working days: at least 0.5, in halves ("2,5" too).
+ *
+ * @param text What the person typed.
+ * @returns Working days, or null when invalid.
+ */
+export function parseDuration(text: string): number | null {
+  const value = Number(
+    text
+      .trim()
+      .replace(/\s*d(ays?)?$/i, '')
+      .replace(',', '.'),
+  );
+  return Number.isFinite(value) && value >= 0.5 && Number.isInteger(value * 2) ? value : null;
+}
+
+/** The horizontal scale of the bar area. */
+export interface TimelineScale {
+  /** Day number (days since 1970-01-01) of the first column, a Monday. */
+  origin: number;
+  /** Number of days drawn. */
+  days: number;
+  /** Pixels per day. */
+  dayWidth: number;
+}
+
+/**
+ * Day number of a date.
+ *
+ * @param date `YYYY-MM-DD`.
+ * @returns Days since 1970-01-01.
+ */
+export function dayNumber(date: string): number {
+  return Math.round(Date.parse(`${date}T00:00:00Z`) / 86_400_000);
+}
+
+/**
+ * Date of a day number.
+ *
+ * @param day Days since 1970-01-01.
+ * @returns `YYYY-MM-DD`.
+ */
+export function dateOfDay(day: number): string {
+  return new Date(day * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Day of the week of a day number, Monday first.
+ *
+ * @param day Days since 1970-01-01.
+ * @returns 0 (Monday) to 6 (Sunday).
+ */
+export function weekdayOf(day: number): number {
+  return (((day - 4) % 7) + 7) % 7;
+}
+
+/**
+ * Chooses the drawn range: from a week before the plan (or today) to a few
+ * weeks after it, starting on a Monday.
+ *
+ * @param items Visible items.
+ * @param today `YYYY-MM-DD`.
+ * @param zoom Zoom level.
+ * @returns The scale.
+ */
+export function timelineScale(
+  items: readonly ScheduleDates[],
+  today: string,
+  zoom: TimelineZoom,
+): TimelineScale {
+  const todayDay = dayNumber(today);
+  let first = todayDay;
+  let last = todayDay;
+  for (const item of items) {
+    for (const date of [item.startDate, item.dueDate]) {
+      if (date === null) continue;
+      first = Math.min(first, dayNumber(date));
+      last = Math.max(last, dayNumber(date));
+    }
+  }
+  const pad = zoom === 'week' ? 7 : zoom === 'month' ? 21 : 56;
+  const start = first - pad;
+  const origin = start - weekdayOf(start);
+  return { origin, days: last + pad * 2 - origin, dayWidth: DAY_WIDTH[zoom] };
+}
+
+/**
+ * The x position of the start of a half day.
+ *
+ * @param scale The scale.
+ * @param date `YYYY-MM-DD`.
+ * @param second The 2nd half.
+ * @returns Pixels from the left edge.
+ */
+export function halfX(scale: TimelineScale, date: string, second: boolean): number {
+  return (dayNumber(date) - scale.origin + (second ? 0.5 : 0)) * scale.dayWidth;
+}
+
+/** Where a row's bar or marker goes. */
+export interface BarBox {
+  /** Left edge in pixels. */
+  left: number;
+  /** Width in pixels; 0 for a one-date marker. */
+  width: number;
+  /** A one-date marker instead of a bar. */
+  marker: 'start' | 'due' | null;
+}
+
+/**
+ * Places a bar: from the start half to the end of the finish half. With
+ * only one date it is a marker.
+ *
+ * @param scale The scale.
+ * @param dates The dates.
+ * @returns The box, or null without dates.
+ */
+export function barBox(scale: TimelineScale, dates: ScheduleDates): BarBox | null {
+  const { startDate, dueDate } = dates;
+  if (startDate !== null && dueDate !== null) {
+    const left = halfX(scale, startDate, dates.startSecondHalf);
+    const right = halfX(scale, dueDate, false) + scale.dayWidth / (dates.dueFirstHalf ? 2 : 1);
+    return { left, width: Math.max(right - left, scale.dayWidth / 2), marker: null };
+  }
+  if (startDate !== null)
+    return { left: halfX(scale, startDate, dates.startSecondHalf), width: 0, marker: 'start' };
+  if (dueDate !== null)
+    return {
+      left: halfX(scale, dueDate, false) + scale.dayWidth / (dates.dueFirstHalf ? 2 : 1),
+      width: 0,
+      marker: 'due',
+    };
+  return null;
+}
+
+/** A label along the top of the bar area. */
+export interface ScaleTick {
+  /** Text. */
+  label: string;
+  /** Left edge in pixels. */
+  left: number;
+  /** Width in pixels. */
+  width: number;
+}
+
+/**
+ * Upper and lower header labels for a zoom: weeks over days, months over
+ * weeks, or years over months.
+ *
+ * @param scale The scale.
+ * @param zoom Zoom level.
+ * @returns Upper and lower ticks.
+ */
+export function scaleTicks(
+  scale: TimelineScale,
+  zoom: TimelineZoom,
+): { upper: ScaleTick[]; lower: ScaleTick[] } {
+  const w = scale.dayWidth;
+  const upper: ScaleTick[] = [];
+  const lower: ScaleTick[] = [];
+  const end = scale.origin + scale.days;
+  if (zoom === 'week') {
+    for (let d = scale.origin; d < end; d += 7) {
+      const date = dateOfDay(d);
+      upper.push({ label: shortDay(date, date), left: (d - scale.origin) * w, width: 7 * w });
+    }
+    for (let d = scale.origin; d < end; d++) {
+      lower.push({ label: 'MTWTFSS'[weekdayOf(d)], left: (d - scale.origin) * w, width: w });
+    }
+    return { upper, lower };
+  }
+  // Months (upper for month zoom, lower for quarter zoom).
+  const months: ScaleTick[] = [];
+  for (let d = scale.origin; d < end;) {
+    const date = dateOfDay(d);
+    const [y, m] = date.split('-').map(Number) as [number, number];
+    const next = dayNumber(
+      `${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, '0')}-01`,
+    );
+    const stop = Math.min(next, end);
+    months.push({
+      label: `${MONTHS[m - 1]} ${y}`,
+      left: (d - scale.origin) * w,
+      width: (stop - d) * w,
+    });
+    d = stop;
+  }
+  if (zoom === 'month') {
+    for (let d = scale.origin; d < end; d += 7) {
+      lower.push({
+        label: String(Number(dateOfDay(d).slice(8))),
+        left: (d - scale.origin) * w,
+        width: 7 * w,
+      });
+    }
+    return { upper: months, lower };
+  }
+  const years: ScaleTick[] = [];
+  for (const month of months) {
+    const year = month.label.slice(-4);
+    const lastYear = years[years.length - 1];
+    if (lastYear !== undefined && lastYear.label === year) lastYear.width += month.width;
+    else years.push({ label: year, left: month.left, width: month.width });
+  }
+  return { upper: years, lower: months.map((m) => ({ ...m, label: m.label.slice(0, 3) })) };
+}
+
+/**
+ * Items that start before a visible predecessor finishes (docs/M9-PLAN.md
+ * §3.3), keyed by successor id with the predecessor ids.
+ *
+ * @param items Visible items.
+ * @param edges Visible links.
+ * @returns Conflicting successors and their predecessors.
+ */
+export function conflicts(
+  items: readonly WorkItemDto[],
+  edges: readonly PlanEdge[],
+): Map<string, string[]> {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const result = new Map<string, string[]>();
+  for (const edge of edges) {
+    const pred = byId.get(edge.blockingItemId);
+    const succ = byId.get(edge.blockedItemId);
+    if (pred === undefined || succ === undefined || pred.dueDate === null) continue;
+    const begin =
+      succ.startDate !== null
+        ? startSlot(succ.startDate, succ.startSecondHalf)
+        : succ.dueDate !== null
+          ? endSlot(succ.dueDate, succ.dueFirstHalf)
+          : null;
+    if (begin === null || begin > endSlot(pred.dueDate, pred.dueFirstHalf)) continue;
+    result.set(succ.id, [...(result.get(succ.id) ?? []), pred.id]);
+  }
+  return result;
+}
+
+/**
+ * The usual type of a new child under a parent (Epic → Feature → Story →
+ * Task; Task under a Feature too).
+ *
+ * @param parent The parent's type, or null for a top-level row.
+ * @param fallback Type for a top-level row.
+ * @returns The child type.
+ */
+export function childTypeOf(parent: ItemType | null, fallback: ItemType): ItemType {
+  switch (parent) {
+    case ItemType.EPIC:
+      return ItemType.FEATURE;
+    case ItemType.FEATURE:
+      return ItemType.STORY;
+    case ItemType.STORY:
+      return ItemType.TASK;
+    case null:
+      return fallback;
+    default:
+      return ItemType.TASK;
+  }
+}
+
+/** Outcome of an indent or outdent. */
+export type OutlineMove = { parentId: string | null } | { error: string };
+
+/**
+ * Where indenting a row puts it: under its previous sibling (the nearest row
+ * above at the same depth), keeping its type (docs/M9-PLAN.md §3.1).
+ *
+ * @param rows Rows in display order.
+ * @param index The row.
+ * @returns The new parent, or why it cannot move.
+ */
+export function indentTarget(rows: readonly TimelineRow[], index: number): OutlineMove {
+  const row = rows[index];
+  if (row?.node.item === undefined || row.node.item === null)
+    return { error: 'This row cannot move' };
+  let i = index - 1;
+  while (i >= 0 && rows[i].depth > row.depth) i--;
+  const sibling = rows[i];
+  if (sibling === undefined || sibling.depth !== row.depth)
+    return { error: 'There is no row above at the same level to indent under' };
+  const parentType = sibling.node.ref.type;
+  if (!isAllowedParent(row.node.item.type, parentType))
+    return {
+      error: `A ${typeName(row.node.item.type)} cannot sit under a ${typeName(parentType)}`,
+    };
+  return { parentId: sibling.node.id };
+}
+
+/**
+ * Where outdenting a row puts it: beside its parent, under the parent's
+ * parent, keeping its type.
+ *
+ * @param rows Rows in display order.
+ * @param index The row.
+ * @returns The new parent, or why it cannot move.
+ */
+export function outdentTarget(rows: readonly TimelineRow[], index: number): OutlineMove {
+  const row = rows[index];
+  const item = row?.node.item;
+  if (item === undefined || item === null) return { error: 'This row cannot move' };
+  if (item.parentId === null) return { error: 'This row is already at the top level' };
+  const parent = item.ancestors[item.ancestors.length - 1];
+  const grandparent = item.ancestors[item.ancestors.length - 2] ?? null;
+  if (parent === undefined) return { error: 'This row is already at the top level' };
+  if (grandparent !== null && !isAllowedParent(item.type, grandparent.type))
+    return {
+      error: `A ${typeName(item.type)} cannot sit under a ${typeName(grandparent.type)}`,
+    };
+  return { parentId: grandparent?.id ?? null };
+}
+
+/**
+ * A readable type name.
+ *
+ * @param type Item type.
+ * @returns E.g. "User Story".
+ */
+export function typeName(type: ItemType): string {
+  return { EPIC: 'Epic', FEATURE: 'Feature', STORY: 'User Story', TASK: 'Task', BUG: 'Bug' }[type];
+}
+
+/** One pasted line. */
+export interface PastedRow {
+  /** Title. */
+  title: string;
+  /** Indent level, 0 for the first level. */
+  level: number;
+}
+
+/**
+ * Splits pasted text into rows: one per non-empty line, with leading tabs
+ * or pairs of spaces as indent levels, relative to the least indented line.
+ * Tab-separated columns after the title are ignored.
+ *
+ * @param text Pasted text.
+ * @param maxTitle Longest title kept; longer ones are cut.
+ * @returns Rows.
+ */
+export function parsePasted(text: string, maxTitle: number): PastedRow[] {
+  const lines = text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .filter((l) => l.trim() !== '');
+  const levels = lines.map((l) => {
+    const lead = /^[\t ]*/.exec(l)?.[0] ?? '';
+    return [...lead].reduce((n, c) => n + (c === '\t' ? 2 : 1), 0) >> 1;
+  });
+  const min = Math.min(...levels);
+  return lines.map((l, i) => ({
+    title: (l.trim().split('\t')[0] ?? '').trim().slice(0, maxTitle),
+    level: levels[i] - min,
+  }));
+}
+
+/**
+ * Reads a predecessors cell: item numbers or keys separated by commas or
+ * spaces ("12, 15" or "KLO-12").
+ *
+ * @param text The cell text.
+ * @param byNumber Visible items by number.
+ * @returns Item ids found, and the parts that name no visible item.
+ */
+export function parsePredecessors(
+  text: string,
+  byNumber: ReadonlyMap<number, WorkItemDto>,
+): { ids: string[]; unknown: string[] } {
+  const ids: string[] = [];
+  const unknown: string[] = [];
+  for (const part of text.split(/[\s,;]+/).filter((p) => p !== '')) {
+    const number = Number(/(\d+)$/.exec(part)?.[1] ?? NaN);
+    const item = Number.isInteger(number) ? byNumber.get(number) : undefined;
+    if (item === undefined) unknown.push(part);
+    else if (!ids.includes(item.id)) ids.push(item.id);
+  }
+  return { ids, unknown };
+}
+
+/**
+ * After an item moved in the hierarchy, gives its visible descendants the
+ * new ancestor chain, so the tree stays right without reloading everything.
+ *
+ * @param items Visible items, the moved one already updated.
+ * @param moved The moved item as the API returned it.
+ * @returns The items with rebased descendants.
+ */
+export function rebaseDescendants(
+  items: readonly WorkItemDto[],
+  moved: WorkItemDto,
+): WorkItemDto[] {
+  const head = [
+    ...moved.ancestors,
+    { id: moved.id, number: moved.number, key: moved.key, type: moved.type, title: moved.title },
+  ];
+  return items.map((item) => {
+    const at = item.ancestors.findIndex((a) => a.id === moved.id);
+    return at < 0 ? item : { ...item, ancestors: [...head, ...item.ancestors.slice(at + 1)] };
+  });
+}

@@ -56,7 +56,12 @@ describe('ProjectSettingsPage', () => {
       name: 'Kanban',
       description: 'About',
       archivedAt: archived ? '2026-01-02T00:00:00.000Z' : null,
-      settings: { membersCanAssignOthers: false, statusToBucket: {}, labelStyle: 'SOLID' },
+      settings: {
+        membersCanAssignOthers: false,
+        statusToBucket: {},
+        labelStyle: 'SOLID',
+        autoMoveDependents: false,
+      },
       myRole: null,
       myVisibility: 'ALL',
       myTeams: [],

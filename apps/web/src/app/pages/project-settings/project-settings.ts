@@ -190,6 +190,9 @@ import { ProjectTeamsComponent } from './project-teams';
                     <mat-checkbox formControlName="membersCanAssignOthers">
                       Members can assign items to others
                     </mat-checkbox>
+                    <mat-checkbox formControlName="autoMoveDependents">
+                      Move dependent items automatically on the timeline
+                    </mat-checkbox>
                   }
 
                   <button
@@ -211,6 +214,16 @@ import { ProjectTeamsComponent } from './project-teams';
                   Members {{ project.settings.membersCanAssignOthers ? 'can' : 'cannot' }} assign
                   items to others.
                 </p>
+                @if (project.ownerId === null) {
+                  <p>
+                    Dependent timeline items
+                    {{
+                      project.settings.autoMoveDependents
+                        ? 'move automatically'
+                        : 'move after a confirmation'
+                    }}.
+                  </p>
+                }
               }
             </mat-card-content>
           </mat-card>
@@ -475,6 +488,7 @@ export class ProjectSettingsPage implements OnInit {
     name: ['', [required, Validators.maxLength(PROJECT_NAME_MAX)]],
     description: ['', [Validators.maxLength(PROJECT_DESCRIPTION_MAX)]],
     membersCanAssignOthers: [false],
+    autoMoveDependents: [false],
   });
 
   /**
@@ -557,12 +571,15 @@ export class ProjectSettingsPage implements OnInit {
   protected async saveGeneral(): Promise<void> {
     const project = this.project();
     if (project === null) return;
-    const { name, description, membersCanAssignOthers } = this.generalForm.getRawValue();
+    const { name, description, membersCanAssignOthers, autoMoveDependents } =
+      this.generalForm.getRawValue();
     await this.run(async () => {
       const saved = await this.api.update(project.id, {
         name,
         description,
-        ...(project.ownerId !== null ? {} : { settings: { membersCanAssignOthers } }),
+        ...(project.ownerId !== null
+          ? {}
+          : { settings: { membersCanAssignOthers, autoMoveDependents } }),
       });
       // Saved: the form shows the stored values again.
       this.generalForm.markAsPristine();
@@ -702,6 +719,7 @@ export class ProjectSettingsPage implements OnInit {
       name: project.name,
       description: project.description,
       membersCanAssignOthers: project.settings.membersCanAssignOthers,
+      autoMoveDependents: project.settings.autoMoveDependents,
     });
   }
 

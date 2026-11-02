@@ -1,5 +1,40 @@
 # Decisions
 
+## M9 timeline implementation (2026-11-02)
+
+- Schema: one additive migration (`20261102120000_timeline_half_days`) adds
+  `startSecondHalf`, `dueFirstHalf`, `startNoEarlierThan` and
+  `startNoEarlierThanSecondHalf` to `WorkItem`, with defaults that leave existing
+  items unchanged. Item responses gain the matching fields; create and PATCH
+  accept the two half flags, and a cleared date resets its half. Pins change only
+  through the reschedule endpoint.
+- The planner (`planSchedule` in `@kloister/shared`) runs in both the API and the
+  web app. The API loads every visible item and link through `scoped()` for each
+  reschedule, so hidden items never shape or appear in a plan; requested items
+  resolve first (404 before any version check). `apply` re-checks versions and,
+  after a preview, refuses when the dependent moves differ; `only` applies exact
+  dates and pins (Undo). Each changed item keeps its ordinary audit entry with a
+  shared `rescheduleId`; dependent moves name `rescheduleTriggerId`, which the
+  activity history redacts for viewers who cannot see that item.
+- `GET /projects/:id/timeline` returns the visible links only (`TimelineDto`):
+  the web app already loads the visible items for every project screen.
+- `Project.settings.autoMoveDependents` is a flat, PM-only, audited key; project
+  creation writes `true`, a missing key reads as `false`, personal spaces refuse
+  it. Timeline routes answer 404 for personal spaces.
+- Web: `core/timeline-logic.ts` (rows, spans, typed dates, scale, conflicts,
+  outline moves, paste parsing), `core/reschedule.ts` (`RescheduleFlow`, provided
+  by the project shell, used by the timeline and the project drawer),
+  `pages/timeline/` (lazy route and the confirmation dialog). Global single-key
+  shortcuts ignore the grid, which handles its own keys. The bulk helper gains
+  status, priority, labels and adding an assignee.
+- Deviations from the plan, all recorded in docs/M9-PLAN.md §13: cells save on
+  commit rather than per row; no splitter or virtual scrolling; "Show on
+  timeline" sits in the drawer (cards and backlog rows have no menus); the Excel
+  sheet marks the current week in its header.
+- Exports: project workbooks gain a Timeline sheet built by
+  `items/snapshot-timeline.ts`; the workbook writer accepts an optional per-sheet
+  layout (outline levels, fills, bold rows, widths, frozen columns).
+
 ## Planning update: M9 project timeline (2026-11-02)
 
 - Owner request: a project timeline for planning and reviewing Epic → Feature →

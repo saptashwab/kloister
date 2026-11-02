@@ -538,3 +538,27 @@ suggestions, and label creation reuses the shared label palette.
 - **Audit log.** Actions in words grouped by area, the actor's name over their email, project
   key · name, the entity by name or key (never a current item title), detail lines such as
   "Changed title: Old → New", and the stored JSON behind a "Technical details" disclosure.
+
+## 16. Timeline (M9)
+
+The approved mockups (layout A, spreadsheet first) set the look; docs/M9-PLAN.md has the behaviour.
+
+- **Layout.** One scroll area: the grid on the left stays in place while the bars scroll sideways,
+  and the header row stays on top. Rows are 34 px, matching the grid and the bar tracks. A plan strip
+  above shows the plan's span, working days, days of work, the item count and conflicts.
+- **Cells.** Keys in mono, titles indented 16 px per level with the type tile and a disclosure
+  toggle for parents. Summary rows (parents) use `--k-ground`, bold muted values and read-only cells.
+  The focused cell has a 2 px inset primary ring; an edited cell holds an input with a 2 px primary
+  border. Selected rows use `--k-primary-soft`. Halves read "5 Nov, 2nd half" / "11 Nov, 1st half"
+  and are shown only when not the default; the drawer names them Morning and Afternoon.
+- **Bars.** Type colours from `--k-type-*`: Not started outlined on the soft tile colour, In progress
+  solid, Blocked striped with warn colours, Done in `--k-sunken`. Status is also in the bar's name
+  and the Status column, never colour alone. Conflicts get a danger ring and a dashed danger link;
+  pins show the pin icon. Summary rows show a dark bracket labelled with its duration and, when the
+  parent has its own dates, a dashed outline behind it. One-date items show a diamond marker.
+- **Scale.** Week zoom draws days (22 px) with weekends shaded; month zoom draws weeks; quarter zoom
+  months. Sprint bands sit at the top of the header; they become buttons that assign the selected
+  rows while a selection exists. The today line is the primary colour at 55 % opacity.
+- **Selection bar.** The backlog's bulk bar look: sprint, assign and status selects, outline and link
+  buttons, and More… for the rest. Results show as a status line with per-row reasons.
+- **Phone.** Below 600 px the timeline is a list of cards with dates and durations and no bars.

@@ -1,0 +1,207 @@
+// Timeline bars, scale, links and phone cards (SPEC §6.4), loaded with the timeline route only.
+app-timeline {
+  .track {
+    position: relative;
+    flex: none;
+    height: var(--k-size-34px);
+    border-bottom: var(--k-line) solid var(--k-border);
+    box-sizing: border-box;
+  }
+  .layer {
+    position: absolute;
+    top: var(--k-size-48px);
+    bottom: 0;
+    pointer-events: none;
+  }
+  .today {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--k-primary);
+    opacity: 0.55;
+  }
+  .bar {
+    position: absolute;
+    top: var(--k-size-9px);
+    height: var(--k-space-4);
+    box-sizing: border-box;
+    border-radius: var(--k-radius-sm);
+    border: 1.5px solid var(--bar);
+    background: var(--bar-soft);
+    cursor: grab;
+    touch-action: none;
+    outline: none;
+  }
+  .bar.progress {
+    background: var(--bar);
+  }
+  .bar.blocked {
+    background: repeating-linear-gradient(45deg, var(--bar-soft) 0 4px, var(--k-warn-soft) 4px 8px);
+    border-color: var(--k-warn-ink);
+  }
+  .bar.done {
+    background: var(--k-sunken);
+    border-color: var(--k-border-strong);
+  }
+  .bar.conflict {
+    box-shadow:
+      0 0 0 2px var(--k-surface),
+      0 0 0 3.5px var(--k-danger-ink);
+  }
+  .bar:focus-visible {
+    box-shadow:
+      0 0 0 2px var(--k-surface),
+      0 0 0 4px var(--k-primary);
+  }
+  .bar .edge {
+    position: absolute;
+    top: -2px;
+    bottom: -2px;
+    width: 7px;
+    cursor: ew-resize;
+  }
+  .bar .edge.l {
+    left: -4px;
+  }
+  .bar .edge.r {
+    right: -4px;
+  }
+  .marker {
+    position: absolute;
+    top: 10px;
+    width: 12px;
+    height: 12px;
+    margin-left: -6px;
+    transform: rotate(45deg);
+    border: 1.5px solid var(--bar);
+    background: var(--bar-soft);
+    box-sizing: border-box;
+  }
+  .bracket {
+    position: absolute;
+    top: 13px;
+    height: 6px;
+    background: var(--k-text-2);
+    border-radius: 2px;
+  }
+  .bracket::before,
+  .bracket::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    width: 3px;
+    height: 12px;
+    background: var(--k-text-2);
+  }
+  .bracket::before {
+    left: 0;
+  }
+  .bracket::after {
+    right: 0;
+  }
+  .own {
+    position: absolute;
+    top: 8px;
+    height: 18px;
+    border: 1.5px dashed var(--k-border-strong);
+    border-radius: var(--k-radius-sm);
+    box-sizing: border-box;
+  }
+  .blabel {
+    position: absolute;
+    top: var(--k-size-9px);
+    height: var(--k-space-4);
+    display: flex;
+    align-items: center;
+    gap: var(--k-space-1);
+    font-size: var(--k-small);
+    color: var(--k-muted);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .tick {
+    position: absolute;
+    font-size: var(--k-small);
+    color: var(--k-muted);
+    overflow: hidden;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+  .tick.up {
+    top: var(--k-size-18px);
+    padding-left: var(--k-space-1);
+    font-weight: 600;
+    color: var(--k-text-2);
+    border-left: var(--k-line) solid var(--k-border);
+  }
+  .tick.low {
+    top: var(--k-size-30px);
+    text-align: center;
+  }
+  .band {
+    position: absolute;
+    top: 2px;
+    height: 14px;
+    padding: 0 var(--k-space-1);
+    border: 0;
+    border-radius: var(--k-radius-sm);
+    background: var(--k-primary-soft);
+    color: var(--k-primary-ink);
+    font: 600 var(--k-small) var(--k-font);
+    text-align: left;
+    overflow: hidden;
+    white-space: nowrap;
+    box-sizing: border-box;
+  }
+  button.band {
+    cursor: pointer;
+    outline: 1px dashed var(--k-primary-line);
+  }
+  svg.links {
+    position: absolute;
+    top: 0;
+    left: 0;
+    overflow: visible;
+  }
+  svg.links path {
+    fill: none;
+    stroke: var(--k-control-border);
+    stroke-width: 1.3;
+  }
+  svg.links path.bad {
+    stroke: var(--k-danger-ink);
+    stroke-dasharray: 4 3;
+  }
+  .add input {
+    flex: 1;
+    height: var(--k-size-28px);
+    border: var(--k-line) dashed var(--k-border-strong);
+    border-radius: var(--k-radius-sm);
+    padding: 0 var(--k-space-2);
+    font: inherit;
+    background: transparent;
+    color: var(--k-text);
+  }
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: var(--k-space-2);
+  }
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--k-space-1);
+    padding: var(--k-space-2) var(--k-space-3);
+    border: var(--k-line) solid var(--k-border);
+    border-radius: var(--k-radius-md);
+    background: var(--k-surface);
+    color: inherit;
+    text-decoration: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .row.flash .cell {
+      animation: none;
+    }
+  }
+}

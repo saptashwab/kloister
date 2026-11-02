@@ -1,0 +1,204 @@
+// Timeline toolbar, selection bar and grid (SPEC §6.4), loaded with the timeline route only.
+app-timeline {
+  & {
+    display: flex;
+    flex-direction: column;
+    gap: var(--k-space-2);
+    padding: var(--k-space-3) var(--k-gutter) var(--k-space-6);
+  }
+  .tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--k-space-2);
+  }
+  .tools mat-form-field {
+    width: var(--k-size-140px);
+  }
+  .grow {
+    flex: 1;
+  }
+  .mode {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--k-space-1);
+    padding: var(--k-space-1) var(--k-space-3);
+    border-radius: var(--k-radius-full);
+    background: var(--k-sunken);
+    color: var(--k-text-2);
+    font-size: var(--k-small);
+  }
+  .mode.auto {
+    background: var(--k-success-soft);
+    color: var(--k-success-ink);
+  }
+  .bulk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--k-space-2);
+    padding: var(--k-space-2) var(--k-space-3);
+    border: var(--k-line) solid var(--k-primary-line);
+    border-radius: var(--k-radius-md);
+    background: var(--k-primary-soft);
+    color: var(--k-primary-ink);
+  }
+  .bulk mat-form-field {
+    width: var(--k-size-140px);
+  }
+  .plan {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--k-space-4);
+    align-items: baseline;
+    padding: var(--k-space-2) var(--k-space-3);
+    border: var(--k-line) solid var(--k-border);
+    border-radius: var(--k-radius-md) var(--k-radius-md) 0 0;
+    border-bottom: 0;
+    background: var(--k-surface);
+  }
+  .plan b {
+    font-size: 1.05rem;
+  }
+  .muted {
+    color: var(--k-muted);
+  }
+  .scroller {
+    position: relative;
+    overflow: auto;
+    max-height: calc(100dvh - var(--k-size-320px));
+    min-height: var(--k-size-200px);
+    border: var(--k-line) solid var(--k-border);
+    border-radius: 0 0 var(--k-radius-md) var(--k-radius-md);
+    background: var(--k-surface);
+  }
+  .canvas {
+    position: relative;
+  }
+  // Overrides the app-wide .row (wrap and gap): grid cells and the bar
+  // track must stay on one line.
+  .row {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0;
+    align-items: stretch;
+    height: var(--k-size-34px);
+  }
+  .cells {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    display: flex;
+    flex: none;
+    background: var(--k-surface);
+    border-right: var(--k-line) solid var(--k-border-strong);
+  }
+  .head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    height: var(--k-size-48px);
+  }
+  .head .cells {
+    z-index: 4;
+    align-items: flex-end;
+  }
+  .head .cell {
+    color: var(--k-muted);
+    font-size: var(--k-small);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: var(--k-line) solid var(--k-border);
+  }
+  .head .scale {
+    background: var(--k-surface);
+    border-bottom: var(--k-line) solid var(--k-border);
+  }
+  .cell {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--k-space-1);
+    height: var(--k-size-34px);
+    padding: 0 var(--k-space-2);
+    box-sizing: border-box;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    border-bottom: var(--k-line) solid var(--k-border);
+    font-size: var(--k-body-sm);
+    outline: none;
+  }
+  .cell:focus-visible,
+  .cell.focus {
+    box-shadow: inset 0 0 0 2px var(--k-primary);
+  }
+  .cell.num {
+    justify-content: flex-end;
+  }
+  .cell .text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cell input {
+    width: 100%;
+    height: var(--k-size-28px);
+    box-sizing: border-box;
+    border: 2px solid var(--k-primary);
+    border-radius: var(--k-radius-sm);
+    padding: 0 var(--k-space-1);
+    font: inherit;
+    background: var(--k-surface);
+    color: var(--k-text);
+  }
+  .row.summary .cell {
+    background: var(--k-ground);
+  }
+  .row.summary .sum {
+    font-weight: 600;
+    color: var(--k-text-2);
+  }
+  .row.selected .cell {
+    background: var(--k-primary-soft);
+  }
+  .row.flash .cell {
+    animation: k-flash 2.5s ease-out;
+  }
+  @keyframes k-flash {
+    from {
+      background: var(--k-primary-soft);
+    }
+  }
+  .title-only {
+    color: var(--k-muted);
+    font-style: italic;
+  }
+  .toggle {
+    display: inline-grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--k-muted);
+    cursor: pointer;
+  }
+  .toggle.open app-icon {
+    transform: rotate(90deg);
+  }
+  .key {
+    color: var(--k-text-2);
+    text-decoration: none;
+  }
+  .key:hover {
+    text-decoration: underline;
+  }
+  .warn {
+    color: var(--k-danger-ink);
+  }
+  .pin {
+    color: var(--k-primary);
+  }
+}

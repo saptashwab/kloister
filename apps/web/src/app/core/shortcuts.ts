@@ -97,7 +97,8 @@ export class Shortcuts {
     if (
       target instanceof HTMLElement &&
       target.closest(
-        'input, textarea, select, [contenteditable], [role="textbox"], [role="combobox"]',
+        // A timeline grid cell handles its own typing (M9), like a text field.
+        'input, textarea, select, [contenteditable], [role="textbox"], [role="combobox"], [role="grid"]',
       )
     )
       return;

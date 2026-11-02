@@ -10,6 +10,8 @@ outbound email or external services at runtime.
 
 - Configurable boards, labels, assignments, priorities, due dates with optional times and status rules.
 - Epics, Features, Stories, Tasks and Bugs, with hierarchy, dependencies and sprints.
+- A project **Timeline**: plan in a spreadsheet-like grid beside bars, with half-day working
+  durations, predecessors that move dependent items automatically, totals and bulk row actions.
 - My work across projects, private personal spaces, project roles and optional teams.
 - Rich descriptions, checklists, notes, mentions, attachments and pasted images.
 - Item duplication, independent copies per person, Excel snapshots and offline archives.

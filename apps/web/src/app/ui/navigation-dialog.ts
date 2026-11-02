@@ -84,6 +84,15 @@ import { dialogMotion } from './motion';
             <dd>{{ s.action }}</dd>
           }
         </dl>
+        <h3>Timeline</h3>
+        <dl class="k-shortcuts">
+          @for (s of timelineShortcuts; track s.key) {
+            <dt>
+              <kbd>{{ s.key }}</kbd>
+            </dt>
+            <dd>{{ s.action }}</dd>
+          }
+        </dl>
         <p class="muted">
           Single keys work outside text fields. Tab reaches all controls; item fields and reorder
           menus offer alternatives to dragging.
@@ -159,6 +168,20 @@ export class NavigationDialog {
     { key: 'L', action: 'Change labels on the focused item' },
     { key: 'Esc', action: 'Close the drawer or a menu' },
     { key: '?', action: 'Show this reference' },
+  ];
+  /** Keys of the project timeline grid and bars (SPEC §6.4, M9). */
+  protected readonly timelineShortcuts = [
+    { key: 'Arrows', action: 'Move between cells' },
+    { key: 'Enter / F2', action: 'Edit the cell, or open the item from its key' },
+    { key: 'Enter (editing)', action: 'Save and go to the next row; adds a row on the last one' },
+    { key: 'Tab (editing)', action: 'Save and go to the next cell' },
+    { key: 'Esc', action: 'Cancel editing, or clear the selection' },
+    { key: 'Space', action: 'Select or unselect the row' },
+    { key: 'Shift / Ctrl + click', action: 'Select a range / add or remove one row' },
+    { key: 'Ctrl + ] / Ctrl + [', action: 'Indent / outdent the row or the selection' },
+    { key: 'Insert', action: 'Add a row below' },
+    { key: 'Left / Right (bar)', action: 'Move the bar by half a day; Enter saves' },
+    { key: 'Shift + Left / Right (bar)', action: 'Change the duration by half a day' },
   ];
   /** Destinations filtered by the typed text; no directory or new API call. */
   protected readonly results = computed(() => {

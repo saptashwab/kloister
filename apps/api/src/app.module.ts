@@ -10,6 +10,7 @@ import { BrandingModule } from './branding/branding.module.js';
 import { ConfigModule } from './config/config.module.js';
 import { HealthModule } from './health/health.module.js';
 import { ItemsModule } from './items/items.module.js';
+import { TimelineModule } from './timeline/timeline.module.js';
 import { LoggingModule } from './logging/logging.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -37,6 +38,7 @@ import { UsersModule } from './users/users.module.js';
     ProjectsModule,
     BoardModule,
     ItemsModule,
+    TimelineModule,
     AnnotationsModule,
     NotificationsModule,
     AdminSettingsModule,

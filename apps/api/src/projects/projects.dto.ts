@@ -140,6 +140,11 @@ export class ProjectSettingsChangeDto implements Partial<ProjectSettings> {
   @OmittableNotNull()
   @IsIn(Object.values(LabelStyle))
   labelStyle?: LabelStyle;
+
+  /** Timeline date changes move dependent items without asking (SPEC §6.4). */
+  @OmittableNotNull()
+  @IsBoolean()
+  autoMoveDependents?: boolean;
 }
 
 /** Body of `PATCH /projects/:id`. */

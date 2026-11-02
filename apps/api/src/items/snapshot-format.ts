@@ -2,8 +2,28 @@ import sanitizeHtml from 'sanitize-html';
 import { decodeHTML } from 'entities';
 import { randomUUID } from 'node:crypto';
 
+/**
+ * Optional presentation of a sheet (the M9 Timeline sheet). Row indexes
+ * count data rows from 0, after the header row.
+ */
+export interface SnapshotLayout {
+  /** Excel outline level per data row (0 for none), for collapsible groups. */
+  outlineLevels?: number[];
+  /** Solid fill colour (`RRGGBB`) per data row and column, or null. */
+  fills?: (string | null)[][];
+  /** Data rows shown in bold. */
+  boldRows?: number[];
+  /** Column widths in characters; others use the default. */
+  widths?: number[];
+  /** Columns kept in view while scrolling sideways. */
+  frozenColumns?: number;
+}
+
 /** Table data containing only caller-readable values. */
-export type SnapshotTables = Record<string, { headers: string[]; rows: string[][] }>;
+export type SnapshotTables = Record<
+  string,
+  { headers: string[]; rows: string[][]; layout?: SnapshotLayout }
+>;
 
 /**
  * Makes rich text readable in spreadsheet cells, retaining block and line boundaries.
@@ -78,13 +98,24 @@ export async function snapshotWorkbook(tables: SnapshotTables): Promise<Buffer> 
   for (const [name, table] of Object.entries(tables)) {
     let sheetNumber = 1;
     let sheet = workbook.addWorksheet(name);
+    const layout = table.layout;
     const setup = () => {
       sheet.addRow(table.headers);
-      sheet.views = [{ state: 'frozen', ySplit: 1 }];
-      sheet.columns.forEach((column) => {
-        column.width = 28;
+      sheet.views = [{ state: 'frozen', ySplit: 1, xSplit: layout?.frozenColumns ?? 0 }];
+      sheet.columns.forEach((column, index) => {
+        column.width = layout?.widths?.[index] ?? 28;
         column.alignment = { vertical: 'top', wrapText: true };
       });
+      if (layout?.outlineLevels !== undefined) {
+        // Summary rows sit above their children, as on the timeline.
+        sheet.properties.outlineProperties = { summaryBelow: false, summaryRight: false };
+        sheet.pageSetup = {
+          orientation: 'landscape',
+          fitToPage: true,
+          fitToWidth: 1,
+          fitToHeight: 0,
+        };
+      }
       sheet.getRow(1).font = { bold: true };
       sheet.autoFilter = {
         from: { row: 1, column: 1 },
@@ -92,7 +123,7 @@ export async function snapshotWorkbook(tables: SnapshotTables): Promise<Buffer> 
       };
     };
     setup();
-    for (const data of table.rows) {
+    for (const [dataIndex, data] of table.rows.entries()) {
       if (sheet.rowCount >= 1_048_576) {
         sheet = workbook.addWorksheet(`${name} ${++sheetNumber}`);
         setup();
@@ -130,6 +161,17 @@ export async function snapshotWorkbook(tables: SnapshotTables): Promise<Buffer> 
       // Formula-like strings are never assigned as formula or hyperlink objects.
       row.eachCell((cell) => {
         cell.numFmt = '@';
+      });
+      const level = layout?.outlineLevels?.[dataIndex] ?? 0;
+      if (level > 0) row.outlineLevel = Math.min(level, 7);
+      if (layout?.boldRows?.includes(dataIndex) === true) row.font = { bold: true };
+      layout?.fills?.[dataIndex]?.forEach((colour, column) => {
+        if (colour === null) return;
+        row.getCell(column + 1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: `FF${colour}` },
+        };
       });
       const key = data[0];
       if (key !== undefined && name === 'Items')

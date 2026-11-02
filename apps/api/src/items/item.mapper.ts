@@ -107,8 +107,14 @@ export function toItemDto(
     sprintId: row.sprintId,
     teamId: row.teamId,
     startDate: fromDbDate(row.startDate),
+    startSecondHalf: row.startSecondHalf,
     dueDate: fromDbDate(row.dueDate),
+    dueFirstHalf: row.dueFirstHalf,
     dueTime: fromDbTime(row.dueTime),
+    startNoEarlierThan:
+      row.startNoEarlierThan === null
+        ? null
+        : { date: fromDbDate(row.startNoEarlierThan)!, second: row.startNoEarlierThanSecondHalf },
     position: row.position,
     createdById: row.createdById,
     assigneeIds: row.assignees.map((a) => a.userId),

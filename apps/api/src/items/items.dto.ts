@@ -184,10 +184,20 @@ export class CreateItemDto implements CreateItemRequest {
   @IsCalendarDate()
   startDate?: string | null;
 
+  /** Starts in the 2nd half of the start date (M9). */
+  @OmittableNotNull()
+  @IsBoolean()
+  startSecondHalf?: boolean;
+
   /** Due date. */
   @Nullable()
   @IsCalendarDate()
   dueDate?: string | null;
+
+  /** Finishes after the 1st half of the due date (M9). */
+  @OmittableNotNull()
+  @IsBoolean()
+  dueFirstHalf?: boolean;
 
   /** Due time `HH:MM` on the due date. */
   @Nullable()
@@ -268,10 +278,20 @@ export class UpdateItemDto implements UpdateItemRequest {
   @IsCalendarDate()
   startDate?: string | null;
 
+  /** Starts in the 2nd half of the start date (M9). */
+  @OmittableNotNull()
+  @IsBoolean()
+  startSecondHalf?: boolean;
+
   /** New due date, or null. */
   @Nullable()
   @IsCalendarDate()
   dueDate?: string | null;
+
+  /** Finishes after the 1st half of the due date (M9). */
+  @OmittableNotNull()
+  @IsBoolean()
+  dueFirstHalf?: boolean;
 
   /** New due time `HH:MM`, or null; needs a due date. */
   @Nullable()

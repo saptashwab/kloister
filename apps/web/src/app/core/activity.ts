@@ -28,6 +28,9 @@ const FIELD_LABELS: Record<string, string> = {
   startDate: 'start date',
   dueDate: 'due date',
   dueTime: 'due time',
+  startSecondHalf: 'start half',
+  dueFirstHalf: 'finish half',
+  startNoEarlierThan: 'pinned start',
   sprintId: 'sprint',
   teamId: 'team',
   bucketId: 'bucket',
@@ -84,6 +87,14 @@ function formatValue(field: string, value: unknown, names: ActivityNames): strin
       return name(value, names.team.bind(names), 'a deleted team');
     case 'parentId':
       return name(value, names.item.bind(names), 'another item');
+    case 'startSecondHalf':
+      return value === true ? 'afternoon' : 'morning';
+    case 'dueFirstHalf':
+      return value === true ? 'morning' : 'afternoon';
+    case 'startNoEarlierThan':
+      return isRecord(value)
+        ? `${scalar(value['date'])}${value['second'] === true ? ', afternoon' : ''}`
+        : 'none';
     case 'assigneeIds':
     case 'labelIds': {
       if (!Array.isArray(value) || value.length === 0) return 'none';
@@ -133,8 +144,15 @@ export function describeActivity(entry: AuditEntryDto, names: ActivityNames): st
   switch (entry.action) {
     case AuditAction.ITEM_CREATED:
       return [`created this ${TYPE_LABELS[meta['type'] as ItemType] ?? 'item'}`];
-    case AuditAction.ITEM_UPDATED:
-      return describeChanges(meta['changes'], names);
+    case AuditAction.ITEM_UPDATED: {
+      const lines = describeChanges(meta['changes'], names);
+      // A timeline move of a dependent item names the item that caused it,
+      // unless the API redacted it for this viewer (M9).
+      if (typeof meta['rescheduleTriggerId'] === 'string')
+        lines.push(`moved with ${names.item(meta['rescheduleTriggerId']) ?? 'another item'}`);
+      else if ('rescheduleTriggerId' in meta) lines.push('moved with a dependency change');
+      return lines;
+    }
     case AuditAction.ITEM_MOVED: {
       const from = formatValue('bucketId', meta['from'], names);
       const to = formatValue('bucketId', meta['to'], names);

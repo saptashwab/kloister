@@ -32,28 +32,28 @@ enum IntroductionState {
 
 /// A local account. Accounts are created by admins only; there is no self sign-up.
 model User {
-  id                 String     @id @default(uuid()) @db.Uuid
+  id                 String            @id @default(uuid()) @db.Uuid
   /// Stored lowercased so lookups are case-insensitive.
-  email              String     @unique
+  email              String            @unique
   displayName        String
   /// argon2id hash; never returned by the API.
   passwordHash       String
-  systemRole         SystemRole @default(USER)
+  systemRole         SystemRole        @default(USER)
   /// Set when an admin creates the account or resets its password.
-  mustChangePassword Boolean    @default(true)
+  mustChangePassword Boolean           @default(true)
   /// Only new accounts explicitly enroll; password resets preserve this state.
-  introductionState IntroductionState @default(EXEMPT)
-  isActive           Boolean    @default(true)
-  failedLoginCount   Int        @default(0)
+  introductionState  IntroductionState @default(EXEMPT)
+  isActive           Boolean           @default(true)
+  failedLoginCount   Int               @default(0)
   lockedUntil        DateTime?
   /// Per-user theme override (M6); empty means "use default".
-  themePrefs         Json       @default("{}")
+  themePrefs         Json              @default("{}")
   lastLoginAt        DateTime?
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
   /// Sole private space, kept unchanged when this account is deactivated.
-  personalSpace Project? @relation("PersonalOwner")
+  personalSpace Project?        @relation("PersonalOwner")
   sessions      Session[]
   auditLogs     AuditLog[]
   memberships   ProjectMember[]
@@ -161,56 +161,58 @@ model Project {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  members ProjectMember[]
-  teams   Team[]
-  buckets Bucket[]
-  sprints Sprint[]
-  labels  Label[]
-  items   WorkItem[]
+  members        ProjectMember[]
+  teams          Team[]
+  buckets        Bucket[]
+  sprints        Sprint[]
+  labels         Label[]
+  items          WorkItem[]
   adoDestination AdoDestination?
 }
 
 /// One reviewed destination per ordinary project. Remote tuples are deliberately non-exclusive.
 model AdoDestination {
-  id String @id @default(uuid()) @db.Uuid
-  projectId String @unique @db.Uuid
-  organization String
-  remoteProject String
-  profile Json
-  revision Int @default(1)
+  id                    String             @id @default(uuid()) @db.Uuid
+  projectId             String             @unique @db.Uuid
+  organization          String
+  remoteProject         String
+  profile               Json
+  revision              Int                @default(1)
   /// Set by a project PM: every transfer must use Detailed review.
-  requireDetailedReview Boolean @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  links AdoItemLink[]
-  batches AdoTransferBatch[]
+  requireDetailedReview Boolean            @default(false)
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  project               Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  links                 AdoItemLink[]
+  batches               AdoTransferBatch[]
+
   @@unique([id, projectId])
 }
 
 /// Durable reference and observations; original item identity survives deletion as a tombstone.
 model AdoItemLink {
-  id String @id @default(uuid()) @db.Uuid
-  destinationId String @db.Uuid
-  projectId String @db.Uuid
+  id                  String         @id @default(uuid()) @db.Uuid
+  destinationId       String         @db.Uuid
+  projectId           String         @db.Uuid
   /// Intentionally no cascading item relation: deleted identities must never be reused.
-  itemId String @db.Uuid
-  reference String @unique
-  remoteId String?
-  tombstonedAt DateTime?
-  localBaseline Json @default("{}")
-  remoteBaseline Json @default("{}")
-  observation Json @default("{}")
-  observedAt DateTime?
+  itemId              String         @db.Uuid
+  reference           String         @unique
+  remoteId            String?
+  tombstonedAt        DateTime?
+  localBaseline       Json           @default("{}")
+  remoteBaseline      Json           @default("{}")
+  observation         Json           @default("{}")
+  observedAt          DateTime?
   observationRevision Int?
-  pendingBatchId String? @db.Uuid
+  pendingBatchId      String?        @db.Uuid
   /// Exact generated footer, removed only on a validated reference round trip.
-  generatedSuffix String @default("")
+  generatedSuffix     String         @default("")
   /// Exact reviewed outbound values, independent of remote creation defaults.
-  intent Json @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  destination AdoDestination @relation(fields: [destinationId, projectId], references: [id, projectId], onDelete: Cascade)
+  intent              Json           @default("{}")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  destination         AdoDestination @relation(fields: [destinationId, projectId], references: [id, projectId], onDelete: Cascade)
+
   @@unique([destinationId, itemId])
   @@unique([destinationId, remoteId])
   @@index([projectId, itemId])
@@ -218,26 +220,27 @@ model AdoItemLink {
 
 /// Recoverable bounded transfer intent. Compact retry receipts survive content expiry.
 model AdoTransferBatch {
-  id String @id @default(uuid()) @db.Uuid
-  destinationId String @db.Uuid
-  projectId String @db.Uuid
-  creatorId String @db.Uuid
-  direction String
-  mode String
+  id               String           @id @default(uuid()) @db.Uuid
+  destinationId    String           @db.Uuid
+  projectId        String           @db.Uuid
+  creatorId        String           @db.Uuid
+  direction        String
+  mode             String
   /// Review mode of this batch; batches before M8.1 were all Detailed.
-  review String @default("detailed")
-  state String @default("PREVIEW")
-  revision Int
-  idempotencyKey String
-  fileDigest String
-  digest String
-  content Json @default("{}")
-  completedAt DateTime?
+  review           String           @default("detailed")
+  state            String           @default("PREVIEW")
+  revision         Int
+  idempotencyKey   String
+  fileDigest       String
+  digest           String
+  content          Json             @default("{}")
+  completedAt      DateTime?
   contentExpiredAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  destination AdoDestination @relation(fields: [destinationId, projectId], references: [id, projectId], onDelete: Cascade)
-  rows AdoTransferRow[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  destination      AdoDestination   @relation(fields: [destinationId, projectId], references: [id, projectId], onDelete: Cascade)
+  rows             AdoTransferRow[]
+
   @@unique([destinationId, idempotencyKey])
   @@unique([id, projectId])
   @@index([state, completedAt])
@@ -245,17 +248,18 @@ model AdoTransferBatch {
 
 /// Per-row normalized bounded recovery data; no uploaded archive or historical authorship.
 model AdoTransferRow {
-  id String @id @default(uuid()) @db.Uuid
-  batchId String @db.Uuid
-  projectId String @db.Uuid
-  index Int
-  itemId String? @db.Uuid
-  remoteId String?
-  result String
-  content Json @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  batch AdoTransferBatch @relation(fields: [batchId, projectId], references: [id, projectId], onDelete: Cascade)
+  id        String           @id @default(uuid()) @db.Uuid
+  batchId   String           @db.Uuid
+  projectId String           @db.Uuid
+  index     Int
+  itemId    String?          @db.Uuid
+  remoteId  String?
+  result    String
+  content   Json             @default("{}")
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  batch     AdoTransferBatch @relation(fields: [batchId, projectId], references: [id, projectId], onDelete: Cascade)
+
   @@unique([batchId, index])
 }
 
@@ -411,36 +415,44 @@ model Label {
 /// item's project. Sprint and team are checked against the project in code,
 /// because deleting a sprint or team must clear only that one column.
 model WorkItem {
-  id          String     @id @default(uuid()) @db.Uuid
-  projectId   String     @db.Uuid
+  id                           String     @id @default(uuid()) @db.Uuid
+  projectId                    String     @db.Uuid
   /// Per-project sequence taken from `Project.lastItemNumber`.
-  number      Int
-  type        ItemType
+  number                       Int
+  type                         ItemType
   /// Deleting an item with children is refused unless its whole subtree is
   /// deleted in the same statement (SPEC §4.1).
-  parentId    String?    @db.Uuid
-  title       String
+  parentId                     String?    @db.Uuid
+  title                        String
   /// Sanitized HTML (SPEC §5).
-  description String     @default("")
-  status      ItemStatus @default(NOT_STARTED)
+  description                  String     @default("")
+  status                       ItemStatus @default(NOT_STARTED)
   /// 1 (highest) to 4.
-  priority    Int        @default(2)
+  priority                     Int        @default(2)
   /// Required for STORY, TASK and BUG; optional for EPIC and FEATURE. A
   /// bucket that still holds items cannot be deleted.
-  bucketId    String?    @db.Uuid
-  sprintId    String?    @db.Uuid
-  teamId      String?    @db.Uuid
-  startDate   DateTime?  @db.Date
-  dueDate     DateTime?  @db.Date
+  bucketId                     String?    @db.Uuid
+  sprintId                     String?    @db.Uuid
+  teamId                       String?    @db.Uuid
+  startDate                    DateTime?  @db.Date
+  /// Starts in the 2nd half of startDate (timeline half days, SPEC §6.4).
+  startSecondHalf              Boolean    @default(false)
+  dueDate                      DateTime?  @db.Date
+  /// Finishes after the 1st half of dueDate (timeline half days, SPEC §6.4).
+  dueFirstHalf                 Boolean    @default(false)
   /// Optional due time on dueDate, minutes after midnight (wall-clock, no time zone).
-  dueTime     Int?       @db.SmallInt
+  dueTime                      Int?       @db.SmallInt
+  /// Timeline pin, "start no earlier than" (SPEC §6.4); null without a pin.
+  startNoEarlierThan           DateTime?  @db.Date
+  /// The pin is the 2nd half of startNoEarlierThan.
+  startNoEarlierThanSecondHalf Boolean    @default(false)
   /// Order within the bucket, ascending (fractional index).
-  position    Float
-  createdById String     @db.Uuid
+  position                     Float
+  createdById                  String     @db.Uuid
   /// Set when the status becomes DONE, cleared when it leaves DONE.
-  completedAt DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  completedAt                  DateTime?
+  createdAt                    DateTime   @default(now())
+  updatedAt                    DateTime   @updatedAt
 
   project       Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
   parent        WorkItem?            @relation("WorkItemHierarchy", fields: [parentId, projectId], references: [id, projectId], onDelete: NoAction)

@@ -155,7 +155,9 @@ export class ProjectsService {
             key: dto.key,
             name: dto.name,
             description: dto.description ?? '',
-            settings: { ...DEFAULT_PROJECT_SETTINGS },
+            // New projects move dependent timeline items automatically; older
+            // projects keep the confirmation until a PM switches (SPEC §6.4).
+            settings: { ...DEFAULT_PROJECT_SETTINGS, autoMoveDependents: true },
             buckets: {
               create: DEFAULT_BUCKETS.map((bucket, index) => ({
                 ...bucket,
@@ -248,6 +250,8 @@ export class ProjectsService {
         'settings.membersCanAssignOthers',
         'Personal spaces do not have assignments',
       );
+    if (access.project.ownerId !== null && dto.settings?.autoMoveDependents !== undefined)
+      throw invalidField('settings.autoMoveDependents', 'Personal spaces do not have a timeline');
     const id = access.project.id;
     // The row is re-read inside a serializable transaction so settings are
     // merged into the latest stored JSON (concurrent edits to different keys
@@ -307,6 +311,16 @@ export class ProjectsService {
             changes['settings.labelStyle'] = {
               from: settings.labelStyle,
               to: settingsChange.labelStyle,
+            };
+          }
+          if (
+            settingsChange.autoMoveDependents !== undefined &&
+            settingsChange.autoMoveDependents !== settings.autoMoveDependents
+          ) {
+            changedSettings.autoMoveDependents = settingsChange.autoMoveDependents;
+            changes['settings.autoMoveDependents'] = {
+              from: settings.autoMoveDependents,
+              to: settingsChange.autoMoveDependents,
             };
           }
           if (Object.keys(changedSettings).length > 0) {

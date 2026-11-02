@@ -208,6 +208,12 @@ export interface ProjectSettings {
   statusToBucket: StatusToBucket;
   /** How labels are drawn on cards and in the drawer (SPEC §4, §6; set by PMs). */
   labelStyle: LabelStyle;
+  /**
+   * Timeline date changes move dependent items without asking (SPEC §6.4, M9).
+   * Off when missing, so existing projects keep the confirmation; new projects
+   * start with it on.
+   */
+  autoMoveDependents: boolean;
 }
 
 /**
@@ -232,6 +238,7 @@ export const DEFAULT_PROJECT_SETTINGS: ProjectSettings = {
   membersCanAssignOthers: false,
   statusToBucket: {},
   labelStyle: LabelStyle.SOLID,
+  autoMoveDependents: false,
 };
 
 /** A project as the API returns it, from the caller's point of view. */
