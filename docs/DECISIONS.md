@@ -1,5 +1,14 @@
 # Decisions
 
+## Planning: M10 live updates (2026-11-02)
+
+- Proposed in docs/M10-PLAN.md at the owner's request: live board, backlog, timeline, drawer, notifications,
+  My work, sprints and settings effects. Server-Sent Events rather than WebSockets (one-way traffic, plain
+  proxying, no extra Apache module); PostgreSQL LISTEN/NOTIFY published from the audited write so only committed
+  changes are announced; events carry ids and visibility facts only, and the client refetches through the scoped
+  API. Open questions (httpd fallback line, conflict notice, admin switch default, highlight text) await the
+  owner; no implementation yet.
+
 ## M9.3 own items until scheduled, suggested changes (2026-11-02)
 
 - Owner approved both proposals. A Member's own item stays editable and deletable until it is scheduled (start
