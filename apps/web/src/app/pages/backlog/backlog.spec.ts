@@ -91,6 +91,26 @@ describe('BacklogPage', () => {
     expect(rows[1]?.querySelector('mat-checkbox')).not.toBeNull();
   });
 
+  it('marks the cell of the field someone edits and reads the sentence once per row (DESIGN §9.1)', async () => {
+    const { root, fixture } = await render([makeItem(3)]);
+    TestBed.inject(ProjectContext).presence.set([
+      { userId: 'u1', itemId: 'i3', action: 'editing', field: 'status', view: 'backlog' },
+    ]);
+    await settle(fixture);
+    const row = root.querySelector<HTMLElement>('tbody tr')!;
+    const cells = [...row.querySelectorAll('td')];
+    const marked = cells.filter((c) => c.classList.contains('k-pm-strong'));
+    expect(marked).toHaveLength(1);
+    expect(marked[0]?.textContent).toContain('Not started');
+    expect(marked[0]?.querySelector('app-presence-tag')?.getAttribute('title')).toBe(
+      'Ann is editing the status',
+    );
+    const named = [...row.querySelectorAll('[role="img"]')].filter(
+      (e) => e.getAttribute('aria-label') === 'Ann is editing the status',
+    );
+    expect(named).toHaveLength(1);
+  });
+
   it('bulk-sets the sprint item by item, skipping items the caller cannot edit', async () => {
     const editable = makeItem(3);
     const locked = makeItem(4, { can: readOnly });

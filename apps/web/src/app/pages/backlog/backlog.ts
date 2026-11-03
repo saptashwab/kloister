@@ -428,14 +428,14 @@ function backlogColumn(entry: PresenceEntryDto): BacklogMark {
                 @let mItem = rowMark(row.node.id, 'item');
                 <td [style.padding-left.px]="10 + row.depth * 24" [appPresenceMark]="mItem">
                   @if (mItem) {
-                    <app-presence-tag [entry]="mItem" place="inside" />
+                    <app-presence-tag [entry]="mItem" place="inside" [announce]="false" />
                   }
                   <ng-container *ngTemplateOutlet="itemCell; context: { $implicit: row }" />
                 </td>
                 @let mStatus = rowMark(row.node.id, 'status');
                 <td [appPresenceMark]="mStatus">
                   @if (mStatus) {
-                    <app-presence-tag [entry]="mStatus" place="inside" />
+                    <app-presence-tag [entry]="mStatus" place="inside" [announce]="false" />
                   }
                   @if (item) {
                     <app-status-pill [status]="item.status" />
@@ -444,7 +444,7 @@ function backlogColumn(entry: PresenceEntryDto): BacklogMark {
                 @let mSprint = rowMark(row.node.id, 'sprint');
                 <td [appPresenceMark]="mSprint">
                   @if (mSprint) {
-                    <app-presence-tag [entry]="mSprint" place="inside" />
+                    <app-presence-tag [entry]="mSprint" place="inside" [announce]="false" />
                   }
                   {{ item ? sprintName(item) : '' }}
                   @if (item && outOfStorySprint(item)) {
@@ -454,14 +454,14 @@ function backlogColumn(entry: PresenceEntryDto): BacklogMark {
                 @let mBucket = rowMark(row.node.id, 'bucket');
                 <td [appPresenceMark]="mBucket">
                   @if (mBucket) {
-                    <app-presence-tag [entry]="mBucket" place="inside" />
+                    <app-presence-tag [entry]="mBucket" place="inside" [announce]="false" />
                   }
                   {{ item ? bucketName(item) : '' }}
                 </td>
                 @let mAssignees = rowMark(row.node.id, 'assignees');
                 <td [appPresenceMark]="mAssignees">
                   @if (mAssignees) {
-                    <app-presence-tag [entry]="mAssignees" place="inside" />
+                    <app-presence-tag [entry]="mAssignees" place="inside" [announce]="false" />
                   }
                   {{ item ? assigneeNames(item) : '' }}
                   @if (ctx.presenceByItem().get(row.node.id); as people) {

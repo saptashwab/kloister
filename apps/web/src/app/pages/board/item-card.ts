@@ -149,7 +149,7 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
     @let i = item();
     @if (mark(); as pm) {
       @if (strong()) {
-        <app-presence-tag [entry]="pm" what="this card" place="inside" />
+        <app-presence-tag [entry]="pm" what="this card" place="inside" [announce]="false" />
       }
     }
     @if (cover(); as colour) {

@@ -807,7 +807,7 @@ interface BarDraft {
                       (dblclick)="startEdit(i, ci, null)"
                     >
                       @if (otherEditor(r.node.id, c.id); as pm) {
-                        <app-presence-tag [entry]="pm" place="inside" />
+                        <app-presence-tag [entry]="pm" place="inside" [announce]="!barPeople(r)" />
                       }
                       @if (editing(); as e) {
                         @if (e.row === i && e.col === ci) {
@@ -2461,6 +2461,18 @@ export class TimelinePage implements OnInit {
       this.ctx.presenceByItem().get(itemId),
       (p) => p.action === PresenceAction.MOVING,
     );
+  }
+
+  /**
+   * Whether a row's bar label lists its people with the small presence
+   * avatars, so a cell's name tag need not announce them again.
+   *
+   * @param row The row.
+   * @returns True for an item row with a bar.
+   */
+  protected barPeople(row: TimelineRow): boolean {
+    const item = row.node.item;
+    return !row.summary && item !== null && this.shownBox(item) !== null;
   }
 
   /**

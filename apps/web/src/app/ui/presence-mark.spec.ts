@@ -44,6 +44,17 @@ class MarkHost {
   readonly who = signal<PresenceEntryDto | null>(null);
 }
 
+/** Hosts a cell whose people are already announced elsewhere in its row. */
+@Component({
+  imports: [PresenceMark, PresenceTag],
+  template: `<div class="cell" [appPresenceMark]="who">
+    <app-presence-tag [entry]="who" place="inside" [announce]="false" />
+  </div>`,
+})
+class QuietHost {
+  readonly who = entry();
+}
+
 /** Hosts the header avatars. */
 @Component({
   imports: [PresenceHead],
@@ -112,6 +123,16 @@ describe('presence marks', () => {
     fixture.detectChanges();
     expect(tag().classList).not.toContain('short');
     expect(tag().getAttribute('aria-label')).toBe('Ann Lee is editing the title');
+  });
+
+  it('keeps the tooltip but hides a tag the row already announces', () => {
+    const fixture = TestBed.createComponent(QuietHost);
+    fixture.detectChanges();
+    const tag = (fixture.nativeElement as HTMLElement).querySelector('app-presence-tag')!;
+    expect(tag.getAttribute('title')).toBe('Ann Lee is editing the due date');
+    expect(tag.getAttribute('aria-hidden')).toBe('true');
+    expect(tag.getAttribute('role')).toBeNull();
+    expect(tag.getAttribute('aria-label')).toBeNull();
   });
 
   it('says in the header hover card what each person does, with Go to only for an item', async () => {

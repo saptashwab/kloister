@@ -51,18 +51,22 @@ export class PresenceMark {
  * in shared documents (DESIGN §9.1). It shows the first name, then shrinks
  * to a coloured bar after {@link TAG_FULL_MS}; hovering it or the element,
  * or focus in the element, shows the name again. The full sentence ("Ann is
- * editing the due date") is its tooltip and accessible name.
+ * editing the due date") is its tooltip and accessible name, unless the
+ * card, row or cell already says it through its small presence avatars:
+ * then the tag is hidden from assistive technology, so nothing is read
+ * twice.
  */
 @Component({
   selector: 'app-presence-tag',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     class: 'k-pm-tag',
-    role: 'img',
     '[class.short]': 'short()',
     '[class.inside]': "place() === 'inside'",
     '[style]': 'vars()',
-    '[attr.aria-label]': 'sentence()',
+    '[attr.role]': "announce() ? 'img' : null",
+    '[attr.aria-hidden]': "announce() ? null : 'true'",
+    '[attr.aria-label]': 'announce() ? sentence() : null',
     '[attr.title]': 'sentence()',
   },
   template: `<span class="k-pm-name" aria-hidden="true">{{ name() }}</span>`,
@@ -73,10 +77,16 @@ export class PresenceTag {
   /** Word for a moved thing: "this card", "this bar". */
   readonly what = input('this item');
   /**
-   * `outside`: above the element's top edge (drawer fields, board cards);
-   * `inside`: within its top corner, for elements that clip (grid cells).
+   * `outside`: above the element's top edge (drawer fields); `inside`:
+   * within its top corner, for elements that clip (cards, grid cells).
    */
   readonly place = input<'outside' | 'inside'>('outside');
+  /**
+   * False where small presence avatars in the same card, row or cell
+   * already announce the sentence (board cards, backlog table rows,
+   * timeline rows); the tag is then only seen.
+   */
+  readonly announce = input(true);
 
   private readonly ctx = inject(ProjectContext, { optional: true });
 

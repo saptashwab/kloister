@@ -87,4 +87,44 @@ describe('ItemCard (v1.3.3)', () => {
     await settle(fixture);
     expect(text()).toContain('Overdue since 17:00');
   });
+
+  it('marks a card someone moves, and says so to screen readers once (DESIGN §9.1)', async () => {
+    const members = [makeMember('u1', 'Ann Lee')];
+    const presence = signal(
+      new Map([
+        ['i1', [{ userId: 'u1', itemId: 'i1', action: 'moving', field: null, view: 'board' }]],
+      ]),
+    );
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        {
+          provide: ProjectContext,
+          useValue: {
+            project: signal(null),
+            labelsById: signal(new Map()),
+            membersById: signal(new Map(members.map((m) => [m.userId, m]))),
+            flashing: signal(new Set()),
+            recent: signal(0),
+            changedBy: () => null,
+            presenceByItem: presence,
+            has: () => false,
+            writable: () => false,
+          },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(ItemCard);
+    fixture.componentRef.setInput('item', makeItem(1));
+    await settle(fixture);
+    const card = fixture.nativeElement as HTMLElement;
+    expect(card.classList).toContain('k-pm-strong');
+    const tag = card.querySelector('app-presence-tag')!;
+    expect(tag.getAttribute('title')).toBe('Ann Lee is moving this card');
+    expect(tag.getAttribute('aria-hidden')).toBe('true');
+    const named = [...card.querySelectorAll('[role="img"]')].filter(
+      (e) => e.getAttribute('aria-label') === 'Ann Lee is moving this card',
+    );
+    expect(named).toHaveLength(1);
+  });
 });

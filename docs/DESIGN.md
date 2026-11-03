@@ -314,7 +314,9 @@ There are no live mouse cursors and no live typing preview.
   clip.
 - **Name tag**: a small tag on the top right corner of a strong mark shows the first name, then shrinks to a 16 × 5 px
   bar after 3 seconds. Hovering the tag (or a drawer field), or focus in the marked element, shows the name again.
-  The full sentence ("Ann is editing the due date") is its tooltip and accessible name. A tag inside a card or cell
+  The full sentence ("Ann is editing the due date") is its tooltip and accessible name. Where the card or row
+  already announces it through its small presence avatars (board cards, backlog table rows, timeline rows with a
+  bar), the tag is hidden from screen readers so the sentence is read once. A tag inside a card or cell
   does not grow on hover of the whole element, so it never covers the element's own controls. With reduced motion
   the tag changes size without a transition.
 - **Item drawer**: each field (title, status, bucket, assignees, labels, sprint, priority, start, due, due time,

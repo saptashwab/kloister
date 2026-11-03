@@ -17,8 +17,9 @@
   avatar colour). Two people with the same avatar colour share a presence colour; the tag names them.
   Contrast is checked against the default surfaces, as for tinted labels. The faint viewing edge (55 % of the
   colour) is decorative and not held to a contrast ratio; who is viewing also shows in the header and the small
-  avatars. Tags inside timeline and backlog cells add "Ann is editing …" to those cells' accessible names while
-  someone is there.
+  avatars. Each card, row or cell reads the sentence once: name tags are hidden from screen readers where the small
+  presence avatars of the same board card, backlog table row or timeline row (one with a bar) already say it, and
+  keep their accessible name elsewhere (drawer fields, backlog phone cards, timeline rows without a bar).
 - **Where marks go.** Drawer fields wrap their control in a `pm-zone` so the tag stays outside the title heading's
   accessible name. Board cards and grid or table cells clip, so their outline is drawn inside and their tag sits
   inside the top right corner; those inside tags grow back on their own hover or focus in the element, not on
