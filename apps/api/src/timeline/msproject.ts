@@ -532,6 +532,23 @@ export function msProjectXml(input: MsProjectInput): string {
           ].join(''),
     )
     .join('');
+  // Holidays in both forms, as Project's own files have them: exception
+  // days in WeekDays (older format, which some tools such as ProjectLibre
+  // read only) and the Exceptions list (Project 2007 on, preferred by Project).
+  const holidayDays = holidays
+    .map((h) =>
+      [
+        '<WeekDay>',
+        el('DayType', 0),
+        el('DayWorking', 0),
+        '<TimePeriod>',
+        el('FromDate', `${h.startDate}T00:00:00`),
+        el('ToDate', `${h.endDate}T23:59:00`),
+        '</TimePeriod>',
+        '</WeekDay>',
+      ].join(''),
+    )
+    .join('');
   const exceptions = holidays
     .map((h) =>
       [
@@ -581,7 +598,7 @@ export function msProjectXml(input: MsProjectInput): string {
     el('Name', 'Standard'),
     el('IsBaseCalendar', 1),
     el('BaseCalendarUID', -1),
-    `<WeekDays>${weekDays}</WeekDays>`,
+    `<WeekDays>${weekDays}${holidayDays}</WeekDays>`,
     exceptions === '' ? '' : `<Exceptions>${exceptions}</Exceptions>`,
     '</Calendar></Calendars>',
     `<Tasks>${tasks.join('')}</Tasks>`,

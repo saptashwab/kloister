@@ -165,6 +165,10 @@ describe('Microsoft Project XML (v1.3.2)', () => {
     ]);
     const xml = build([draft], { holidays });
     expect(xml.match(/<Exception>/g)).toHaveLength(1);
+    // Also as an exception day in WeekDays, the older form other tools read.
+    expect(xml).toContain(
+      '<WeekDay><DayType>0</DayType><DayWorking>0</DayWorking><TimePeriod><FromDate>2026-11-09T00:00:00</FromDate><ToDate>2026-11-10T23:59:00</ToDate></TimePeriod></WeekDay>',
+    );
     expect(xml).toContain(
       '<TimePeriod><FromDate>2026-11-09T00:00:00</FromDate><ToDate>2026-11-10T23:59:00</ToDate></TimePeriod>',
     );

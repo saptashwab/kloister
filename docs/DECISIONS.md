@@ -30,6 +30,9 @@
   between an item and its own ancestor/descendant (allowed in Kloister) go to the notes; progress weighting
   matches the timeline; undated tasks start on a working day. Accepted: "today" for undated tasks is the
   server's UTC date.
+- Owner check in ProjectLibre: the plan opened correctly but the holidays were not applied, because ProjectLibre
+  reads only the older exception-day form (`WeekDay` with `DayType` 0). Holidays are now written in both forms,
+  as Project's own files and MPXJ do (Project 2007 and later prefer the `Exceptions` list).
 - Found while doing this: the v1.3.1 grip and inline typing-row styles were nested under the Who menu selector
   and never applied; they now live in `_timeline-drag.scss`, with the grip always visible on touch screens.
 
