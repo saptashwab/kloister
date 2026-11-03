@@ -114,4 +114,34 @@ describe('App', () => {
     expect(links[0]?.querySelector('.k-badge')?.textContent).toBe('3');
     TestBed.inject(NotificationsStore).stop();
   });
+
+  it('shrinks the sidebar to an icon rail and back, remembering the choice (v1.4.0)', async () => {
+    localStorage.removeItem('k-rail');
+    const fixture = TestBed.createComponent(App);
+    TestBed.inject(SessionStore).set({
+      id: 'u1',
+      email: 'a@example.org',
+      displayName: 'A',
+      systemRole: 'USER',
+      mustChangePassword: false,
+      isActive: true,
+      lastLoginAt: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await fixture.whenStable();
+    const root = fixture.nativeElement as HTMLElement;
+    const toggle = root.querySelector<HTMLButtonElement>('.rail-toggle')!;
+    expect(toggle.getAttribute('aria-label')).toBe('Collapse sidebar');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    toggle.click();
+    await fixture.whenStable();
+    expect(root.querySelector('.shell')?.classList).toContain('rail');
+    expect(toggle.getAttribute('aria-label')).toBe('Expand sidebar');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(localStorage.getItem('k-rail')).toBe('on');
+    toggle.click();
+    await fixture.whenStable();
+    expect(root.querySelector('.shell')?.classList).not.toContain('rail');
+    localStorage.removeItem('k-rail');
+  });
 });

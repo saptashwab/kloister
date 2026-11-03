@@ -8,6 +8,13 @@ export interface PageExport {
   filters: Record<string, string | boolean>;
   /** Also offer the plan as a Microsoft Project file (the timeline, v1.3.2). */
   msProject?: boolean;
+  /**
+   * Whether the view has a toolbar marked `k-page-tools`, which folds away
+   * with the project header (v1.4.0).
+   */
+  tools?: boolean;
+  /** How many filters narrow the view, shown as a chip while toolbars are folded. */
+  activeFilters?: number;
 }
 
 /**

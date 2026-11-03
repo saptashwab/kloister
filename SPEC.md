@@ -272,6 +272,12 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
 ## 6. Features (frontend)
 
 - **Login / forced password change**
+- **Room for the page** (v1.4.0): on wide screens the sidebar can shrink to an icon rail (tablets always use the
+  rail; phones keep the slide-in menu). In a project, the header and the view's toolbar (board, backlog, timeline and
+  calendar filters) can fold into one slim row with the project name, the tabs and icon-only actions; while folded,
+  the toolbar can be shown over the page and folds again after a press elsewhere or Escape, a chip shows how many
+  filters are active, and selection bars stay visible. Ctrl+\ (⌘\ on a Mac) folds both or unfolds both.
+  Both choices are remembered per browser, not as settings.
 - **Projects list**: the user's projects. Admins also get the All/My toggle. Personal spaces are never listed here.
   From M8.5 each row shows open items, overdue items and last activity counted within the caller's visibility; rows an
   admin sees only through All projects show no counts and are not read.

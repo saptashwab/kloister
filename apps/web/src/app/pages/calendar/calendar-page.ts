@@ -78,7 +78,7 @@ const UNDATED_MAX = 100;
     }
   `,
   template: `
-    <div class="filters" role="group" aria-label="Filters">
+    <div class="filters k-page-tools" role="group" aria-label="Filters">
       @if (!personal()) {
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>Assignee</mat-label>
@@ -221,7 +221,14 @@ export class CalendarPage implements OnInit {
 
   /** Registers the export action and reloads holidays with the project. */
   constructor() {
-    inject(PageActions).register(() => ({ source: this.ctx.project()?.id ?? '', filters: {} }));
+    inject(PageActions).register(() => ({
+      source: this.ctx.project()?.id ?? '',
+      filters: {},
+      tools: true,
+      activeFilters:
+        [this.assignee(), this.type(), this.label(), this.sprint()].filter((v) => v !== '').length +
+        (this.mine() ? 1 : 0),
+    }));
     inject(DestroyRef).onDestroy(() => void this.hold?.release());
     effect(() => {
       // The project is set again on every reload, also after holiday changes.

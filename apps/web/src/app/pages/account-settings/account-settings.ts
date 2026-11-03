@@ -8,6 +8,7 @@ import { RouterLink } from '@angular/router';
 import type { ThemeDto } from '@kloister/shared';
 import { SessionStore } from '../../core/session.store';
 import { SettingsApiService } from '../../core/settings-api.service';
+import { ThemeApiService } from '../../core/theme-api.service';
 import { ThemeService } from '../../core/theme.service';
 import { required } from '../../core/validators';
 import { Icon } from '../../ui/icon';
@@ -90,6 +91,7 @@ import { SettingsStyles } from '../../ui/settings-styles';
 })
 export class AccountSettingsPage implements OnDestroy {
   private readonly api = inject(SettingsApiService);
+  private readonly themeApi = inject(ThemeApiService);
   private readonly store = inject(SessionStore);
   private readonly theme = inject(ThemeService);
   private readonly toast = inject(ToastService);
@@ -153,7 +155,7 @@ export class AccountSettingsPage implements OnDestroy {
   protected async saveTheme(): Promise<void> {
     this.busy.set(true);
     try {
-      const saved = await this.api.setMyTheme(this.draft());
+      const saved = await this.themeApi.setMyTheme(this.draft());
       this.theme.setUserTheme(saved.theme);
       this.theme.previewTheme(null);
       this.draft.set(saved.theme);

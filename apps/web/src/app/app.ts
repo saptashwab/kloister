@@ -15,6 +15,7 @@ import type { ConnectedPosition } from '@angular/cdk/overlay';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { AuthService } from './core/auth.service';
+import { Layout } from './core/layout';
 import { NotificationsStore } from './core/notifications.store';
 import { ProjectsNav } from './core/projects-nav';
 import { SessionStore } from './core/session.store';
@@ -27,7 +28,8 @@ import { Icon } from './ui/icon';
  * Root component: the app shell (DESIGN §7). Signed-in users get the
  * sidebar with the app name, "My work", the project switcher, admin links
  * and the user menu; the sign-in and forced password change screens are
- * shown without it. At narrow widths the sidebar opens from a menu button.
+ * shown without it. At narrow widths the sidebar opens from a menu button;
+ * on wide screens it can shrink to an icon rail ({@link Layout}).
  * The bell (sidebar link, and a top bar button at narrow widths) shows the
  * unread notification count, polled every 60 seconds while signed in
  * (SPEC §6) and updated at once while live updates are connected (M10).
@@ -62,6 +64,8 @@ export class App {
 
   /** Signed-in state. */
   protected readonly store = inject(SessionStore);
+  /** Sidebar rail and folded toolbars, with their shortcut. */
+  protected readonly layout = inject(Layout);
   /** The caller's projects for the switcher. */
   protected readonly nav = inject(ProjectsNav);
   /** The unread notification count for the bell. */

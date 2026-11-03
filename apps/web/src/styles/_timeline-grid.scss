@@ -14,6 +14,10 @@ app-timeline {
     border: var(--k-line) solid var(--k-border);
     border-radius: 0 0 var(--k-radius-md) var(--k-radius-md);
     background: var(--k-surface);
+    // The folded header and toolbar (v1.4.0) give the grid about 180 px more.
+    .k-folded & {
+      max-height: calc(100dvh - var(--k-size-140px));
+    }
   }
   .canvas {
     position: relative;

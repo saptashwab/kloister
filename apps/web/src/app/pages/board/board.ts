@@ -37,6 +37,7 @@ import {
   type BoardFilter,
   buildColumns,
   dropRequest,
+  activeFilterCount,
   EMPTY_FILTER,
   type GroupBy,
   endOfWeek,
@@ -224,7 +225,7 @@ const QUICK_PEOPLE = 6;
       <p class="k-alert info" role="status">Sprint board: {{ name }}</p>
     }
 
-    <div class="toolbar" role="toolbar" aria-label="Board filters">
+    <div class="toolbar k-page-tools" role="toolbar" aria-label="Board filters">
       <label class="search">
         <app-icon name="search" />
         <input
@@ -635,6 +636,8 @@ export class BoardPage implements OnInit, PersonFilter {
   private readonly pageActions = inject(PageActions).register(() => ({
     source: this.ctx.project()?.id ?? '',
     filters: this.snapshotFilters(),
+    tools: true,
+    activeFilters: activeFilterCount(this.filter()),
   }));
   private readonly api = inject(ItemsApiService);
   private readonly router = inject(Router);
@@ -743,10 +746,7 @@ export class BoardPage implements OnInit, PersonFilter {
   );
 
   /** True when any filter is set. */
-  protected readonly filtered = computed(() => {
-    const f = this.filter();
-    return Object.values(f).some((v) => v !== '');
-  });
+  protected readonly filtered = computed(() => activeFilterCount(this.filter()) > 0);
 
   /** Name of the sprint the board is filtered to, for the heading. */
   protected readonly sprintName = computed(() =>

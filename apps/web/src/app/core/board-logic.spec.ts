@@ -1,5 +1,6 @@
 import { makeBucket, makeItem, makeMember, makeSprint } from '../../testing/fixtures';
 import {
+  activeFilterCount,
   buildColumns,
   buildTree,
   dropRequest,
@@ -236,5 +237,14 @@ describe('board logic', () => {
       const pruned = pruneTree(buildTree([feature, story, other]), (i) => i.title === 'Login');
       expect(flattenTree(pruned, new Set()).map((r) => r.node.ref.key)).toEqual(['KLO-2', 'KLO-3']);
     });
+  });
+});
+
+describe('activeFilterCount (v1.4.0)', () => {
+  it('counts the filters that have a value', () => {
+    expect(activeFilterCount(EMPTY_FILTER)).toBe(0);
+    expect(activeFilterCount({ ...EMPTY_FILTER, text: 'site', due: 'week', labelId: 'l1' })).toBe(
+      3,
+    );
   });
 });

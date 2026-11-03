@@ -283,7 +283,7 @@ interface BarDraft {
   ],
   template: `
     <app-timeline-grid-styles /><app-timeline-bar-styles /><app-timeline-tool-styles /><app-timeline-drag-styles />
-    <div class="tools" role="toolbar" aria-label="Timeline">
+    <div class="tools k-page-tools" role="toolbar" aria-label="Timeline">
       @if (canCreate()) {
         <button mat-stroked-button type="button" (click)="focusAdd(null)">
           <app-icon name="plus" />Add row
@@ -1300,6 +1300,13 @@ export class TimelinePage implements OnInit {
     source: this.ctx.project()?.id ?? '',
     filters: { today: this.today, boardOnly: false, ...(this.text() ? { q: this.text() } : {}) },
     msProject: true,
+    tools: true,
+    activeFilters: [
+      this.text() !== '',
+      this.typeFilter() !== '',
+      this.assigneeFilter() !== '',
+      !this.showDone(),
+    ].filter(Boolean).length,
   }));
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');

@@ -9,8 +9,6 @@ import {
   type FontWeight,
   type LiveSettingsDto,
   type LogSettingsDto,
-  type MyThemeDto,
-  type PublicBrandingDto,
   type SecuritySettingsDto,
   type StorageSettingsDto,
   type ThemeDto,
@@ -23,8 +21,9 @@ import { firstValueFrom } from 'rxjs';
 import { apiUrl } from './api';
 
 /**
- * Client for settings (SPEC §6): the public branding, the caller's own
- * profile and theme, and the admin settings, branding and backups. Admin
+ * Client for settings (SPEC §6): the caller's own profile, and the admin
+ * settings, branding and backups (the public branding and the caller's
+ * theme are `ThemeApiService`). Admin
  * routes answer 403 to everyone else; the UI hides them as well. Logo and
  * font uploads send the raw file with its name in the `x-file-name` header;
  * the API checks their type by content.
@@ -34,15 +33,6 @@ export class SettingsApiService {
   private readonly http = inject(HttpClient);
 
   /**
-   * The app name, logo, font and default theme; needs no session.
-   *
-   * @returns The public branding.
-   */
-  publicBranding(): Promise<PublicBrandingDto> {
-    return this.get('branding');
-  }
-
-  /**
    * Changes the caller's display name.
    *
    * @param request The new name.
@@ -50,29 +40,6 @@ export class SettingsApiService {
    */
   updateMe(request: UpdateMeRequest): Promise<UserDto> {
     return firstValueFrom(this.http.patch<UserDto>(apiUrl('me'), request));
-  }
-
-  /**
-   * The caller's own theme.
-   *
-   * @returns The theme, or null for "use default".
-   */
-  myTheme(): Promise<MyThemeDto> {
-    return this.get('me/theme');
-  }
-
-  /**
-   * Sets or clears the caller's own theme.
-   *
-   * @param theme The theme, or null for "use default".
-   * @returns The stored theme.
-   */
-  setMyTheme(theme: ThemeDto | null): Promise<MyThemeDto> {
-    return firstValueFrom(
-      theme === null
-        ? this.http.delete<MyThemeDto>(apiUrl('me/theme'))
-        : this.http.put<MyThemeDto>(apiUrl('me/theme'), theme),
-    );
   }
 
   /**

@@ -6,6 +6,7 @@ import { DEFAULT_THEME, ThemeMode } from '@kloister/shared';
 import { settle } from '../../../testing/fixtures';
 import { SessionStore } from '../../core/session.store';
 import { SettingsApiService } from '../../core/settings-api.service';
+import { ThemeApiService } from '../../core/theme-api.service';
 import { ThemeService } from '../../core/theme.service';
 import { ToastService } from '../../ui/toast.service';
 import { AccountSettingsPage } from './account-settings';
@@ -41,6 +42,8 @@ describe('AccountSettingsPage (SPEC §6 user settings)', () => {
         provideHttpClient(),
         provideHttpClientTesting(),
         { provide: SettingsApiService, useValue: api },
+        // The theme calls moved to their own client (v1.4.0).
+        { provide: ThemeApiService, useValue: api },
       ],
     }).compileComponents();
     TestBed.inject(SessionStore).set(USER);

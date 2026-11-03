@@ -1,18 +1,15 @@
 import { DOCUMENT } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import {
   DEFAULT_APP_NAME,
   DEFAULT_THEME,
-  type MyThemeDto,
   type PublicBrandingDto,
   type ThemeDto,
   ThemeMode,
   UiFont,
 } from '@kloister/shared';
-import { firstValueFrom } from 'rxjs';
-import { apiUrl } from './api';
+import { ThemeApiService } from './theme-api.service';
 import { themeCss } from './theme';
 
 /** Branding used until the server answers, or when it cannot be reached. */
@@ -40,9 +37,7 @@ const BRANDING_WAIT_MS = 3000;
  */
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
-  // HttpClient directly, not the settings client: this service is part of
-  // the initial bundle and needs only two endpoints.
-  private readonly http = inject(HttpClient);
+  private readonly api = inject(ThemeApiService);
   private readonly document = inject(DOCUMENT);
   private readonly title = inject(Title);
 
@@ -80,7 +75,7 @@ export class ThemeService {
       setTimeout(() => resolve(null), BRANDING_WAIT_MS),
     );
     try {
-      const request = firstValueFrom(this.http.get<PublicBrandingDto>(apiUrl('branding')));
+      const request = this.api.publicBranding();
       const branding = await Promise.race([request, timeout]);
       if (branding !== null) this.current.set(branding);
     } catch {
@@ -104,7 +99,7 @@ export class ThemeService {
    */
   async loadUserTheme(): Promise<void> {
     try {
-      const mine = await firstValueFrom(this.http.get<MyThemeDto>(apiUrl('me/theme')));
+      const mine = await this.api.myTheme();
       this.own.set(mine.theme);
     } catch {
       this.own.set(null);

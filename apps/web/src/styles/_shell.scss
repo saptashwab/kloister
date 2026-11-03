@@ -224,39 +224,56 @@
   }
 }
 
+/* The icon rail: always on tablets, and on wide screens when chosen (v1.4.0). */
+@mixin rail {
+  flex-basis: var(--k-sidebar-rail);
+  padding-inline: var(--k-space-2);
+  .brand {
+    flex-direction: column;
+    gap: var(--k-space-2);
+    padding-inline: var(--k-space-2);
+  }
+  .brand h1,
+  .nav-section,
+  .nav-empty,
+  .who,
+  .project .name {
+    display: none;
+  }
+  .nav-text {
+    position: absolute;
+    width: var(--k-line);
+    height: var(--k-line);
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .nav-link,
+  .me {
+    justify-content: center;
+    padding-inline: var(--k-space-1);
+  }
+  .k-badge {
+    position: absolute;
+    margin-left: var(--k-space-6);
+  }
+  .k-logo {
+    max-width: var(--k-control-height);
+  }
+}
+
+/* The rail choice belongs to wide screens; tablets have no room for the full sidebar. */
 @media (min-width: 600px) and (max-width: 1023px) {
   .sidebar {
-    flex-basis: var(--k-sidebar-rail);
-    padding-inline: var(--k-space-2);
-    .brand {
-      padding-inline: var(--k-space-2);
-    }
-    .brand h1,
-    .nav-section,
-    .nav-empty,
-    .who,
-    .project .name {
+    @include rail;
+    .rail-toggle {
       display: none;
     }
-    .nav-text {
-      position: absolute;
-      width: var(--k-line);
-      height: var(--k-line);
-      overflow: hidden;
-      clip-path: inset(50%);
-    }
-    .nav-link,
-    .me {
-      justify-content: center;
-      padding-inline: var(--k-space-1);
-    }
-    .k-badge {
-      position: absolute;
-      margin-left: var(--k-space-6);
-    }
-    .k-logo {
-      max-width: var(--k-control-height);
-    }
+  }
+}
+
+@media (min-width: 1024px) {
+  .shell.rail .sidebar {
+    @include rail;
   }
 }
 
@@ -276,6 +293,9 @@
 
     .close-nav {
       display: inline-grid;
+    }
+    .rail-toggle {
+      display: none;
     }
   }
 
@@ -305,4 +325,27 @@
       font-weight: 700;
     }
   }
+}
+
+/*
+ * Folded project toolbars (v1.4.0): a view marks its toolbar `k-page-tools`;
+ * folded, it is hidden, and while peeking it shows over the top of the page
+ * instead of pushing the page down. Selection bars are separate and stay.
+ */
+.k-folded:not(.k-peek) .k-page-tools {
+  display: none !important;
+}
+
+.k-folded.k-peek .k-page-tools {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  /* Under the item drawer and its scrim (19 and up). */
+  z-index: 15;
+  margin: 0;
+  padding: var(--k-space-2) var(--k-gutter);
+  border-bottom: var(--k-line) solid var(--k-border);
+  background: var(--k-surface);
+  box-shadow: var(--k-float);
 }

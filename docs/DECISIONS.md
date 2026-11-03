@@ -1,5 +1,27 @@
 # Decisions
 
+## v1.4.0 room for the page (2026-11-03)
+
+- Owner request: the pinned sidebar and multi-row project header and toolbars take too much screen, especially
+  on the timeline. The sidebar can shrink to the tablet icon rail on wide screens, and the project header and the
+  view's toolbar fold into one slim row (Office's "Show tabs only"). Both are per-browser choices (localStorage)
+  rather than settings, switched by a button or Ctrl+\ (both at once). No API or database change.
+- Ctrl+\ rather than a single key: it must work while editing in the timeline grid, where single-key shortcuts
+  are off, and Ctrl+B is Bold in the editor. It folds both when both are open, otherwise opens both.
+- Folding is generic: a view marks its toolbar `k-page-tools` (board, backlog, timeline, calendar filters) and
+  reports `tools` and `activeFilters` with its page actions. Selection bars are separate elements, so they stay
+  visible without being moved into the slim row (owner asked for selection actions to stay reachable).
+  Peeking places the toolbar over the page (absolute in the tab panel), so the grid does not jump; presses inside
+  the toolbar or its menus keep it. The timeline grid's height grows by about 180 px while folded.
+- Folding also applies at phone width, where toolbars cost the most height; the sidebar keeps its phone menu.
+- Bundle (owner rule: the 500 kB budget is a warning; workarounds that make code worse need the owner's call):
+  the feature adds 2.5 kB (494.04 to 496.51 kB). The theme service's direct HttpClient calls were a workaround;
+  pointing it at the settings client added 1.8 kB (the admin calls came along), so the public branding and
+  own-theme calls moved to a small `ThemeApiService` instead (+0.3 kB, no duplicated code). The My work calendar
+  stays an ordinary import, by measurement rather than as a workaround: `@defer` adds Angular's defer runtime
+  (10.1 kB) to every first page load, while the deferred calendar is only 4.8 kB of the lazy My work page, because
+  the calendar's shared code is already in its own chunk. Initial bundle 497.31 kB; the budget is unchanged.
+
 ## v1.3.3 shares off the board cards (2026-11-03)
 
 - Owner feedback: on board cards the share ("50%") sat inside the overlapping avatar stack, so the next avatar

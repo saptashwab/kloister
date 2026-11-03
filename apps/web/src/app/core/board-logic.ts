@@ -52,6 +52,16 @@ export const EMPTY_FILTER: BoardFilter = {
 };
 
 /**
+ * How many board filters are set, for the folded header's chip (v1.4.0).
+ *
+ * @param filter The filters.
+ * @returns The number of fields with a value.
+ */
+export function activeFilterCount(filter: BoardFilter): number {
+  return Object.values(filter).filter((v) => v !== '').length;
+}
+
+/**
  * Formats a date as the wire format `YYYY-MM-DD`, in local time.
  *
  * @param date The date.

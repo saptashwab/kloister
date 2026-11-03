@@ -13,6 +13,7 @@ import {
 } from '@kloister/shared';
 import { settle } from '../../../testing/fixtures';
 import { SettingsApiService } from '../../core/settings-api.service';
+import { ThemeApiService } from '../../core/theme-api.service';
 import { DEFAULT_BRANDING, ThemeService } from '../../core/theme.service';
 import { Dialogs } from '../../ui/dialogs';
 import { ToastService } from '../../ui/toast.service';
@@ -62,6 +63,8 @@ async function render(component: Type<unknown>, api: Record<string, unknown>) {
       provideHttpClient(),
       provideHttpClientTesting(),
       { provide: SettingsApiService, useValue: api },
+      // The theme calls moved to their own client (v1.4.0).
+      { provide: ThemeApiService, useValue: api },
       { provide: Dialogs, useValue: { confirm: vi.fn().mockResolvedValue(true) } },
     ],
   }).compileComponents();

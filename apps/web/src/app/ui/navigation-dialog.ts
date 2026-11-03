@@ -168,6 +168,7 @@ export class NavigationDialog {
     { key: 'L', action: 'Change labels on the focused item' },
     { key: 'Esc', action: 'Close the drawer or a menu' },
     { key: '?', action: 'Show this reference' },
+    { key: 'Ctrl + \\', action: 'Fold or unfold the sidebar and project toolbar' },
   ];
   /** Keys of the project timeline grid and bars (SPEC §6.4, M9). */
   protected readonly timelineShortcuts = [

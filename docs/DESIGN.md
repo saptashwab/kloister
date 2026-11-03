@@ -247,9 +247,19 @@ keys always use the bundled JetBrains Mono.
   soft), and the user menu at the bottom (avatar, name, role; opens settings, theme and sign out). Admins get the
   admin entries and the All/My projects toggle (SPEC §3.1). "My work" is the "all their work" list (section 9) for
   the signed-in user. At tablet width the sidebar collapses to icons; at phone width it becomes a menu button.
+  On wide screens the left-arrow button at the top shrinks it to the same 72 px icon rail (the right arrow widens
+  it again); the choice is remembered per browser (v1.4.0).
 - **Header**: breadcrumb ("Projects / Demo project"), page title, search ("Search or jump to KLO-…", `/`) and the
   primary "New item" button.
 - **Project tabs**: Board, Backlog, Sprints, Settings, with a 2 px primary underline on the current tab.
+- **Folded header** (v1.4.0): the up-arrow button at the end of the tab row folds the header and the view's
+  toolbar (marked `k-page-tools`) into one slim row: project name, tabs without icons, then the active-filter chip,
+  live status, presence and icon-only Search, Export… and New item, a down-arrow button that shows the toolbar over
+  the page (`--k-surface`, `--k-float`; no layout jump) and a pin that unfolds again. The fold button and the pin
+  are one button whose name, icon and `aria-expanded` change, so focus stays on it; a peeking toolbar folds again
+  on Escape (unless a list, menu or dialog is open), a press elsewhere or focus moving past it. Below 1024 px the slim row wraps the
+  tabs onto their own line. Selection bars are separate from the toolbar and stay visible. Ctrl+\ folds or
+  unfolds the sidebar and header together; both choices are remembered per browser.
 - **Board toolbar**: sprint chip (current sprint, primary soft), filter chips (dashed when empty: Assignee, Label,
   Type, Due), the quick person filter (overlapping avatars of project members), then "Group by" as a segmented
   control (Bucket, Status, Assignee, Sprint).
@@ -345,6 +355,9 @@ the full set and a command palette arrive in M6.5 (SPEC §10).
 | `A`     | Assign…                    |
 | `L`     | Add a label…               |
 | `Esc`   | Close the drawer or a menu |
+
+`Ctrl` + `\` (`⌘` + `\` on a Mac) folds or unfolds the sidebar and the project header (v1.4.0). It uses a
+modifier, so it also works in text fields and the timeline grid and is not affected by the single-key switch.
 
 A `?` dialog lists them. Every drag-and-drop action also has a keyboard path (the menus above, and keyboard
 ordering controls). The help dialog has an **Enable single-key shortcuts** switch, saved on this browser;

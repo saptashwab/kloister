@@ -93,6 +93,9 @@ change pending, administrator); the API checks every request.
 
 ## Keyboard and accessibility
 
+- `core/layout.ts` holds the sidebar rail and folded-header choices (per browser) and their
+  Ctrl+\ shortcut. Views mark their toolbar `k-page-tools` and report `tools` and `activeFilters`
+  through `core/page-actions.ts`; the project shell folds, peeks and shows the filter chip from that.
 - `core/shortcuts.ts` is the single keyboard entry point: pages register contextual actions, and
   the help and command dialogs load on demand. Single-key shortcuts work only outside text fields
   and can be switched off per browser (WCAG 2.1.4). The keys are listed in DESIGN §12.
@@ -115,7 +118,8 @@ styles warn above 4 kB and fail above 8 kB (`angular.json`). To stay inside:
 - report and calendar API calls live in `core/reports-api.service.ts`, used only by those pages;
 - `@defer` blocks are avoided: their runtime would join the initial bundle, and every page is lazy
   already;
-- `ThemeService` uses `HttpClient` directly instead of a larger client.
+- `ThemeService` uses the small `ThemeApiService` (public branding and the caller's theme), not the
+  settings client, whose admin calls load with the settings pages (v1.4.0).
 
 ## Adding a screen
 

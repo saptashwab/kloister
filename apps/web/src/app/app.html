@@ -1,6 +1,6 @@
 @if (user(); as me) {
   <a class="skip" href="#main">Skip to content</a>
-  <div class="shell" [class.nav-open]="navOpen()">
+  <div class="shell" [class.nav-open]="navOpen()" [class.rail]="layout.rail()">
     <nav class="sidebar" aria-label="Main" tabindex="-1" (keydown)="navKey($event)">
       <div class="brand">
         @if (theme.logoUrl(); as logo) {
@@ -9,6 +9,18 @@
           <span class="mark" aria-hidden="true"><app-icon name="board" [size]="16" /></span>
         }
         <h1>{{ title() }}</h1>
+        <button
+          type="button"
+          class="k-icon-btn sm rail-toggle"
+          [attr.aria-label]="layout.rail() ? 'Expand sidebar' : 'Collapse sidebar'"
+          [attr.aria-expanded]="!layout.rail()"
+          [title]="
+            (layout.rail() ? 'Expand sidebar' : 'Collapse sidebar') + ' (Ctrl+\\ folds both)'
+          "
+          (click)="layout.setRail()"
+        >
+          <app-icon [name]="layout.rail() ? 'arrowRight' : 'arrowLeft'" />
+        </button>
         <button
           #closeNavButton
           type="button"

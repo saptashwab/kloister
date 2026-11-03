@@ -1,4 +1,18 @@
-import { Component, computed, DestroyRef, effect, inject, input, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import {
+  afterNextRender,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
+  Injector,
+  input,
+  signal,
+  untracked,
+  viewChild,
+} from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
@@ -10,6 +24,7 @@ import { errorMessage } from '../../core/api';
 import { ItemsApiService } from '../../core/items-api.service';
 import { ProjectContext } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
+import { Layout } from '../../core/layout';
 import { Shortcuts } from '../../core/shortcuts';
 import { Skeleton } from '../../ui/feedback';
 import { Icon, type IconName } from '../../ui/icon';
@@ -40,12 +55,20 @@ import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
     SnapshotAction,
     RouterOutlet,
     RouterLink,
+    NgTemplateOutlet,
     MatTabsModule,
     MatButtonModule,
     Icon,
     Skeleton,
   ],
   providers: [ProjectContext, PageActions, RescheduleFlow],
+  host: {
+    '[class.k-folded]': 'layout.folded()',
+    '[class.k-peek]': 'peek()',
+    '(document:pointerdown)': 'pointerDown($event)',
+    '(document:focusin)': 'focusIn($event)',
+    '(document:keydown.escape)': 'escape($event)',
+  },
   styles: `
     .head {
       padding: var(--k-size-14px) var(--k-gutter) 0;
@@ -57,10 +80,54 @@ import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
     .crumbs a:hover {
       text-decoration: underline;
     }
-    nav {
-      padding: 0 calc(var(--k-gutter) - var(--k-space-2));
+    .tabs-row {
+      display: flex;
+      align-items: center;
+      gap: var(--k-space-2);
+      padding: 0 var(--k-gutter) 0 calc(var(--k-gutter) - var(--k-space-2));
       border-bottom: var(--k-line) solid var(--k-border);
+    }
+    nav {
+      flex: 1;
+      min-width: 0;
       --mat-tab-header-divider-height: 0;
+    }
+    /* Below desktop width the folded row wraps: name and actions, then the tabs. */
+    @media (max-width: 1023px) {
+      :host(.k-folded) .tabs-row {
+        flex-wrap: wrap;
+        padding-top: var(--k-space-1);
+      }
+      :host(.k-folded) nav {
+        flex-basis: 100%;
+        order: 2;
+      }
+      :host(.k-folded) .slim-actions {
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        min-width: 0;
+      }
+    }
+    .slim-name {
+      flex: none;
+      max-width: var(--k-size-200px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding-left: var(--k-space-2);
+      font-size: var(--k-body);
+      font-weight: 700;
+    }
+    .slim-actions {
+      display: flex;
+      flex: none;
+      align-items: center;
+      gap: var(--k-space-2);
+    }
+    mat-tab-nav-panel {
+      display: block;
+      position: relative;
     }
     .tab {
       display: inline-flex;
@@ -77,56 +144,152 @@ import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
   template: `
     <app-live-styles />
     @if (ctx.project(); as project) {
-      <div class="k-page-head head">
-        <div>
-          <div class="crumbs">
-            <a routerLink="/">Projects</a> / {{ project.key ?? 'Private space' }}
-          </div>
-          <h1>{{ project.name }}</h1>
-        </div>
-        <span class="spacer"></span>
+      <ng-template #actions let-slim>
         <app-live-status />
         <app-presence [people]="ctx.presence()" [members]="ctx.membersById()" [actions]="false" />
-        <button type="button" class="k-chip" (click)="shortcuts.open()" aria-label="Search or jump">
-          <app-icon name="search" />Search or jump <kbd>/</kbd>
-        </button>
+        @if (slim) {
+          <button
+            type="button"
+            class="k-icon-btn"
+            (click)="shortcuts.open()"
+            aria-label="Search or jump"
+            title="Search or jump (/)"
+          >
+            <app-icon name="search" />
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="k-chip"
+            (click)="shortcuts.open()"
+            aria-label="Search or jump"
+          >
+            <app-icon name="search" />Search or jump <kbd>/</kbd>
+          </button>
+        }
         @if (pageActions.export(); as exportAction) {
           <app-snapshot-action
             [source]="exportAction.source"
             [filters]="exportAction.filters"
             [msProject]="exportAction.msProject === true"
+            [compact]="slim"
           />
         }
         @if (canCreate()) {
-          <button mat-flat-button type="button" (click)="newItem()">
-            <app-icon name="plus" />New item
-          </button>
+          @if (slim) {
+            <button
+              mat-flat-button
+              type="button"
+              (click)="newItem()"
+              aria-label="New item"
+              title="New item (C)"
+            >
+              <app-icon name="plus" />
+            </button>
+          } @else {
+            <button mat-flat-button type="button" (click)="newItem()">
+              <app-icon name="plus" />New item
+            </button>
+          }
         }
-      </div>
+      </ng-template>
+      @if (!layout.folded()) {
+        <div class="k-page-head head">
+          <div>
+            <div class="crumbs">
+              <a routerLink="/">Projects</a> / {{ project.key ?? 'Private space' }}
+            </div>
+            <h1>{{ project.name }}</h1>
+          </div>
+          <span class="spacer"></span>
+          <ng-container *ngTemplateOutlet="actions; context: { $implicit: false }" />
+        </div>
+      }
       @if (project.archivedAt) {
         <p class="k-alert warn archived" role="status">This project is archived and read-only.</p>
       }
-      <nav mat-tab-nav-bar mat-stretch-tabs="false" [tabPanel]="panel" aria-label="Project views">
-        @for (tab of tabs; track tab.path) {
-          @if (!tab.projectOnly || project.ownerId === null) {
+      <div class="tabs-row">
+        @if (layout.folded()) {
+          <h1 class="slim-name" [title]="project.name">{{ project.name }}</h1>
+        }
+        <nav mat-tab-nav-bar mat-stretch-tabs="false" [tabPanel]="panel" aria-label="Project views">
+          @for (tab of tabs; track tab.path) {
+            @if (!tab.projectOnly || project.ownerId === null) {
+              <a
+                mat-tab-link
+                [routerLink]="
+                  tab.path === ''
+                    ? ['/p', project.key ?? 'personal']
+                    : ['/p', project.key ?? 'personal', tab.path]
+                "
+                [active]="activeTab() === tab.path"
+                ><span class="tab">
+                  @if (!layout.folded()) {
+                    <app-icon [name]="tab.icon" />
+                  }
+                  {{ tab.label }}</span
+                ></a
+              >
+            }
+          }
+          @if (ctx.has(adoPermission) && project.ownerId === null) {
             <a
               mat-tab-link
-              [routerLink]="
-                tab.path === ''
-                  ? ['/p', project.key ?? 'personal']
-                  : ['/p', project.key ?? 'personal', tab.path]
-              "
-              [active]="activeTab() === tab.path"
-              ><span class="tab"><app-icon [name]="tab.icon" />{{ tab.label }}</span></a
+              [routerLink]="['/p', project.key, 'ado']"
+              [active]="activeTab() === 'ado'"
+              >ADO transfer</a
             >
           }
-        }
-        @if (ctx.has(adoPermission) && project.ownerId === null) {
-          <a mat-tab-link [routerLink]="['/p', project.key, 'ado']" [active]="activeTab() === 'ado'"
-            >ADO transfer</a
+        </nav>
+        <div class="slim-actions fold-controls">
+          @if (layout.folded()) {
+            @if (filterCount() > 0) {
+              <button
+                type="button"
+                class="k-chip on"
+                [attr.aria-label]="filterLabel()"
+                [attr.aria-expanded]="peek()"
+                (click)="peek.set(true)"
+              >
+                <app-icon name="filter" [size]="13" />{{ filterCount() }}
+                {{ filterCount() === 1 ? 'filter' : 'filters' }}
+              </button>
+            }
+            <ng-container *ngTemplateOutlet="actions; context: { $implicit: true }" />
+            @if (hasTools()) {
+              <button
+                #peekButton
+                type="button"
+                class="k-icon-btn"
+                [attr.aria-label]="peek() ? 'Hide the toolbar' : 'Show the toolbar'"
+                [attr.aria-expanded]="peek()"
+                [title]="peek() ? 'Hide the toolbar' : 'Show the toolbar'"
+                (click)="peek.set(!peek())"
+              >
+                <app-icon [name]="peek() ? 'up' : 'down'" />
+              </button>
+            }
+          }
+          <!-- One button for both states, so it keeps focus when it folds or unfolds. -->
+          <button
+            #foldButton
+            type="button"
+            class="k-icon-btn"
+            [attr.aria-label]="
+              layout.folded() ? 'Keep the header and toolbar open' : 'Fold the header and toolbar'
+            "
+            [attr.aria-expanded]="!layout.folded()"
+            [title]="
+              (layout.folded()
+                ? 'Keep the header and toolbar open'
+                : 'Fold the header and toolbar') + ' (Ctrl+\\\\)'
+            "
+            (click)="layout.setFolded(!layout.folded())"
           >
-        }
-      </nav>
+            <app-icon [name]="layout.folded() ? 'pin' : 'up'" />
+          </button>
+        </div>
+      </div>
       <mat-tab-nav-panel #panel>
         <router-outlet />
       </mat-tab-nav-panel>
@@ -147,6 +310,23 @@ export class ProjectShellPage {
   protected readonly adoPermission = ProjectPermission.EXPORT_ADO;
   /** Lazy command palette shared with the app shell. */
   protected readonly shortcuts = inject(Shortcuts);
+  /** Folded header and toolbars, and the sidebar rail (v1.4.0). */
+  protected readonly layout = inject(Layout);
+  /** While folded: the toolbar shown over the page until a press elsewhere. */
+  protected readonly peek = signal(false);
+  /** Whether the open view has a toolbar that folds. */
+  protected readonly hasTools = computed(() => this.pageActions.export()?.tools === true);
+  /** Filters narrowing the open view, for the folded row's chip. */
+  protected readonly filterCount = computed(() => this.pageActions.export()?.activeFilters ?? 0);
+  /** The chip's accessible name, saying what pressing it does. */
+  protected readonly filterLabel = computed(
+    () =>
+      `${this.filterCount()} ${this.filterCount() === 1 ? 'filter' : 'filters'} set, show the toolbar`,
+  );
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  private readonly foldButton = viewChild<ElementRef<HTMLButtonElement>>('foldButton');
+  private readonly peekButton = viewChild<ElementRef<HTMLButtonElement>>('peekButton');
   /** Shared state of the project, provided here for the pages below. */
   protected readonly ctx = inject(ProjectContext);
   private readonly items = inject(ItemsApiService);
@@ -201,9 +381,35 @@ export class ProjectShellPage {
   );
 
   /**
-   * Opens the project whenever the key in the URL changes.
+   * Opens the project whenever the key in the URL changes, and folds a
+   * peeking toolbar again after navigating or unfolding.
    */
   constructor() {
+    effect(() => {
+      this.url();
+      this.layout.folded();
+      untracked(() => this.peek.set(false));
+    });
+    // Folding removes the header (and unfolding the slim row's buttons); when
+    // focus was in what goes away, it moves to the fold button instead of the page.
+    let wasFolded = this.layout.folded();
+    effect(() => {
+      const folded = this.layout.folded();
+      if (folded === wasFolded) return;
+      wasFolded = folded;
+      untracked(() => {
+        const active = document.activeElement;
+        if (!(active instanceof HTMLElement) || !this.host.nativeElement.contains(active)) return;
+        afterNextRender(
+          () => {
+            if (!this.host.nativeElement.contains(document.activeElement)) {
+              this.foldButton()?.nativeElement.focus();
+            }
+          },
+          { injector: this.injector },
+        );
+      });
+    });
     inject(Shortcuts).register((key) => {
       if (key !== 'c' || !this.canCreate() || document.querySelector('.d-panel')) return false;
       void this.newItem();
@@ -222,6 +428,49 @@ export class ProjectShellPage {
         .then(() => (switched ? this.ctx.refresh() : undefined))
         .catch((error: unknown) => this.error.set(errorMessage(error)));
     });
+  }
+
+  /**
+   * Escape folds a peeking toolbar again, unless it was for something
+   * else: a list, menu or dialog open over the page, or a control that
+   * handled it. Focus inside the toolbar returns to its show button.
+   *
+   * @param event The key press.
+   */
+  protected escape(event: Event): void {
+    if (!this.peek() || event.defaultPrevented) return;
+    if (document.querySelector('.cdk-overlay-container .cdk-overlay-pane:not(:empty)')) return;
+    const inTools = document.activeElement?.closest('.k-page-tools') != null;
+    this.peek.set(false);
+    if (inTools) this.peekButton()?.nativeElement.focus();
+  }
+
+  /**
+   * Folds a peeking toolbar again when keyboard focus moves past it, so it
+   * never covers what has focus.
+   *
+   * @param event The focus change.
+   */
+  protected focusIn(event: FocusEvent): void {
+    if (!this.peek()) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('.k-page-tools, .cdk-overlay-container, .fold-controls')) return;
+    this.peek.set(false);
+  }
+
+  /**
+   * Folds a peeking toolbar again after a press outside it. Presses in the
+   * toolbar, its menus and lists (overlays) and the fold controls keep it.
+   *
+   * @param event The press.
+   */
+  protected pointerDown(event: PointerEvent): void {
+    if (!this.peek()) return;
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    if (target.closest('.k-page-tools, .cdk-overlay-container, .fold-controls')) return;
+    this.peek.set(false);
   }
 
   /**

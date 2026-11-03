@@ -14,6 +14,7 @@ import {
 } from '@kloister/shared';
 import { formatSize } from '../../core/format';
 import { SettingsApiService } from '../../core/settings-api.service';
+import { ThemeApiService } from '../../core/theme-api.service';
 import { FONT_NAMES, FONT_STACKS } from '../../core/theme';
 import { ThemeService } from '../../core/theme.service';
 import { required } from '../../core/validators';
@@ -249,6 +250,7 @@ const FONT_ACCEPT = '.woff2,.woff,.ttf,.otf,font/woff2,font/woff,font/ttf,font/o
 })
 export class AdminBrandingPage implements OnInit, OnDestroy {
   private readonly api = inject(SettingsApiService);
+  private readonly themeApi = inject(ThemeApiService);
   private readonly toast = inject(ToastService);
   private readonly dialogs = inject(Dialogs);
   /** The branding in effect, for the logo preview. */
@@ -483,7 +485,7 @@ export class AdminBrandingPage implements OnInit, OnDestroy {
    * @returns Resolves once reloaded.
    */
   private async refreshPublic(): Promise<void> {
-    this.theme.setBranding(await this.api.publicBranding());
+    this.theme.setBranding(await this.themeApi.publicBranding());
   }
 
   /**

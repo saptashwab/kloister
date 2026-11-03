@@ -263,7 +263,7 @@ export const HELP_ARTICLES: readonly HelpArticle[] = [
     id: 'keyboard',
     title: 'Keyboard, focus and reduced motion',
     role: 'Everyone; action shortcuts still require normal permissions.',
-    text: 'Use Tab/Shift+Tab to move and Enter/Space to activate. Search or jump is available from the sidebar and /. J/K focuses the next/previous card; Enter opens it. C creates, M opens bucket, A assignments and L labels where allowed. Escape closes the drawer/menu/editor; image viewers close before their drawer. ? opens keyboard reference and the browser-local single-key shortcut switch. Single keys are suppressed while typing, composing or using overlays. Every drag action has a field/order alternative. Reduced motion follows the device setting; there is no timed tour.',
+    text: 'Use Tab/Shift+Tab to move and Enter/Space to activate. Search or jump is available from the sidebar and /. Ctrl+\\ (⌘\\ on a Mac) folds the sidebar to icons and the project header and toolbar into one slim row, or unfolds both; the arrow buttons at the top of the sidebar and at the end of the project tabs do each on its own, the down arrow shows a folded toolbar for a moment, and the pin keeps it open. J/K focuses the next/previous card; Enter opens it. C creates, M opens bucket, A assignments and L labels where allowed. Escape closes the drawer/menu/editor; image viewers close before their drawer. ? opens keyboard reference and the browser-local single-key shortcut switch. Single keys are suppressed while typing, composing or using overlays. Every drag action has a field/order alternative. Reduced motion follows the device setting; there is no timed tour.',
   },
   {
     id: 'snapshots',

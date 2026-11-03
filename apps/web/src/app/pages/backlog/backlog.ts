@@ -15,6 +15,7 @@ import {
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
 import {
+  activeFilterCount,
   type BoardFilter,
   buildTree,
   EMPTY_FILTER,
@@ -155,7 +156,7 @@ const AD_HOC_GROUP = 'ad-hoc';
       <p class="k-alert" role="alert">{{ error() }}</p>
     }
 
-    <div class="row filters">
+    <div class="row filters k-page-tools">
       <mat-form-field>
         <mat-label>Search</mat-label>
         <input
@@ -466,6 +467,8 @@ export class BacklogPage implements OnInit {
   private readonly pageActions = inject(PageActions).register(() => ({
     source: this.ctx.project()?.id ?? '',
     filters: this.snapshotFilters(),
+    tools: true,
+    activeFilters: activeFilterCount(this.filter()),
   }));
   private readonly api = inject(ItemsApiService);
   private readonly session = inject(SessionStore);

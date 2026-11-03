@@ -11,9 +11,21 @@ import { dialogMotion } from './motion';
 @Component({
   selector: 'app-snapshot-action',
   imports: [MatButtonModule, Icon],
-  template: `<button mat-stroked-button type="button" (click)="open()">
-    <app-icon name="download" />Export…
-  </button>`,
+  template: `@if (compact()) {
+      <button
+        type="button"
+        class="k-icon-btn"
+        aria-label="Export…"
+        title="Export…"
+        (click)="open()"
+      >
+        <app-icon name="download" />
+      </button>
+    } @else {
+      <button mat-stroked-button type="button" (click)="open()">
+        <app-icon name="download" />Export…
+      </button>
+    }`,
 })
 export class SnapshotAction {
   /** Project uuid or me for My work; never an arbitrary person. */
@@ -22,6 +34,8 @@ export class SnapshotAction {
   readonly filters = input<Record<string, string | boolean>>({});
   /** Also offer the plan as a Microsoft Project file (the timeline, v1.3.2). */
   readonly msProject = input(false);
+  /** An icon-only button, for the folded project header (v1.4.0). */
+  readonly compact = input(false);
   private readonly dialog = inject(MatDialog);
   /**
    * Loads the scope preview and download dialog on demand.
