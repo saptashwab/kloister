@@ -4,7 +4,7 @@ Self-hosted project tracking for teams that keep their work on their own server.
 Plan on Kanban boards, organize a backlog and manage personal tasks without SSO,
 outbound email or external services at runtime.
 
-**MIT licensed · v1.3 pre-release · Production target: RHEL 8.10 x86_64**
+**MIT licensed · v1.4 pre-release · Production target: RHEL 8.10 x86_64**
 
 ## Features
 
@@ -28,6 +28,8 @@ outbound email or external services at runtime.
 - **Live updates**: boards, timelines, item details and the bell follow other people's changes
   without a reload, and you see who else has an item open.
 - In-app notifications, themes, branding, bundled fonts and keyboard navigation.
+- **Room for the page**: fold the sidebar to icons and a page's header and toolbar into one slim
+  row (or both with Ctrl+\), remembered per browser; filters stay one click away.
 - Local accounts, access controls, audit history and scheduled database backups.
 - Searchable **Help & FAQ** and a skippable introduction with **Take the tour** replay.
 
