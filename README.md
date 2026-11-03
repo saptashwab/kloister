@@ -4,7 +4,7 @@ Self-hosted project tracking for teams that keep their work on their own server.
 Plan on Kanban boards, organize a backlog and manage personal tasks without SSO,
 outbound email or external services at runtime.
 
-**MIT licensed · v1.4 pre-release · Production target: RHEL 8.10 x86_64**
+**MIT licensed · v1.4.1 · Production target: RHEL 8.10 x86_64**
 
 ## Features
 
