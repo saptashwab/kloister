@@ -533,8 +533,8 @@ export function msProjectXml(input: MsProjectInput): string {
     )
     .join('');
   // Holidays in both forms, as Project's own files have them: exception
-  // days in WeekDays (older format, which some tools such as ProjectLibre
-  // read only) and the Exceptions list (Project 2007 on, preferred by Project).
+  // days in WeekDays (the older format some tools read) and the Exceptions
+  // list (Project 2007 on, which Project prefers).
   const holidayDays = holidays
     .map((h) =>
       [

@@ -30,9 +30,12 @@
   between an item and its own ancestor/descendant (allowed in Kloister) go to the notes; progress weighting
   matches the timeline; undated tasks start on a working day. Accepted: "today" for undated tasks is the
   server's UTC date.
-- Owner check in ProjectLibre: the plan opened correctly but the holidays were not applied, because ProjectLibre
-  reads only the older exception-day form (`WeekDay` with `DayType` 0). Holidays are now written in both forms,
-  as Project's own files and MPXJ do (Project 2007 and later prefer the `Exceptions` list).
+- Owner check in ProjectLibre 1.9.8: the plan, half days, links and assignments open correctly, but holidays are
+  not applied. Running ProjectLibre's own importer on the file shows both holidays imported into the project
+  calendar with type "use default": its converter copies an exception's working hours but never marks an
+  exception without hours as non-working, so holidays from any Microsoft Project file are lost there. Not
+  fixable in the file. Holidays are also written in the older `WeekDay`/`DayType` 0 form, as Project's own files
+  and MPXJ do, for other readers; Project 2007 and later prefer the `Exceptions` list.
 - Found while doing this: the v1.3.1 grip and inline typing-row styles were nested under the Who menu selector
   and never applied; they now live in `_timeline-drag.scss`, with the grip always visible on touch screens.
 
