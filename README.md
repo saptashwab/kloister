@@ -26,7 +26,8 @@ outbound email or external services at runtime.
 - Item duplication, independent copies per person, Excel snapshots and offline archives, and the
   timeline as a **Microsoft Project** file.
 - **Live updates**: boards, timelines, item details and the bell follow other people's changes
-  without a reload, and you see who else has an item open.
+  without a reload, and you see who else is working where: their name tag sits on the field,
+  cell, card or bar they are changing.
 - In-app notifications, themes, branding, bundled fonts and keyboard navigation.
 - **Room for the page**: fold the sidebar to icons and a page's header and toolbar into one slim
   row (or both with Ctrl+\), remembered per browser; filters stay one click away.

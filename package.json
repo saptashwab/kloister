@@ -1,6 +1,6 @@
 {
   "name": "kloister",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Self-hosted Kanban project tracker for restricted environments.",
   "private": true,
   "license": "MIT",
