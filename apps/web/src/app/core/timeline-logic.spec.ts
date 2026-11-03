@@ -9,6 +9,7 @@ import {
   childTypeOf,
   conflicts,
   dueText,
+  dropTarget,
   durationText,
   indentTarget,
   outdentTarget,
@@ -75,6 +76,28 @@ describe('timeline rows and totals (M9)', () => {
     startDate: '2026-11-04',
     dueDate: '2026-11-05',
     dueFirstHalf: true,
+  });
+
+  it('finds where a dragged row lands, fitting its type (v1.3.1)', () => {
+    const rows = timelineRows(buildTree([epic, a, b]), new Set());
+    // b dropped between the Epic and a: the Epic's first child.
+    expect(dropTarget(rows, 2, 2, 1, 0, []).move).toEqual({ afterId: null });
+    // Its own rows are no place to drop it.
+    expect(dropTarget(rows, 2, 2, 2, 1, []).reason).toBe('Drop it outside its own rows');
+    // a dropped after b one level deeper: under b, as a Story.
+    expect(dropTarget(rows, 1, 1, 3, 2, []).move).toEqual({
+      afterId: null,
+      parentId: 'i3',
+      type: 'STORY',
+    });
+    // ...but not when its own Stories could not stay under a Story.
+    expect(dropTarget(rows, 1, 1, 3, 2, ['STORY']).move).toBeNull();
+    // a dropped after b at the top level: after the Epic, keeping its type.
+    expect(dropTarget(rows, 1, 1, 3, 0, [])).toEqual({
+      move: { afterId: 'i1', parentId: null },
+      depth: 0,
+      reason: '',
+    });
   });
 
   it('gives parents the span of their dated descendants', () => {

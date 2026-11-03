@@ -66,6 +66,7 @@ function item(id: string, type: ItemType = 'TASK', parentId: string | null = nul
     sprint: null,
     createdById: 'pm',
     position: 1,
+    outlinePosition: null,
     completedAt: null,
     adHoc: false,
     deletedAt: null,

@@ -1,4 +1,5 @@
 import {
+  compareOutline,
   type HalfDay,
   type ItemStatus,
   type ItemType,
@@ -20,6 +21,8 @@ export interface TimelineSheetItem extends ScheduleDates {
   parentId: string | null;
   /** Per-project number, for sibling order. */
   number: number;
+  /** Outline position, for sibling order (v1.3.1), or null. */
+  outlinePosition: number | null;
   /** Display key. */
   key: string;
   /** Title. */
@@ -135,7 +138,8 @@ export function timelineSheet(
     const parent = item.parentId !== null && ids.has(item.parentId) ? item.parentId : null;
     children.set(parent, [...(children.get(parent) ?? []), item]);
   }
-  for (const list of children.values()) list.sort((a, b) => a.number - b.number);
+  // Siblings in the plan's outline order, as on the timeline (v1.3.1).
+  for (const list of children.values()) list.sort(compareOutline);
 
   const ordered: { item: TimelineSheetItem; depth: number }[] = [];
   const visit = (parent: string | null, depth: number): void => {

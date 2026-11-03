@@ -130,6 +130,7 @@ export function toItemDto(
         ? null
         : { date: fromDbDate(row.startNoEarlierThan)!, second: row.startNoEarlierThanSecondHalf },
     position: row.position,
+    outlinePosition: row.outlinePosition,
     createdById: row.createdById,
     assigneeIds: row.assignees.map((a) => a.userId),
     assigneeShares: row.assignees.map((a) => ({ userId: a.userId, share: a.share })),

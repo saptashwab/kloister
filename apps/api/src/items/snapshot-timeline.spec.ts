@@ -10,6 +10,7 @@ function item(
 ): TimelineSheetItem {
   return {
     parentId: null,
+    outlinePosition: null,
     key: `WEB-${over.number}`,
     title: `Item ${over.number}`,
     type: 'TASK',

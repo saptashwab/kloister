@@ -12,6 +12,7 @@ import {
   MAX_ASSIGNEES,
   MAX_ITEM_LABELS,
   type MoveItemRequest,
+  type OutlineMoveRequest,
   PRIORITY_MAX,
   PRIORITY_MIN,
   isValidShare,
@@ -397,6 +398,26 @@ export class MoveItemDto implements MoveItemRequest {
   bucketId?: string | null;
 
   /** Item to place the card after; omitted or null for the top. */
+  @Nullable()
+  @LowercaseUuid()
+  @IsUUID()
+  afterId?: string | null;
+}
+
+/** Body of `POST /projects/:id/items/:item/outline` (v1.3.1). */
+export class OutlineMoveDto implements OutlineMoveRequest {
+  /** New parent; omitted keeps the parent, null for the top level. */
+  @Nullable()
+  @LowercaseUuid()
+  @IsUUID()
+  parentId?: string | null;
+
+  /** New type, when the old one is not allowed under the new parent. */
+  @OmittableNotNull()
+  @IsIn(Object.values(ItemType))
+  type?: ItemType;
+
+  /** Sibling to place the item right after; omitted or null for the first place. */
   @Nullable()
   @LowercaseUuid()
   @IsUUID()

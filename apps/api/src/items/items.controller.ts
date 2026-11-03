@@ -36,6 +36,7 @@ import {
   DeleteItemQueryDto,
   ListItemsQueryDto,
   MoveItemDto,
+  OutlineMoveDto,
   UpdateItemDto,
 } from './items.dto.js';
 import { ItemsService } from './items.service.js';
@@ -159,6 +160,29 @@ export class ItemsController {
     @Query() query: DeleteItemQueryDto,
   ): Promise<DeleteItemResult> {
     return this.items.remove(auth, access, item, query.cascade ?? false);
+  }
+
+  /**
+   * Places an item among its siblings in the plan outline, optionally under
+   * a new parent with a fitted type (v1.3.1). Permissions: `EDIT_ANY_ITEM`
+   * or `EDIT_OWN_ITEMS`, and the plan rule (ProjectAccessService.canPlanItem).
+   *
+   * @param auth The caller.
+   * @param access The caller's access.
+   * @param item Item uuid or number.
+   * @param body New parent, type and the sibling to follow.
+   * @returns The item in its new place.
+   */
+  @Post(':item/outline')
+  @HttpCode(HttpStatus.OK)
+  @RequireProjectPermission([P.EDIT_ANY_ITEM, P.EDIT_OWN_ITEMS])
+  outline(
+    @CurrentAuth() auth: AuthContext,
+    @CurrentProject() access: ProjectAccess,
+    @Param('item') item: string,
+    @Body() body: OutlineMoveDto,
+  ): Promise<WorkItemDetailDto> {
+    return this.items.outline(auth, access, item, body);
   }
 
   /**

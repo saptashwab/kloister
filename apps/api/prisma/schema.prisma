@@ -451,6 +451,10 @@ model WorkItem {
   startNoEarlierThanSecondHalf Boolean    @default(false)
   /// Order within the bucket, ascending (fractional index).
   position                     Float
+  /// Order among siblings in the plan outline (timeline, backlog, exports),
+  /// ascending fractional index; null keeps the default order by type and
+  /// number after the ordered siblings (v1.3.1).
+  outlinePosition              Float?
   createdById                  String     @db.Uuid
   /// Set when the status becomes DONE, cleared when it leaves DONE.
   completedAt                  DateTime?

@@ -493,6 +493,12 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   children would no longer fit; bulk Change type checks parent and children per row and lists the reasons.
   Making an off-board item a Story, Task or Bug puts it in the "New items start in" bucket instead of being
   refused. The backlog's bulk bar offers Change type and Move under too.
+- Row order (v1.3.1): rows can be dragged by a grip (or moved with Alt+Shift+Up/Down) to reorder siblings or,
+  by the drop level, to move under another row with a fitted type. The order is stored per item
+  (`outlinePosition`; unplaced siblings keep the order by type and number after the placed ones) and used by the
+  timeline, backlog and Excel Timeline sheet. Reordering follows the plan setting, is not audited (like card
+  order) and is announced live. Add row below opens the typing row right under the chosen row and places the new
+  row there; Add child row opens it under the row's last child.
 - Splitter (M9.2): a separator between the plan table and the bars shares the width between them, by pointer or
   arrow keys, and is remembered per browser. A narrowed table gets its own horizontal scrollbar while the bars
   keep theirs; vertical scrolling stays shared so rows line up, and moving the cell focus scrolls the table to

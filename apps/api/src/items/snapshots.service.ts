@@ -306,6 +306,7 @@ export class SnapshotsService {
           id: item.id,
           parentId: item.parentId,
           number: item.number,
+          outlinePosition: item.outlinePosition,
           key: item.key,
           title: item.title,
           type: item.type,

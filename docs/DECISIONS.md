@@ -2,6 +2,21 @@
 
 ## v1.3.1 timeline rows and bulk hierarchy edits (2026-11-03)
 
+- Owner request in the same release: drag rows to reorder and show the typing row where the new row goes. The
+  owner approved one additive column, `WorkItem.outlinePosition` (nullable fractional index, migration
+  `20261104090000_outline_position`). Null keeps the old order (type, then number) after placed siblings, so
+  nothing moves on upgrade. `POST items/:item/outline` places an item after a visible sibling, optionally with a
+  new parent and fitted type through the ordinary update. The first placement among siblings numbers them
+  with raw SQL so their versions (`updatedAt`) do not change; hidden siblings are read only for ordering.
+  Reordering follows the plan rule, is not audited (as card order) and is announced live.
+- Review follow-ups: numbering siblings is one statement and announces each renumbered sibling live, and the
+  mover's own page reloads after a placement, so every viewer sees the same order. A parent change outside
+  the outline route clears the position (the item goes after the placed rows of its new parent). Siblings are
+  renumbered when repeated inserts at one spot leave no room. Accepted: positions are spaced evenly when
+  numbered, so a reader could infer that hidden siblings exist between visible ones (no titles, types or
+  counts beyond that); title-only ancestors sort after placed rows because their references carry no
+  position; dragging does not scroll the view by itself (Alt+Shift+Up/Down covers long moves).
+
 - Owner report after upgrading to v1.3.0: building Epic → Feature → Story → Task on the timeline needed
   manual bucket, type and parent changes per row. Fixes approved by the owner: Add child row (Alt+Enter) with
   the natural child type; indent and outdent fit the type to the new parent (`fitTypeUnder` in the shared

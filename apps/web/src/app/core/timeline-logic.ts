@@ -3,6 +3,7 @@ import {
   fitTypeUnder,
   isAllowedParent,
   ItemType,
+  type OutlineMoveRequest,
   type PlanEdge,
   type ScheduleDates,
   scheduleSpan,
@@ -509,6 +510,89 @@ export function outdentTarget(
   const grandparent = item.ancestors[item.ancestors.length - 2] ?? null;
   if (parent === undefined) return { error: 'This row is already at the top level' };
   return placed(item, grandparent?.id ?? null, grandparent?.type ?? null, childTypes);
+}
+
+/** Where a dragged row would land, and why not when it cannot. */
+export interface DropTarget {
+  /** The move to send, or null when the drop is not possible. */
+  move: OutlineMoveRequest | null;
+  /** The level the row would take. */
+  depth: number;
+  /** Why the drop is not possible, or empty. */
+  reason: string;
+}
+
+/**
+ * Where dropping a dragged row lands (v1.3.1): in a gap between rows, at a
+ * level between the next row's and one below the previous row's, chosen
+ * from the wanted level. One level below the previous row makes it that
+ * row's first child; otherwise it follows the row at that level just above
+ * the gap. The type is fitted to the new parent as when indenting.
+ *
+ * @param rows Rows in display order.
+ * @param index The dragged row.
+ * @param end The last row of the dragged row's subtree.
+ * @param gap Insert before this row index (rows.length for the end).
+ * @param wanted The level the pointer asks for.
+ * @param childTypes Types of the dragged item's children.
+ * @returns The move, the level and any reason it cannot happen.
+ */
+export function dropTarget(
+  rows: readonly TimelineRow[],
+  index: number,
+  end: number,
+  gap: number,
+  wanted: number,
+  childTypes: readonly ItemType[],
+): DropTarget {
+  const item = rows[index]?.node.item;
+  const none = (depth: number, reason: string): DropTarget => ({ move: null, depth, reason });
+  if (!item) return none(0, 'This row cannot move');
+  if (gap >= index && gap <= end + 1)
+    return none(rows[index].depth, 'Drop it outside its own rows');
+  const above = rows[gap - 1];
+  const below = rows[gap];
+  const depth = Math.max(
+    below?.depth ?? 0,
+    Math.min(above === undefined ? 0 : above.depth + 1, wanted),
+  );
+  let parent: WorkItemDto | null;
+  let afterId: string | null;
+  if (above !== undefined && depth === above.depth + 1) {
+    if (!above.node.item) return none(depth, 'A title-only row cannot take rows');
+    parent = above.node.item;
+    afterId = null;
+  } else {
+    let i = gap - 1;
+    while (i >= 0 && rows[i].depth > depth) i--;
+    const anchor = rows[i];
+    if (anchor === undefined) {
+      parent = null;
+      afterId = null;
+    } else {
+      if (i >= index && i <= end) return none(depth, 'Drop it outside its own rows');
+      if (!anchor.node.item) return none(depth, 'A title-only row cannot be a neighbour');
+      afterId = anchor.node.id;
+      const ref = anchor.node.item.ancestors[anchor.node.item.ancestors.length - 1];
+      parent =
+        ref === undefined ? null : (rows.find((row) => row.node.id === ref.id)?.node.item ?? null);
+      if (ref !== undefined && parent === null)
+        return none(depth, 'A title-only row cannot take rows');
+    }
+  }
+  if (item.adHoc && parent !== null) return none(depth, 'An ad-hoc item has no parent');
+  const fit = fitTypeUnder(item.type, parent?.type ?? null, childTypes);
+  if ('error' in fit) return none(depth, fit.error);
+  const parentId = parent?.id ?? null;
+  return {
+    move: {
+      afterId,
+      ...(parentId === item.parentId ? {} : { parentId }),
+      ...(fit.type === item.type ? {} : { type: fit.type }),
+    },
+    depth,
+    reason: '',
+  };
 }
 
 /**

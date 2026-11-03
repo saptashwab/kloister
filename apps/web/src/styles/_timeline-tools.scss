@@ -1,4 +1,4 @@
-// Timeline toolbar, selection bar and plan strip (SPEC §6.4), loaded with the timeline route only.
+// Timeline toolbar, selection bar, plan strip and row dragging (SPEC §6.4), loaded with the timeline route only.
 app-timeline {
   .tools {
     display: flex;
@@ -106,4 +106,37 @@ app-timeline {
 // Room for the share buttons and the "Other %" field.
 .who-menu.mat-mdc-menu-panel {
   max-width: none;
+  // Row grip (v1.3.1): shown on hover or focus of the row, dragged to reorder.
+  .grip {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 2px;
+    color: var(--k-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+  }
+  .row:hover .grip,
+  .row:focus-within .grip {
+    opacity: 1;
+  }
+  .grip:active {
+    cursor: grabbing;
+  }
+  // Where a dragged row would land; dashed and red when it cannot go there.
+  .drop-mark {
+    position: absolute;
+    z-index: 6;
+    height: 2px;
+    margin-top: -1px;
+    background: var(--k-primary);
+    pointer-events: none;
+  }
+  .drop-mark.bad {
+    background: repeating-linear-gradient(90deg, var(--k-danger-ink) 0 6px, transparent 6px 10px);
+  }
+  // The typing row shown where the new row will go.
+  .row.add.inline .cell {
+    background: var(--k-primary-soft);
+  }
 }

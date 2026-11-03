@@ -68,6 +68,37 @@ export function isAllowedParent(child: ItemType, parent: ItemType): boolean {
   return ALLOWED_PARENT_TYPES[child].includes(parent);
 }
 
+/** Default order of item types among siblings: Epics first, Bugs last. */
+const TYPE_RANK: Record<ItemType, number> = { EPIC: 0, FEATURE: 1, STORY: 2, TASK: 3, BUG: 4 };
+
+/** What sibling ordering reads from an item. */
+export interface OutlineSortable {
+  /** Item type. */
+  type: ItemType;
+  /** Per-project number. */
+  number: number;
+  /** Outline position, or null. */
+  outlinePosition: number | null;
+}
+
+/**
+ * Orders siblings in the plan outline (v1.3.1): items someone placed come
+ * first by their outline position; the rest follow in the default order, by
+ * type (Epics first) and then number. Timeline, backlog, exports and the API
+ * all use this one rule.
+ *
+ * @param a One item.
+ * @param b The other.
+ * @returns Negative when `a` comes first.
+ */
+export function compareOutline(a: OutlineSortable, b: OutlineSortable): number {
+  if (a.outlinePosition !== null && b.outlinePosition !== null)
+    return a.outlinePosition - b.outlinePosition || a.number - b.number;
+  if (a.outlinePosition !== null) return -1;
+  if (b.outlinePosition !== null) return 1;
+  return TYPE_RANK[a.type] - TYPE_RANK[b.type] || a.number - b.number;
+}
+
 /** Readable names of the item types, as shown in the app. */
 const TYPE_NAMES: Record<ItemType, string> = {
   EPIC: 'Epic',
@@ -337,6 +368,11 @@ export interface WorkItemDto {
   startNoEarlierThan: { date: string; second: boolean } | null;
   /** Order within the bucket, ascending. */
   position: number;
+  /**
+   * Order among siblings in the plan outline (timeline, backlog, exports), or
+   * null for the default order (v1.3.1); see {@link compareOutline}.
+   */
+  outlinePosition: number | null;
   /** Creator's user id. */
   createdById: string;
   /** Assignee user ids. */
@@ -478,6 +514,19 @@ export interface UpdateItemRequest {
   assignees?: AssigneeShareDto[];
   /** The full new label list. */
   labelIds?: string[];
+}
+
+/**
+ * Body of `POST /projects/:id/items/:item/outline` (v1.3.1): places an item
+ * among its siblings in the plan outline, optionally under a new parent.
+ */
+export interface OutlineMoveRequest {
+  /** New parent; omit to keep the parent, null for the top level. */
+  parentId?: string | null;
+  /** New type, when the old one is not allowed under the new parent. */
+  type?: ItemType;
+  /** Sibling to place the item right after; null or omitted for the first place. */
+  afterId?: string | null;
 }
 
 /** Body of `POST /projects/:id/items/:item/move`. */

@@ -92,6 +92,8 @@ export class LiveService {
   private presenceSent = SAME_PRESENCE;
   private presenceAt = 0;
   private presenceTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The follow requests in flight, answered one after another. */
+  private following: Promise<void> = Promise.resolve();
 
   /**
    * Notices the browser going offline at once (an open stream may not fail
@@ -290,10 +292,24 @@ export class LiveService {
 
   /**
    * Tells the API which project this stream follows, then reports presence.
+   * Requests go one after another, each with the project open when it is
+   * sent: answered out of order, an earlier "no project" could otherwise
+   * land last and leave the API following nothing while this tab thinks it
+   * follows the project.
    *
-   * @returns Resolves once sent.
+   * @returns Resolves once this and earlier requests are answered.
    */
-  private async sendFollow(): Promise<void> {
+  private sendFollow(): Promise<void> {
+    this.following = this.following.then(() => this.followNow());
+    return this.following;
+  }
+
+  /**
+   * Sends one follow request (see {@link sendFollow}).
+   *
+   * @returns Resolves once answered.
+   */
+  private async followNow(): Promise<void> {
     const streamId = this.streamId;
     if (streamId === null) return;
     const projectId = this.projectId;

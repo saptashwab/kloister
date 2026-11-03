@@ -41,6 +41,7 @@ const TASK = {
   dueTime: null,
   startNoEarlierThan: null,
   position: 1024,
+  outlinePosition: null,
   createdById: PERSON,
   assigneeIds: [PERSON],
   assigneeShares: [{ userId: PERSON, share: 100 }],

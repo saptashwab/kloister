@@ -334,6 +334,7 @@ describe('LiveService', () => {
     source.emit(LiveEvent.HELLO, { streamId: 's1' });
     expect(live.status()).toBe('live');
     expect(notifications.live).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
     http.expectOne('api/v1/events/s1/project').flush(null);
     // Lost: the browser retries by itself.
     source.onerror?.();
@@ -359,14 +360,38 @@ describe('LiveService', () => {
     await vi.advanceTimersByTimeAsync(2_000);
     // Only the subscription so far; presence would be refused before it.
     http.expectNone('api/v1/events/s1/presence');
-    const follows = http.match('api/v1/events/s1/project');
-    for (const f of follows) f.flush(null);
-    await vi.advanceTimersByTimeAsync(0);
+    // Follow requests go one at a time (hello's, then the project's).
+    for (let n = 0; n < 3; n++) {
+      for (const f of http.match('api/v1/events/s1/project')) f.flush(null);
+      await vi.advanceTimersByTimeAsync(0);
+    }
     expect(http.expectOne('api/v1/events/s1/presence').request.body).toEqual({
       itemId: 'i1',
       action: 'viewing',
       field: null,
     });
+    live.stop();
+  });
+
+  it('sends follow requests one after another, the last one with the open project', async () => {
+    vi.useFakeTimers();
+    const { live, http } = setup();
+    live.start();
+    http.expectOne('api/v1/events/status').flush({ enabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+    FakeSource.last!.emit(LiveEvent.HELLO, { streamId: 's1' });
+    await vi.advanceTimersByTimeAsync(0);
+    live.follow('p1');
+    await vi.advanceTimersByTimeAsync(0);
+    // Only the first request is out; the project's waits for its answer.
+    const first = http.match('api/v1/events/s1/project');
+    expect(first).toHaveLength(1);
+    expect(first[0].request.body).toEqual({ projectId: null });
+    first[0].flush(null);
+    await vi.advanceTimersByTimeAsync(0);
+    const second = http.expectOne('api/v1/events/s1/project');
+    expect(second.request.body).toEqual({ projectId: 'p1' });
+    second.flush(null);
     live.stop();
   });
 

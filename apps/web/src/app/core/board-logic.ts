@@ -1,5 +1,6 @@
 import {
   type BucketDto,
+  compareOutline,
   dueNow,
   isOverdueAt,
   type ItemRefDto,
@@ -271,15 +272,6 @@ export function dropRequest(
   }
 }
 
-/** Sort rank of item types: the hierarchy from top to bottom. */
-const TYPE_RANK: Record<ItemType, number> = {
-  EPIC: 0,
-  FEATURE: 1,
-  STORY: 2,
-  TASK: 3,
-  BUG: 4,
-};
-
 /** One node of the backlog tree. */
 export interface TreeNode {
   /** Item id. */
@@ -301,7 +293,7 @@ export interface TreeNode {
  * become read-only title nodes, so the hierarchy stays readable.
  *
  * @param items Visible items.
- * @returns Root nodes, ordered by type then number.
+ * @returns Root nodes, siblings in outline order (see compareOutline).
  */
 export function buildTree(items: WorkItemDto[]): TreeNode[] {
   const visible = new Map(items.map((i) => [i.id, i]));
@@ -336,9 +328,14 @@ export function buildTree(items: WorkItemDto[]): TreeNode[] {
     place(nodeFor(item), parent);
   }
 
+  // Siblings in the plan's outline order (v1.3.1): placed items first, the
+  // rest by type and number. Title-only ancestors have no position.
   const order = (list: TreeNode[]) => {
-    list.sort(
-      (a, b) => TYPE_RANK[a.ref.type] - TYPE_RANK[b.ref.type] || a.ref.number - b.ref.number,
+    list.sort((a, b) =>
+      compareOutline(
+        { ...a.ref, outlinePosition: a.item?.outlinePosition ?? null },
+        { ...b.ref, outlinePosition: b.item?.outlinePosition ?? null },
+      ),
     );
     for (const node of list) order(node.children);
   };

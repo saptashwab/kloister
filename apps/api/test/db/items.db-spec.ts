@@ -3,6 +3,7 @@ import {
   AuditAction,
   type AuditEntryDto,
   type ChecklistItemDto,
+  compareOutline,
   ErrorCode,
   type Page,
   type WorkItemDetailDto,
@@ -739,6 +740,80 @@ describe('work items (db)', () => {
       await openSchedule();
       const opened = (await as('member', 'GET', item(N.mine))).json() as WorkItemDetailDto;
       expect(opened.can).toMatchObject({ edit: true, plan: true, delete: true });
+    });
+  });
+
+  describe('outline order (v1.3.1)', () => {
+    /**
+     * Numbers of the top-level items in outline order.
+     *
+     * @param parentId Parent, or null for the top level.
+     * @returns Item numbers in display order.
+     */
+    async function order(parentId: string | null): Promise<number[]> {
+      const rows = await prisma.workItem.findMany({
+        where: { projectId, parentId, deletedAt: null },
+        select: { type: true, number: true, outlinePosition: true },
+      });
+      return rows.sort(compareOutline).map((r) => r.number);
+    }
+    const outline = (n: number) => `${item(n)}/outline`;
+
+    it('places items after a sibling, keeping hidden and untouched items in order', async () => {
+      // Default order: Epic, the Story, then Tasks by number.
+      expect(await order(null)).toEqual([N.epic, N.memberParent, N.mine, N.assigned, N.teamItem]);
+      const before = await prisma.workItem.findUniqueOrThrow({ where: { id: itemIds.assigned } });
+      const moved = await as('pm', 'POST', outline(N.teamItem), { afterId: itemIds.epic });
+      expect(moved.statusCode).toBe(200);
+      expect(await order(null)).toEqual([N.epic, N.teamItem, N.memberParent, N.mine, N.assigned]);
+      // Numbering the siblings does not change their versions.
+      const after = await prisma.workItem.findUniqueOrThrow({ where: { id: itemIds.assigned } });
+      expect(after.updatedAt).toEqual(before.updatedAt);
+      expect((await as('pm', 'POST', outline(N.assigned), {})).statusCode).toBe(200);
+      expect((await order(null))[0]).toBe(N.assigned);
+      // A parent change by other means (indent, Move under) drops the old
+      // position, so the item goes after the placed rows of its new parent.
+      await as('pm', 'PATCH', item(N.teamItem), { parentId: itemIds.memberParent });
+      const reparented = await prisma.workItem.findUniqueOrThrow({
+        where: { id: itemIds.teamItem },
+      });
+      expect(reparented.outlinePosition).toBeNull();
+    });
+
+    it('follows the plan rule and refuses foreign or hidden neighbours', async () => {
+      // The Member's own unscheduled item: allowed; the PM's assigned item: not.
+      expect((await as('member', 'POST', outline(N.mine), {})).statusCode).toBe(200);
+      expect((await as('member', 'POST', outline(N.assigned), {})).statusCode).toBe(403);
+      expect((await as('viewer', 'POST', outline(N.mine), {})).statusCode).toBe(403);
+      expect((await as('outsider', 'POST', outline(N.mine), {})).statusCode).toBe(404);
+      // The neighbour must be a sibling the caller sees.
+      const notSibling = await as('pm', 'POST', outline(N.mine), { afterId: itemIds.theirs });
+      expect(notSibling.statusCode).toBe(400);
+      expect((await as('pm', 'POST', outline(N.mine), { afterId: itemIds.mine })).statusCode).toBe(
+        400,
+      );
+    });
+
+    it('moves under a new parent with a fitted type in one audited change', async () => {
+      const res = await as('pm', 'POST', outline(N.assigned), {
+        parentId: itemIds.memberParent,
+        afterId: itemIds.memberChild,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ parentId: itemIds.memberParent });
+      expect(await order(itemIds.memberParent)).toEqual([N.memberChild, N.assigned]);
+      const loose = await seedItem(prisma, projectId, { createdById: ids.pm, type: 'FEATURE' });
+      const typed = await as('pm', 'POST', outline(loose.number), {
+        parentId: itemIds.feature,
+        type: 'STORY',
+      });
+      expect(typed.json()).toMatchObject({ type: 'STORY', parentId: itemIds.feature });
+      expect((typed.json() as WorkItemDetailDto).bucketId).not.toBeNull();
+      const entry = await prisma.auditLog.findFirstOrThrow({
+        where: { entityId: loose.id, action: AuditAction.ITEM_UPDATED },
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(JSON.stringify(entry.meta)).toContain('parentId');
     });
   });
 

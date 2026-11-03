@@ -421,4 +421,33 @@ test('child rows and Move under build the hierarchy without retyping (v1.3.1)', 
     expect(moved.bucketId).not.toBeNull();
   }
   await snap(page, 'timeline-child-rows');
+
+  // Rows can be reordered: Alt+Shift+Up moves Launch above Editorial review.
+  const titles = async (): Promise<string[]> =>
+    page.locator('[role="row"] .cell.title').allInnerTexts();
+  await cell(page, `${k}-5`, 1).click();
+  await page.keyboard.press('Alt+Shift+ArrowUp');
+  await expect
+    .poll(async () => {
+      const list = await titles();
+      return (
+        list.findIndex((t) => t.includes('Launch')) <
+        list.findIndex((t) => t.includes('Editorial review'))
+      );
+    })
+    .toBe(true);
+  // Add row below Draft copy: the typing row shows under it and the row lands there.
+  await page.getByRole('button', { name: `Actions for ${k}-3` }).click();
+  await page.getByRole('menuitem', { name: 'Add row below' }).click();
+  const inline = page.locator('.row.add.inline input');
+  await expect(inline).toBeVisible();
+  await inline.fill('Proofread');
+  await inline.press('Enter');
+  await expect
+    .poll(async () => {
+      const list = await titles();
+      return list[list.findIndex((t) => t.includes('Draft copy')) + 1] ?? '';
+    })
+    .toContain('Proofread');
+  await snap(page, 'timeline-reordered');
 });

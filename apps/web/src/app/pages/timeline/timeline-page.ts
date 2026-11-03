@@ -31,6 +31,7 @@ import {
   ItemStatus,
   ItemType,
   naturalChildType,
+  type OutlineMoveRequest,
   type PlanEdge,
   PresenceAction,
   type PresenceField,
@@ -49,6 +50,7 @@ import {
 import { firstValueFrom, map } from 'rxjs';
 import { errorMessage } from '../../core/api';
 import { buildTree, NONE, pruneTree } from '../../core/board-logic';
+import { OutlineApiService } from './outline-api.service';
 import { type BulkField, planBulk, runBulk } from '../../core/bulk';
 import { dayOf } from '../../core/format';
 import { ItemsApiService } from '../../core/items-api.service';
@@ -71,6 +73,7 @@ import {
   dueText,
   durationText,
   halfX,
+  dropTarget,
   indentTarget,
   outdentTarget,
   parseDuration,
@@ -884,13 +887,24 @@ interface BarDraft {
                   }
                 </div>
               </div>
+              @if (canCreate() && inlineAt() === i) {
+                <ng-container *ngTemplateOutlet="adderRow" />
+              }
             }
           </div>
 
-          @if (canCreate()) {
-            <div class="row add">
+          @if (canCreate() && inlineAt() === null) {
+            <ng-container *ngTemplateOutlet="adderRow" />
+          }
+          <ng-template #adderRow>
+            <div class="row add" [class.inline]="inlineAt() !== null">
               <div class="cells" [style.width.px]="gridPane()">
-                <div class="cell" [style.width.px]="gridPane()" style="gap: 8px">
+                <div
+                  class="cell"
+                  [style.width.px]="gridPane()"
+                  [style.padding-left.px]="8 + addDepth() * 16"
+                  style="gap: 8px"
+                >
                   <app-icon name="plus" />
                   <input
                     #adder
@@ -898,12 +912,22 @@ interface BarDraft {
                     [placeholder]="addLabel()"
                     [attr.maxlength]="titleMax"
                     (keydown.enter)="addRow($any($event.target))"
-                    (keydown.escape)="addParent.set(null); addChildId.set(null)"
-                    (paste)="pasteRows($event)"
+                    (keydown.escape)="leaveAdder()"
+                    (paste)="pasteRows($event); $event.stopPropagation()"
                   />
                 </div>
               </div>
             </div>
+          </ng-template>
+          @if (dropMark(); as d) {
+            <div
+              class="drop-mark"
+              [class.bad]="!d.valid"
+              [style.top.px]="48 + d.gap * rowHeight()"
+              [style.left.px]="d.left + check + 8 + d.depth * 16"
+              [style.width.px]="gridPane() - check - 8 - d.depth * 16"
+              [attr.title]="d.reason"
+            ></div>
           }
 
           <div class="layer" [style.left.px]="gridPane()" [style.width.px]="barsWidth()">
@@ -914,7 +938,7 @@ interface BarDraft {
             <svg
               class="links"
               [attr.width]="barsWidth()"
-              [attr.height]="rows().length * rowHeight()"
+              [attr.height]="(rows().length + (inlineAt() === null ? 0 : 1)) * rowHeight()"
               aria-hidden="true"
             >
               @for (l of links(); track l.key) {
@@ -941,6 +965,15 @@ interface BarDraft {
       @switch (c.id) {
         @case ('key') {
           @if (r.node.item; as it) {
+            @if (ctx.canPlan(it)) {
+              <span
+                class="grip"
+                aria-hidden="true"
+                title="Drag to move the row; Alt+Shift+Up or Down moves it with the keyboard"
+                (pointerdown)="rowDragStart($event, rows().indexOf(r))"
+                ><app-icon name="grip" [size]="12"
+              /></span>
+            }
             <a class="key k-key" [routerLink]="['items', it.number]" tabindex="-1">{{ it.key }}</a>
           } @else {
             <span class="k-key title-only">{{ r.node.ref.key }}</span>
@@ -1218,6 +1251,7 @@ export class TimelinePage implements OnInit {
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
   private readonly adder = viewChild<ElementRef<HTMLInputElement>>('adder');
   private readonly gridScroll = viewChild<ElementRef<HTMLElement>>('gridScroll');
+  private readonly outlineApi = inject(OutlineApiService);
   private readonly editor = viewChild<ElementRef<HTMLInputElement>>('editor');
   private readonly menuAnchor = viewChild('menuAnchor', { read: MatMenuTrigger });
 
@@ -1302,6 +1336,15 @@ export class TimelinePage implements OnInit {
   protected readonly report = signal<{ summary: string; problems: string[] } | null>(null);
   /** The parent new rows go under, set by "Add row below"; null for the focused row's level. */
   protected readonly addParent = signal<WorkItemDto | null>(null);
+  /** Where a dragged row would land, while dragging (v1.3.1). */
+  protected readonly dropMark = signal<{
+    gap: number;
+    depth: number;
+    /** Sideways scroll of the view, where the pinned table starts. */
+    left: number;
+    valid: boolean;
+    reason: string;
+  } | null>(null);
   /** Id of the item new rows go under as its children, set by "Add child row" (v1.3.1). */
   protected readonly addChildId = signal<string | null>(null);
   /**
@@ -1465,9 +1508,9 @@ export class TimelinePage implements OnInit {
       const sb = this.shownBox(succ);
       if (pb === null || sb === null) continue;
       const x1 = pb.left + pb.width;
-      const y1 = a * this.rowHeight() + this.rowHeight() / 2;
+      const y1 = this.rowY(a);
       const x2 = sb.left;
-      const y2 = b * this.rowHeight() + this.rowHeight() / 2;
+      const y2 = this.rowY(b);
       const d =
         x2 >= x1 + 10
           ? `M${x1} ${y1}H${x1 + 6}V${y2}H${x2}`
@@ -1997,6 +2040,11 @@ export class TimelinePage implements OnInit {
     ) {
       event.preventDefault();
       void this.outline(event.code === 'BracketRight' ? 1 : -1);
+      return;
+    }
+    if (event.altKey && event.shiftKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+      event.preventDefault();
+      void this.shiftRow(row, event.key === 'ArrowUp' ? -1 : 1);
       return;
     }
     switch (event.key) {
@@ -2775,6 +2823,44 @@ export class TimelinePage implements OnInit {
   // --- New rows ------------------------------------------------------------
 
   /**
+   * The row index after which the typing row shows (v1.3.1): after the
+   * subtree of the row chosen with Add row below or Add child row, so the
+   * new row appears where it will be; null shows it at the bottom.
+   */
+  protected readonly inlineAt = computed(() => {
+    const anchor = this.addChildOf() ?? this.addParent();
+    if (anchor === null) return null;
+    const rows = this.rows();
+    const at = rows.findIndex((row) => row.node.id === anchor.id);
+    if (at < 0) return null;
+    let end = at;
+    while (end + 1 < rows.length && rows[end + 1].depth > rows[at].depth) end++;
+    return end;
+  });
+
+  /** Indent of the typing row: a child's depth, or the chosen row's own. */
+  protected readonly addDepth = computed(() => {
+    const anchor = this.addChildOf() ?? this.addParent();
+    const at = this.inlineAt();
+    if (anchor === null || at === null) return 0;
+    const depth = this.rows().find((row) => row.node.id === anchor.id)?.depth ?? 0;
+    return this.addChildOf() === null ? depth : depth + 1;
+  });
+
+  /**
+   * Middle of a row in the bars layer, below the typing row when it shows
+   * above it.
+   *
+   * @param index Row index.
+   * @returns Y in px.
+   */
+  private rowY(index: number): number {
+    const inline = this.inlineAt();
+    const shift = inline !== null && index > inline ? 1 : 0;
+    return (index + shift) * this.rowHeight() + this.rowHeight() / 2;
+  }
+
+  /**
    * Focuses the add-row field; new rows go beside the given item.
    *
    * @param beside The item the new row goes beside, or null for the focused row.
@@ -2796,7 +2882,24 @@ export class TimelinePage implements OnInit {
     if (!this.canHaveChildren(parent)) return;
     this.addParent.set(null);
     this.addChildId.set(parent.id);
+    if (this.collapsed().has(parent.id)) {
+      const open = new Set(this.collapsed());
+      open.delete(parent.id);
+      this.collapsed.set(open);
+    }
     afterNextRender(() => this.adder()?.nativeElement.focus(), { injector: this.injector });
+  }
+
+  /**
+   * Leaves the typing row with Escape: new rows go to the bottom again and
+   * the focus returns to the row it was opened from.
+   */
+  protected leaveAdder(): void {
+    const anchor = this.addChildOf() ?? this.addParent();
+    this.addParent.set(null);
+    this.addChildId.set(null);
+    const at = anchor === null ? -1 : this.rows().findIndex((row) => row.node.id === anchor.id);
+    if (at >= 0) this.focusCell(at, this.focus().col);
   }
 
   /**
@@ -2868,6 +2971,7 @@ export class TimelinePage implements OnInit {
     if (project === null) return;
     const chain: { id: string; key: string; type: ItemType }[] = [];
     const created: WorkItemDto[] = [];
+    let placedAny = false;
     const teamId = project.myVisibility === 'TEAMS' ? (project.myTeams[0]?.teamId ?? null) : null;
     for (const [index, row] of rows.entries()) {
       const above =
@@ -2887,6 +2991,15 @@ export class TimelinePage implements OnInit {
         });
         this.ctx.upsert(item);
         created.push(item);
+        // Add row below: the new row goes right after the chosen row (or the
+        // row added before it), not at the end of its siblings (v1.3.1).
+        const beside = this.addParent();
+        if (row.level === 0 && beside !== null && this.addChildOf() === null) {
+          this.addParent.set(
+            await this.outlineApi.outline(project.id, item.id, { afterId: beside.id }),
+          );
+          placedAny = true;
+        }
         chain[row.level] = { id: item.id, key: item.key, type: item.type };
         chain.length = row.level + 1;
       } catch (error) {
@@ -2894,9 +3007,14 @@ export class TimelinePage implements OnInit {
           summary: `${created.length} of ${rows.length} rows created; stopped at "${row.title}".`,
           problems: [errorMessage(error)],
         });
+        if (placedAny) await this.ctx.refresh();
         return;
       }
     }
+    // Placing may have numbered the siblings too: reload so the order is right.
+    if (placedAny) await this.ctx.refresh();
+    // The typing row moved under the new row; keep typing there.
+    afterNextRender(() => this.adder()?.nativeElement.focus(), { injector: this.injector });
     // Undo deletes the rows, so it is offered only when the caller may delete
     // every one (with the plan kept to PMs and Leads, a Member may not once a
     // row is scheduled).
@@ -3132,6 +3250,113 @@ export class TimelinePage implements OnInit {
       return null;
     } catch (error) {
       return `${item.key}: ${errorMessage(error)}`;
+    }
+  }
+
+  /**
+   * Moves a row one place up or down among its siblings (Alt+Shift+Up/Down,
+   * v1.3.1); its children move with it.
+   *
+   * @param index Row index.
+   * @param direction -1 up, 1 down.
+   * @returns Resolves once moved.
+   */
+  protected async shiftRow(index: number, direction: -1 | 1): Promise<void> {
+    const item = this.rows()[index]?.node.item;
+    if (!item) return;
+    if (!this.ctx.canPlan(item)) {
+      this.toast.show(`${item.key}: only PMs and Leads change its plan`);
+      return;
+    }
+    const siblings = this.rows()
+      .filter((row) => row.node.item !== null && row.node.item.parentId === item.parentId)
+      .map((row) => row.node.id);
+    const at = siblings.indexOf(item.id);
+    const to = at + direction;
+    if (at < 0 || to < 0 || to >= siblings.length) return;
+    const afterId = direction === -1 ? (siblings[to - 1] ?? null) : siblings[to];
+    await this.placeRow(item, { afterId });
+    // The focus follows the row, so the next press moves it again.
+    const now = this.rows().findIndex((row) => row.node.id === item.id);
+    if (now >= 0) this.focusCell(now, this.focus().col);
+  }
+
+  /**
+   * Starts dragging a row by its grip (v1.3.1). Moving shows where it would
+   * land: between rows, at the level the pointer's sideways offset picks
+   * (16 px per level); releasing places it there with a fitted type.
+   *
+   * @param event The pointer event.
+   * @param index Row index.
+   */
+  protected rowDragStart(event: PointerEvent, index: number): void {
+    const rows = this.rows();
+    const item = rows[index]?.node.item;
+    if (event.button !== 0 || !item || !this.ctx.canPlan(item)) return;
+    event.preventDefault();
+    this.addParent.set(null);
+    this.addChildId.set(null);
+    const handle = event.target as HTMLElement;
+    const grid = handle.closest('[role="grid"]') as HTMLElement;
+    const scrolled = this.scroller()?.nativeElement.scrollLeft ?? 0;
+    let end = index;
+    while (end + 1 < rows.length && rows[end + 1].depth > rows[index].depth) end++;
+    const children = this.ctx
+      .items()
+      .filter((i) => i.parentId === item.id)
+      .map((i) => i.type);
+    let target: OutlineMoveRequest | null = null;
+    const move = (e: PointerEvent) => {
+      const top = grid.getBoundingClientRect().top;
+      const gap = Math.max(
+        0,
+        Math.min(rows.length, Math.round((e.clientY - top) / this.rowHeight())),
+      );
+      const wanted = rows[index].depth + Math.round((e.clientX - event.clientX) / 16);
+      const drop = dropTarget(rows, index, end, gap, wanted, children);
+      target = drop.move;
+      this.dropMark.set({
+        gap,
+        depth: drop.depth,
+        left: scrolled,
+        valid: drop.move !== null,
+        reason: drop.reason,
+      });
+    };
+    // On the window, so a re-render that removes the grip cannot strand the drag.
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      this.dropMark.set(null);
+      if (target !== null) void this.placeRow(item, target);
+    };
+    const cancel = () => {
+      target = null;
+      up();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+  }
+
+  /**
+   * Sends an outline move and reloads the project, so renumbered siblings
+   * and moved subtrees show in their new order.
+   *
+   * @param item The item.
+   * @param request Parent, type and the sibling to follow.
+   * @returns Resolves once placed.
+   */
+  private async placeRow(item: WorkItemDto, request: OutlineMoveRequest): Promise<void> {
+    const project = this.ctx.project();
+    if (project === null) return;
+    try {
+      await this.outlineApi.outline(project.id, item.id, request);
+      // Siblings may have been numbered and subtrees moved: reload the order.
+      await this.ctx.refresh();
+    } catch (error) {
+      this.toast.error(error);
     }
   }
 

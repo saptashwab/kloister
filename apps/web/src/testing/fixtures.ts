@@ -88,6 +88,7 @@ export function makeItem(
     dueTime: null,
     startNoEarlierThan: null,
     position: number,
+    outlinePosition: null,
     createdById: 'u1',
     assigneeIds: [],
     labelIds: [],

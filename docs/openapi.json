@@ -1920,6 +1920,7 @@
                       "dueTime": null,
                       "startNoEarlierThan": null,
                       "position": 1024,
+                      "outlinePosition": null,
                       "createdById": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
                       "assigneeIds": ["6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f"],
                       "assigneeShares": [
@@ -2015,6 +2016,7 @@
                   "dueTime": null,
                   "startNoEarlierThan": null,
                   "position": 1024,
+                  "outlinePosition": null,
                   "createdById": "6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f",
                   "assigneeIds": ["6f1d2c4e-8a0b-4c3d-9e5f-0a1b2c3d4e5f"],
                   "assigneeShares": [
@@ -2164,6 +2166,44 @@
         "tags": ["Items"],
         "x-permission": "Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
         "description": "**Permission:** Project member with `DELETE_ANY_ITEM` (PM, LEAD) or `DELETE_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
+        "security": [{ "session": [], "csrf": [] }]
+      }
+    },
+    "/api/v1/projects/{id}/items/{item}/outline": {
+      "post": {
+        "operationId": "ItemsController_outline",
+        "parameters": [
+          {
+            "name": "item",
+            "required": true,
+            "in": "path",
+            "description": "Item uuid or number.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/OutlineMoveDto" } }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/WorkItemDetailDto" } }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        },
+        "summary": "Places an item among its siblings in the plan outline, optionally under a new parent with a fitted type (v1.3.1). Permissions: `EDIT_ANY_ITEM` or `EDIT_OWN_ITEMS`, and the plan rule (ProjectAccessService.canPlanItem).",
+        "tags": ["Items"],
+        "x-permission": "Project member with `EDIT_ANY_ITEM` (PM, LEAD) or `EDIT_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
+        "description": "**Permission:** Project member with `EDIT_ANY_ITEM` (PM, LEAD) or `EDIT_OWN_ITEMS` (PM, LEAD, MEMBER). Non-members get 404.",
         "security": [{ "session": [], "csrf": [] }]
       }
     },
@@ -6766,6 +6806,28 @@
           }
         }
       },
+      "OutlineMoveDto": {
+        "type": "object",
+        "properties": {
+          "parentId": {
+            "type": "string",
+            "nullable": true,
+            "description": "New parent; omitted keeps the parent, null for the top level.",
+            "format": "uuid"
+          },
+          "type": {
+            "type": "string",
+            "description": "New type, when the old one is not allowed under the new parent.",
+            "enum": ["EPIC", "FEATURE", "STORY", "TASK", "BUG"]
+          },
+          "afterId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Sibling to place the item right after; omitted or null for the first place.",
+            "format": "uuid"
+          }
+        }
+      },
       "MoveItemDto": {
         "type": "object",
         "properties": {
@@ -7990,6 +8052,11 @@
             "description": "\"Start no earlier than\" pin set on the timeline, or null (M9)."
           },
           "position": { "type": "number", "description": "Order within the bucket, ascending." },
+          "outlinePosition": {
+            "type": "number",
+            "nullable": true,
+            "description": "Order among siblings in the plan outline (timeline, backlog, exports), or null for the default order (v1.3.1); see compareOutline."
+          },
           "createdById": { "type": "string", "description": "Creator's user id." },
           "assigneeIds": {
             "type": "array",
@@ -8053,6 +8120,7 @@
           "dueTime",
           "startNoEarlierThan",
           "position",
+          "outlinePosition",
           "createdById",
           "assigneeIds",
           "assigneeShares",
@@ -8203,6 +8271,11 @@
             "description": "\"Start no earlier than\" pin set on the timeline, or null (M9)."
           },
           "position": { "type": "number", "description": "Order within the bucket, ascending." },
+          "outlinePosition": {
+            "type": "number",
+            "nullable": true,
+            "description": "Order among siblings in the plan outline (timeline, backlog, exports), or null for the default order (v1.3.1); see compareOutline."
+          },
           "createdById": { "type": "string", "description": "Creator's user id." },
           "assigneeIds": {
             "type": "array",
@@ -8269,6 +8342,7 @@
           "dueTime",
           "startNoEarlierThan",
           "position",
+          "outlinePosition",
           "createdById",
           "assigneeIds",
           "assigneeShares",

@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ToastService } from '../../ui/toast.service';
+import { OutlineApiService } from './outline-api.service';
 import { provideRouter } from '@angular/router';
 import type {
   HolidayDto,
@@ -34,6 +35,8 @@ interface TimelineInternals {
   bulk(field: 'status', value: string): Promise<void>;
   outline(direction: 1 | -1): Promise<void>;
   focusAddChild(parent: WorkItemDetailDto): void;
+  focusAdd(beside: WorkItemDetailDto | null): void;
+  inlineAt(): number | null;
   addRow(input: HTMLInputElement): Promise<void>;
   addLabel(): string;
   linkInOrder(): Promise<void>;
@@ -78,6 +81,7 @@ describe('TimelinePage (M9)', () => {
       timeline: vi.fn().mockResolvedValue({ edges: [] }),
       update: vi.fn(),
       create: vi.fn(),
+      outline: vi.fn(),
       addDependency: vi.fn().mockResolvedValue(undefined),
     };
     const flow = { change: vi.fn().mockResolvedValue(null) };
@@ -100,6 +104,7 @@ describe('TimelinePage (M9)', () => {
         { provide: HolidaysApiService, useValue: holidaysApi },
         { provide: ProjectsApiService, useValue: projectsApi },
         { provide: ItemsApiService, useValue: itemsApi },
+        { provide: OutlineApiService, useValue: { outline: itemsApi.outline } },
       ],
     }).compileComponents();
     TestBed.inject(SessionStore).set({
@@ -246,6 +251,36 @@ describe('TimelinePage (M9)', () => {
       .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', altKey: true, bubbles: true }));
     await settle(fixture);
     expect(page.addLabel()).toContain('New row under KLO-7');
+  });
+
+  it('reorders rows with Alt+Shift+arrows and places new rows below the chosen row (v1.3.1)', async () => {
+    const { page, itemsApi, fixture, root } = await render([epic, a, b]);
+    itemsApi.outline.mockImplementation((_p: string, id: string) =>
+      Promise.resolve(id === 'i3' ? b : makeItem(9, { parentId: 'i1', ancestors: [epicRef] })),
+    );
+    // Review (row 2) moves up above Draft copy: first among the Epic's rows.
+    page.focusCell(2, 1, false);
+    root.querySelector('[role="grid"]')!.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'ArrowUp',
+        altKey: true,
+        shiftKey: true,
+        bubbles: true,
+      }),
+    );
+    await settle(fixture);
+    expect(itemsApi.outline).toHaveBeenCalledWith('p1', 'i3', { afterId: null });
+    // Add row below Draft copy: the typing row shows right under it, and the
+    // new row is placed after it.
+    page.focusAdd(a);
+    await settle(fixture);
+    expect(page.inlineAt()).toBe(1);
+    expect(root.querySelector('.row.add.inline input')).not.toBeNull();
+    itemsApi.create.mockResolvedValue(makeItem(9, { parentId: 'i1', ancestors: [epicRef] }));
+    const input = document.createElement('input');
+    input.value = 'Proofread';
+    await page.addRow(input);
+    expect(itemsApi.outline).toHaveBeenCalledWith('p1', 'i9', { afterId: 'i2' });
   });
 
   it('is read-only for viewers: no add row, no editors, no draggable edges', async () => {

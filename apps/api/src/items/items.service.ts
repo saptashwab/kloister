@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import {
   type AssigneeShareDto,
   type AuditEntryDto,
+  compareOutline,
   AuditAction,
   type DeleteItemResult,
   ErrorCode,
@@ -65,6 +66,7 @@ import {
   type CreateItemDto,
   type ListItemsQueryDto,
   type MoveItemDto,
+  type OutlineMoveDto,
   NONE,
   type UpdateItemDto,
 } from './items.dto.js';
@@ -79,6 +81,11 @@ export interface UpdateItemOptions {
   /** Merged into the audit entry, e.g. the reschedule id and triggering item. */
   auditMeta?: Prisma.InputJsonObject;
 }
+
+/** Gap between outline positions when siblings are numbered (v1.3.1). */
+const OUTLINE_STEP = 1024;
+/** Smallest gap between neighbours before siblings are numbered again. */
+const OUTLINE_MIN_GAP = 1e-6;
 
 /** Refusal when the project keeps the plan to PMs and Leads (M9.2). */
 export const PLAN_LEADS_ONLY = 'Only PMs and Leads can change the plan in this project';
@@ -587,6 +594,10 @@ export class ItemsService {
         }
         note('parentId', current.parentId, parentId);
         data.parentId = parentId;
+        // A position among the old siblings means nothing among the new ones:
+        // the item goes after the placed ones (v1.3.1); outline() then places
+        // it when that is how it moved.
+        data.outlinePosition = null;
       } else if (type !== current.type && parentId !== null) {
         // Unscoped on purpose: only the parent's type is read, and the
         // caller already sees the parent's title as an ancestor.
@@ -790,6 +801,115 @@ export class ItemsService {
     const row =
       transaction === undefined ? await serializable(this.prisma, work) : await work(transaction);
     return this.detail(transaction ?? this.prisma, access, row);
+  }
+
+  /**
+   * Places an item among its siblings in the plan outline (v1.3.1): right
+   * after `afterId`, or first. A new parent or type goes through
+   * {@link update} in the same transaction, with all its checks and its
+   * audit entry. The order itself is not audited (like card order) but is
+   * announced live. Siblings still in the default order get positions the
+   * first time one of them is placed, without touching their `updatedAt`;
+   * this reads siblings the caller may not see, only to order them.
+   *
+   * Permissions: 404 unless visible; 403 unless the caller may change the
+   * item's plan (ProjectAccessService.canPlanItem); `afterId` must be a
+   * visible sibling (400 otherwise).
+   *
+   * @param auth The caller.
+   * @param access The caller's access.
+   * @param ref Item uuid or number.
+   * @param dto New parent, type and the sibling to follow.
+   * @returns The item in its new place.
+   */
+  async outline(
+    auth: AuthContext,
+    access: ProjectAccess,
+    ref: string,
+    dto: OutlineMoveDto,
+  ): Promise<WorkItemDetailDto> {
+    const projectId = access.project.id;
+    const row = await serializable(this.prisma, async (tx) => {
+      const current = await this.findVisible(tx, access, ref);
+      if (!this.access.canPlanItem(access, itemFacts(current))) throw forbidden(PLAN_LEADS_ONLY);
+      const parentId = dto.parentId === undefined ? current.parentId : dto.parentId;
+      if (parentId !== current.parentId || (dto.type !== undefined && dto.type !== current.type)) {
+        await this.update(
+          auth,
+          access,
+          current.id,
+          {
+            ...(parentId === current.parentId ? {} : { parentId }),
+            ...(dto.type === undefined ? {} : { type: dto.type }),
+          },
+          tx,
+        );
+      }
+      if (dto.afterId === current.id) throw invalidField('afterId', 'An item cannot follow itself');
+      if (dto.afterId) {
+        const after = await tx.workItem.findFirst({
+          where: this.scoped(access, { id: dto.afterId, parentId }),
+          select: { id: true },
+        });
+        if (after === null) throw invalidField('afterId', 'Choose a visible item beside this one');
+      }
+      // Unscoped on purpose: hidden siblings are read only to keep the order.
+      const siblings = (
+        await tx.workItem.findMany({
+          where: { projectId, parentId, deletedAt: null, id: { not: current.id } },
+          select: { id: true, type: true, number: true, outlinePosition: true },
+        })
+      ).sort(compareOutline);
+      const at = dto.afterId ? siblings.findIndex((s) => s.id === dto.afterId) + 1 : 0;
+      // Number the siblings when some have no position yet, or when repeated
+      // inserts at one spot left no room between two neighbours.
+      const crowded = (left: number | null, right: number | null) =>
+        left !== null && right !== null && right - left < OUTLINE_MIN_GAP;
+      if (
+        siblings.some((s) => s.outlinePosition === null) ||
+        crowded(siblings[at - 1]?.outlinePosition ?? null, siblings[at]?.outlinePosition ?? null)
+      ) {
+        siblings.forEach(
+          (sibling, index) => (sibling.outlinePosition = (index + 1) * OUTLINE_STEP),
+        );
+        // One statement; raw SQL, so versions (updatedAt) stay as they are.
+        await tx.$executeRaw`UPDATE "WorkItem" AS w SET "outlinePosition" = v.position
+          FROM unnest(${siblings.map((s) => s.id)}::uuid[], ${siblings.map((s) => s.outlinePosition)}::float8[])
+          AS v(id, position) WHERE w."id" = v.id`;
+        // Other viewers refetch the renumbered siblings they can see.
+        for (const sibling of siblings) {
+          await publishAudit(tx, {
+            actorId: auth.user.id,
+            action: AuditAction.ITEM_UPDATED,
+            entityType: 'WorkItem',
+            entityId: sibling.id,
+            projectId,
+          });
+        }
+      }
+      const before = siblings[at - 1]?.outlinePosition ?? null;
+      const next = siblings[at]?.outlinePosition ?? null;
+      const position =
+        before === null
+          ? (next ?? OUTLINE_STEP * 2) - OUTLINE_STEP
+          : next === null
+            ? before + OUTLINE_STEP
+            : (before + next) / 2;
+      const moved = await tx.workItem.update({
+        where: { id: current.id },
+        data: { outlinePosition: position },
+        include: this.include(access),
+      });
+      await publishAudit(tx, {
+        actorId: auth.user.id,
+        action: AuditAction.ITEM_UPDATED,
+        entityType: 'WorkItem',
+        entityId: current.id,
+        projectId,
+      });
+      return moved;
+    });
+    return this.detail(this.prisma, access, row);
   }
 
   /**
