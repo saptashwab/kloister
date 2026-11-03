@@ -34,6 +34,15 @@ class FilterHost {
 })
 class PlainHost {}
 
+/** Hosts an avatar with a projected line, as board cards show a share. */
+@Component({
+  imports: [Avatar],
+  template: `<app-avatar userId="u7" name="Mia Member"
+    ><span class="share">50% of this item</span></app-avatar
+  >`,
+})
+class DetailHost {}
+
 describe('Avatar', () => {
   beforeEach(() => TestBed.configureTestingModule({ providers: [provideRouter([])] }));
 
@@ -65,6 +74,25 @@ describe('Avatar', () => {
     expect(fixture.componentInstance.toggled).toEqual(['u7']);
     expect(button.getAttribute('aria-pressed')).toBe('true');
     expect(button.classList).toContain('active');
+  });
+
+  it('shows projected content in the hover card', async () => {
+    const fixture = TestBed.createComponent(DetailHost);
+    await settle(fixture);
+    const button = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
+      'button.k-avatar',
+    )!;
+    button.click();
+    await settle(fixture);
+    const card = document.querySelector('[role="dialog"][aria-label="Mia Member"]');
+    expect(card?.querySelector('.share')?.textContent).toBe('50% of this item');
+    // Closing and reopening the card shows the projected line again.
+    button.click();
+    await settle(fixture);
+    button.click();
+    await settle(fixture);
+    const again = document.querySelector('[role="dialog"][aria-label="Mia Member"]');
+    expect(again?.querySelector('.share')?.textContent).toBe('50% of this item');
   });
 });
 

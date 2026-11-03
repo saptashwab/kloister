@@ -27,6 +27,7 @@ import { ActivatedRoute, Router, RouterLink, RouterOutlet } from '@angular/route
 import {
   endSlot,
   finishAfter,
+  type AssigneeShareDto,
   ITEM_TITLE_MAX,
   ItemStatus,
   ItemType,
@@ -59,7 +60,7 @@ import { PageActions } from '../../core/page-actions';
 import { changedFields, CONFLICT_FIELDS, personName, personWithRole } from '../../core/live-logic';
 import { type ItemHold, ProjectContext, type RemoteChange } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
-import { parseWho, shareOf, sharesOf, whoText, withShareFor } from '../../core/shares';
+import { parseWho, shareLabel, shareOf, sharesOf, whoText, withShareFor } from '../../core/shares';
 import { type ShareChoice, ShareButtons, ShareKeys } from '../../ui/share-buttons';
 import { SessionStore } from '../../core/session.store';
 import {
@@ -70,6 +71,8 @@ import {
   dateOfDay,
   dayNumber,
   dueText,
+  CELL_PADDING_PX,
+  fitAvatars,
   durationText,
   halfX,
   applyOutlineMoves,
@@ -1094,14 +1097,19 @@ interface BarDraft {
         }
         @case ('who') {
           @if (r.node.item; as it) {
-            @for (a of sharesOf(it).slice(0, 2); track a.userId) {
-              <app-avatar-static [userId]="a.userId" [name]="memberName(a.userId)" [size]="22" />
-              @if (a.share !== 100) {
-                <span class="who-share">{{ a.share }}%</span>
-              }
-            }
-            @if (it.assigneeIds.length > 2) {
-              <span class="muted">+{{ it.assigneeIds.length - 2 }}</span>
+            @if (whoStack(it, c.width); as w) {
+              <span class="k-avatars" role="img" [attr.aria-label]="w.label" [title]="w.label">
+                @for (a of w.shown; track a.userId) {
+                  <app-avatar-static
+                    [userId]="a.userId"
+                    [name]="memberName(a.userId)"
+                    [size]="22"
+                  />
+                }
+                @if (w.more > 0) {
+                  <span class="k-avatar who-more">{{ w.shown.length ? '+' : '' }}{{ w.more }}</span>
+                }
+              </span>
             }
           }
         }
@@ -2811,6 +2819,29 @@ export class TimelinePage implements OnInit {
     } catch (error) {
       this.toast.error(error);
     }
+  }
+
+  /**
+   * What the Who cell draws: as many avatars as fit the column, a "+N" circle
+   * for the rest, and every name with its share (below 100%) as its label and
+   * tooltip, since shares are not drawn.
+   *
+   * @param item The item.
+   * @param width The column width in px.
+   * @returns The stack, or null without assignees.
+   */
+  protected whoStack(
+    item: WorkItemDto,
+    width: number,
+  ): { shown: AssigneeShareDto[]; more: number; label: string } | null {
+    const people = sharesOf(item);
+    if (people.length === 0) return null;
+    const fit = fitAvatars(people.length, width - CELL_PADDING_PX);
+    return {
+      shown: people.slice(0, fit.shown),
+      more: fit.more,
+      label: people.map((a) => shareLabel(this.memberName(a.userId), a.share)).join(', '),
+    };
   }
 
   /**

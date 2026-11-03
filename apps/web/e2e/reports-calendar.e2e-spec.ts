@@ -183,7 +183,11 @@ test('shares are set inline and by typing, and the Member’s workload follows l
   await expect
     .poll(async () => (await itemOf(pm, s)).assigneeShares)
     .toEqual([{ userId: s.memberId, share: 25 }]);
-  await expect(who).toContainText('25%');
+  // The cell draws avatars only; the share is in its label and tooltip.
+  await expect(who.getByRole('img', { name: 'Mia Member 25%' })).toHaveAttribute(
+    'title',
+    'Mia Member 25%',
+  );
   await snap(pm, 'shares-timeline-who');
 
   // Every dashboard opens for the Member, with numbers from visible items only.

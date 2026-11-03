@@ -54,8 +54,8 @@ const POSITIONS: ConnectedPosition[] = [
 /**
  * A person's avatar (DESIGN §9): initials on a colour derived from the user
  * id. Hovering or keyboard-focusing it opens a hover card with their name,
- * email, "Filter board to this person" (on pages with a person filter) and
- * "View all their work". Clicking filters the board where a filter exists,
+ * email, any projected content (such as a share line), "Filter board to
+ * this person" (on pages with a person filter) and "View all their work". Clicking filters the board where a filter exists,
  * and otherwise toggles the card. Esc closes the card.
  */
 @Component({
@@ -143,6 +143,7 @@ const POSITIONS: ConnectedPosition[] = [
             @if (email()) {
               <span class="email">{{ email() }}</span>
             }
+            <ng-content />
           </div>
         </div>
         <div class="actions">
@@ -325,31 +326,6 @@ export class Avatar implements OnDestroy {
   }
 }
 
-/**
- * A non-interactive avatar, for places that only show who someone is (the
- * signed-in user in the sidebar, activity entries).
- */
-@Component({
-  selector: 'app-avatar-static',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { style: 'display: inline-flex' },
-  template: `<span class="k-avatar" role="img" [attr.aria-label]="name()" [style]="vars()">{{
-    letters()
-  }}</span>`,
-})
-export class StaticAvatar {
-  /** User id (decides the colour). */
-  readonly userId = input.required<string>();
-  /** Display name. */
-  readonly name = input.required<string>();
-  /** Size in px. */
-  readonly size = input(24);
-
-  /** Initials. */
-  protected readonly letters = computed(() => initials(this.name()));
-  /** Colour and size variables. */
-  protected readonly vars = computed(() => {
-    const c = avatarColours(this.userId());
-    return { '--a-bg': c.bg, '--a-fg': c.fg, '--a-size': `${this.size()}px` };
-  });
-}
+// The non-interactive avatar lives in its own file so the app shell can show
+// it without loading the hover card; re-exported for the pages that use both.
+export { StaticAvatar } from './static-avatar';

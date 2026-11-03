@@ -276,7 +276,11 @@ columns show a dashed note ("No cards for Mia Member here").
   cards, 30 px in the toolbar, 40 px in hover cards.
 - **Hover card**: hovering or focusing an avatar opens, after a short delay, a card (`--k-float`, 264 px) with the
   avatar, name and email and two actions: **Filter board to this person** and **View all their work**. It stays
-  open while the pointer or focus is inside it and closes on Esc. On touch, a tap opens it.
+  open while the pointer or focus is inside it and closes on Esc. On touch, a tap opens it. On board cards a
+  share below 100% is a "50% of this item" line under the email (v1.3.3); cards draw no percentages.
+- **Timeline Who cell**: an overlapping stack of 22 px avatars, as many as fit the column, then a "+N" circle the
+  size of an avatar for the rest (the circle alone at the narrowest width). Names with shares are the cell's
+  label and tooltip; the cell is a grid cell, not a set of buttons, so the Who menu (Enter) replaces hover cards.
 - **Filter board to this person**, and clicking an avatar in the toolbar, applies the quick person filter: the
   avatar gets a 2 px primary ring and `aria-pressed="true"`, the others fade to 45 %, a removable chip with the
   person's name appears, and only their cards stay on the board. Clicking again or removing the chip clears it.

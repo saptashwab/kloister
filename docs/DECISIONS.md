@@ -1,5 +1,18 @@
 # Decisions
 
+## v1.3.3 shares off the board cards (2026-11-03)
+
+- Owner feedback: on board cards the share ("50%") sat inside the overlapping avatar stack, so the next avatar
+  covered it, and a bare percentage read oddly without context. Cards now draw avatars only; a share below 100%
+  is a "50% of this item" line in the avatar's hover card and part of its accessible name. Shares stay visible
+  where the plan is edited: the drawer's assignee list, the timeline Who menu and the Workload report.
+- The timeline Who cell had the same problem at its 56px default width: two avatars with a share already
+  overflowed, so the "+N" count was clipped and other assignees went unnoticed. The cell now draws as many
+  overlapping avatars as fit the column (`fitAvatars` in `core/timeline-logic.ts`, so it loads only with the timeline) and a "+N" circle the size of an
+  avatar for the rest, which always fits, down to the 40px minimum (the circle alone then shows the count).
+  Every name with its share is the cell's label and tooltip ("Ann, Bo 25%"). No default width change, so
+  widths people already set keep their meaning.
+
 ## v1.3.2 row dragging like the board (2026-11-03)
 
 - Owner feedback on v1.3.1: dragging a row felt unresponsive (only a thin line moved, and the row moved after

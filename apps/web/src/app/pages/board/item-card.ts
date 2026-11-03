@@ -53,10 +53,10 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
       box-shadow: var(--k-rest);
       cursor: pointer;
     }
-    .k-avatars > .share {
-      margin: 0 0 0 var(--k-size-3px);
+    /* Projected into the avatar's hover card, under the email. */
+    .share {
       color: var(--k-muted);
-      font-size: var(--k-small);
+      font-size: var(--k-body-sm);
     }
     :host:focus-within,
     :host(.cdk-drag-preview) {
@@ -180,11 +180,13 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
           <span class="spacer"></span>
           <span class="k-avatars">
             @for (person of assignees(); track person.id) {
-              <app-avatar [userId]="person.id" [name]="person.name" [email]="person.email" />
+              <app-avatar [userId]="person.id" [name]="person.name" [email]="person.email">
+                @if (person.share !== 100) {
+                  <span class="share">{{ person.share }}% of this item</span>
+                }
+              </app-avatar>
               @if (person.share !== 100) {
-                <span class="share" [attr.aria-label]="person.name + ' has ' + person.share + '%'"
-                  >{{ person.share }}%</span
-                >
+                <span class="visually-hidden">{{ person.share }}% of this item</span>
               }
             }
           </span>

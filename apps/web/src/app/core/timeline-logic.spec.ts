@@ -11,6 +11,7 @@ import {
   conflicts,
   dueText,
   dropTarget,
+  fitAvatars,
   durationText,
   indentTarget,
   outdentTarget,
@@ -356,5 +357,19 @@ describe('keepDurations (M9.1)', () => {
         },
       ],
     );
+  });
+});
+
+describe('fitAvatars', () => {
+  it('draws everyone who fits and counts the rest in a circle that always fits', () => {
+    // 22px avatars overlapping by 6px: one needs 22px, two 38px, three 54px.
+    expect(fitAvatars(2, 40)).toEqual({ shown: 2, more: 0 });
+    expect(fitAvatars(3, 40)).toEqual({ shown: 1, more: 2 });
+    expect(fitAvatars(3, 54)).toEqual({ shown: 3, more: 0 });
+    expect(fitAvatars(5, 54)).toEqual({ shown: 2, more: 3 });
+    // Too narrow for two: the circle alone says how many.
+    expect(fitAvatars(3, 24)).toEqual({ shown: 0, more: 3 });
+    expect(fitAvatars(1, 10)).toEqual({ shown: 1, more: 0 });
+    expect(fitAvatars(0, 40)).toEqual({ shown: 0, more: 0 });
   });
 });

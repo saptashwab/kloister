@@ -896,3 +896,32 @@ export function keepDurations(
   }
   return changes;
 }
+
+/** Horizontal padding of a timeline cell in px: `--k-space-2` on each side (`_timeline-grid.scss`). */
+export const CELL_PADDING_PX = 16;
+
+/** What an overlapping avatar stack draws in the room it has. */
+export interface AvatarFit {
+  /** Avatars drawn, from the start of the list. */
+  shown: number;
+  /** People counted by a "+N" circle after them; 0 for no circle. */
+  more: number;
+}
+
+/**
+ * How many avatars of an overlapping stack fit a width, so a narrow column
+ * still says how many people there are: those that do not fit are counted by
+ * a "+N" circle the size of an avatar, which always fits.
+ *
+ * @param count People in the stack.
+ * @param width Room in px.
+ * @param size Avatar size in px.
+ * @param overlap How far each avatar overlaps the one before, in px
+ *   (`--k-size-6px` in `.k-avatars`).
+ * @returns Avatars to draw and the count for the circle.
+ */
+export function fitAvatars(count: number, width: number, size = 22, overlap = 6): AvatarFit {
+  const room = Math.max(1, Math.floor((width - size) / (size - overlap)) + 1);
+  if (count <= room) return { shown: count, more: 0 };
+  return { shown: room - 1, more: count - room + 1 };
+}

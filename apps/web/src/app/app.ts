@@ -20,7 +20,7 @@ import { ProjectsNav } from './core/projects-nav';
 import { SessionStore } from './core/session.store';
 import { ThemeService } from './core/theme.service';
 import { Shortcuts } from './core/shortcuts';
-import { StaticAvatar } from './ui/avatar';
+import { StaticAvatar } from './ui/static-avatar';
 import { Icon } from './ui/icon';
 
 /**

@@ -292,8 +292,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - columns are buckets, with a Group-by switch: Bucket (default), Status, Assignee, Sprint
   - drag-drop between and within columns
   - filters: assignee, label, sprint, type, due (overdue / this week), text search
-  - cards show type icon, key-number, title, labels, assignee avatars (initials, with the share beside those below
-    100%, M13), due date and optional due time (red if overdue), checklist progress
+  - cards show type icon, key-number, title, labels, assignee avatars (initials; a share below 100% is in the
+    avatar's hover card and label, M13), due date and optional due time (red if overdue), checklist progress
   - an item with a due time is overdue once that time has passed; one without a time, from the day after its due date.
     Within one due day, timed items sort first, earliest first, then untimed items, then by priority (M8.5)
   - labels use the project's label style (solid by default; tinted or cover bar), with text contrast chosen automatically
