@@ -127,8 +127,9 @@ test('report tiles open the backlog filtered, and a bulk edit can be undone', as
   // Move the shown item to another bucket, then put it back with Undo.
   await pm.getByRole('checkbox', { name: 'Select all shown' }).first().check();
   await choose(pm, 'Set bucket', s.buckets[1].name);
-  const toast = pm.locator('mat-snack-bar-container');
-  await expect(toast).toContainText('1 item updated');
+  // A fading toast may still be in the page, so match the one with the text.
+  const toast = pm.locator('mat-snack-bar-container', { hasText: '1 item updated' });
+  await expect(toast).toBeVisible();
   const itemUrl = `api/v1/projects/${s.project.id}/items/${s.adHoc.id}`;
   await expect
     .poll(
@@ -136,7 +137,9 @@ test('report tiles open the backlog filtered, and a bulk edit can be undone', as
     )
     .toBe(s.buckets[1].id);
   await toast.getByRole('button', { name: 'Undo' }).click();
-  await expect(pm.locator('mat-snack-bar-container')).toContainText('Change undone');
+  await expect(
+    pm.locator('mat-snack-bar-container', { hasText: 'Change undone' }).last(),
+  ).toBeVisible();
   await expect
     .poll(
       async () => ((await (await pm.request.get(itemUrl)).json()) as WorkItemDetailDto).bucketId,
@@ -155,7 +158,9 @@ test('Copy link copies the item’s own address from a card and from the drawer'
   await pm.goto(`/p/${k}`);
   const card = pm.locator('app-item-card', { hasText: 'Draft the handbook' });
   await card.getByRole('button', { name: 'Copy link' }).click();
-  await expect(pm.locator('mat-snack-bar-container')).toContainText('Link copied');
+  await expect(
+    pm.locator('mat-snack-bar-container', { hasText: 'Link copied' }).last(),
+  ).toBeVisible();
   expect(await pm.evaluate(() => navigator.clipboard.readText())).toBe(expected(s.planned.number));
 
   // From the drawer opened on the backlog, the link is still the item's own.
@@ -163,7 +168,9 @@ test('Copy link copies the item’s own address from a card and from the drawer'
   const drawer = pm.getByRole('dialog');
   await drawer.getByRole('button', { name: 'Copy link' }).focus();
   await pm.keyboard.press('Enter');
-  await expect(pm.locator('mat-snack-bar-container')).toContainText('Link copied');
+  await expect(
+    pm.locator('mat-snack-bar-container', { hasText: 'Link copied' }).last(),
+  ).toBeVisible();
   expect(await pm.evaluate(() => navigator.clipboard.readText())).toBe(expected(s.adHoc.number));
 });
 
