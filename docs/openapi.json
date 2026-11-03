@@ -7544,6 +7544,12 @@
               "settings",
               "ado"
             ]
+          },
+          "itemIds": {
+            "description": "Every item being moved together, with `moving` only (v1.4.1); `itemId`\nis the first. Each must be visible to the caller.",
+            "uniqueItems": true,
+            "type": "array",
+            "items": { "type": "string", "format": "uuid" }
           }
         },
         "required": ["itemId", "action", "field"]
@@ -10534,6 +10540,11 @@
             ],
             "nullable": true,
             "description": "The project page they are on, or null when not reported."
+          },
+          "itemIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "With `moving` only (v1.4.1): every item being moved together that the viewer may see, `itemId` first. Absent when one item is moved."
           }
         },
         "required": ["userId", "itemId", "action", "field", "view"]

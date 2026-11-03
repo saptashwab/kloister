@@ -138,6 +138,16 @@ Events (data types are in `packages/shared/src/live.ts` and the [API reference](
 - The hub publishes the entry on the same PostgreSQL channel, so every API process knows it. Each
   viewer receives only the people on the project whose item they can see; an entry on a hidden
   item shows the person without the item.
+- Rows moved together (v1.4.1): a `moving` report may list `itemIds`, every item being moved with
+  `itemId` first, at most `PRESENCE_ITEMS_MAX` (100). Each must be visible to the reporter (404
+  otherwise). Only the ids travel on the channel (the payload limit); each API process looks up
+  the listed items' visibility facts itself, once per new list, and drops a lookup that a newer
+  report of the same stream overtook, and repeats a lookup that an item change raced. A list
+  too long for the payload limit (an item with very many assignees) is shortened; presence is
+  never turned into a project resync. Every viewer gets the list filtered item by item with the
+  same `canViewItem` check as `itemId`; `itemId` becomes the first item they can see, and an
+  entry none of whose items they can see shows the person without an item. A hidden item never
+  reaches a viewer, and item changes keep the listed items' facts current.
 - Someone appears to others only after staying 2 seconds. An explicit leave or a closed tab removes
   the entry at once; entries from an API process that stopped confirming them expire after 60
   seconds.
@@ -186,6 +196,14 @@ Events (data types are in `packages/shared/src/live.ts` and the [API reference](
   cards say what each person does and offer Go to: the open page registers a locator with
   `ProjectContext.registerLocator` that scrolls to and flashes (board, backlog) or selects
   (timeline) the item, and the shell opens the drawer unless the page answers `done`.
+- Several holds with `moving` (rows dragged together on the timeline) become one report listing
+  them all (`ProjectContext.report`); `presenceByItem` maps every listed item to the person. The
+  timeline outlines each listed row and tags only the first (DESIGN §9.1).
+- Pending edits (v1.4.1, DESIGN §9.2): `ProjectContext.optimistic` shows an edit at once on top
+  of the store's copy (`core/pending-edits.ts`). Copies arriving from live updates or reloads pass
+  through it: they become the new base and the pending edit stays on top, so a rollback after a
+  failed or cancelled save restores the newest copy, never an older one. Holds and the Keep mine /
+  Use theirs notice work as before, since a timeline edit releases its hold before it saves.
 
 ## The admin switch
 

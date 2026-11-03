@@ -63,6 +63,7 @@ export class PresenceMark {
     class: 'k-pm-tag',
     '[class.short]': 'short()',
     '[class.inside]': "place() === 'inside'",
+    '[class.inline]': "place() === 'inline'",
     '[style]': 'vars()',
     '[attr.role]': "announce() ? 'img' : null",
     '[attr.aria-hidden]': "announce() ? null : 'true'",
@@ -78,9 +79,10 @@ export class PresenceTag {
   readonly what = input('this item');
   /**
    * `outside`: above the element's top edge (drawer fields); `inside`:
-   * within its top corner, for elements that clip (cards, grid cells).
+   * within its top corner, for elements that clip (cards, grid cells);
+   * `inline`: in a line of text, such as a timeline bar's label (v1.4.1).
    */
-  readonly place = input<'outside' | 'inside'>('outside');
+  readonly place = input<'outside' | 'inside' | 'inline'>('outside');
   /**
    * False where small presence avatars in the same card, row or cell
    * already announce the sentence (board cards, backlog table rows,

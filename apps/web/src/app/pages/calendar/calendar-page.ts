@@ -18,6 +18,7 @@ import {
   ItemStatus,
   ItemType,
   moveFinishTo,
+  type PlanEdge,
   PresenceAction,
   type ScheduleDates,
   workCalendar,
@@ -40,6 +41,9 @@ import { Skeleton } from '../../ui/feedback';
 import { phoneLayout } from '../../ui/row-cards';
 import { ToastService } from '../../ui/toast.service';
 import { CalendarView, type CalendarMove } from './calendar-view';
+
+/** The pending-edit tag of a calendar move (v1.4.1). */
+const MOVE_TAG = 'dates';
 
 /** Most undated items listed beside the calendar. */
 const UNDATED_MAX = 100;
@@ -167,6 +171,8 @@ export class CalendarPage implements OnInit {
   protected readonly mine = signal(false);
   protected readonly error = signal('');
   private readonly holidayList = signal<CalendarRange[]>([]);
+  /** Links whose both ends the caller sees, or null until loaded (v1.4.1). */
+  private readonly edges = signal<PlanEdge[] | null>(null);
   private hold: ItemHold | null = null;
 
   /** Personal spaces have no assignees. */
@@ -229,7 +235,8 @@ export class CalendarPage implements OnInit {
         [this.assignee(), this.type(), this.label(), this.sprint()].filter((v) => v !== '').length +
         (this.mine() ? 1 : 0),
     }));
-    inject(DestroyRef).onDestroy(() => void this.hold?.release());
+    const destroy = inject(DestroyRef);
+    destroy.onDestroy(() => void this.hold?.release());
     effect(() => {
       // The project is set again on every reload, also after holiday changes.
       const project = this.ctx.project();
@@ -237,6 +244,43 @@ export class CalendarPage implements OnInit {
         if (project !== null) void this.loadHolidays(project);
       });
     });
+    effect(() => {
+      // Links for previews in the browser (v1.4.1), again when they change.
+      const project = this.projectRef();
+      this.ctx.linksVersion();
+      untracked(() => {
+        if (project !== null && project.ownerId === null) void this.loadEdges(project);
+      });
+    });
+    this.ctx.registerPlan(() => {
+      const edges = this.edges();
+      return edges === null || !this.holidaysLoaded() ? null : { edges, calendar: this.calendar() };
+    }, destroy);
+    // The dependents dialog opens at once on the first move (v1.4.1).
+    void this.flow.preload();
+  }
+
+  /** True once the holidays of the shown project are loaded. */
+  private readonly holidaysLoaded = signal(false);
+  /** The project, changing only when another one opens (not on every reload). */
+  private readonly projectRef = computed(() => this.ctx.project(), {
+    equal: (a, b) => a?.id === b?.id && a?.ownerId === b?.ownerId,
+  });
+
+  /**
+   * Loads the visible links, for previews in the browser (v1.4.1). Without
+   * them the API previews instead.
+   *
+   * @param project The project.
+   * @returns Resolves once loaded.
+   */
+  private async loadEdges(project: ProjectDto): Promise<void> {
+    try {
+      const timeline = await this.api.timeline(project.id);
+      if (this.ctx.project()?.id === project.id) this.edges.set(timeline.edges);
+    } catch {
+      this.edges.set(null);
+    }
   }
 
   /** Loads the project's lists; live updates keep them current. */
@@ -267,6 +311,7 @@ export class CalendarPage implements OnInit {
       canMove: this.ctx.writable() && this.ctx.canPlan(i),
       presence: people === undefined ? null : presenceLine(people, this.ctx.membersById()),
       project: null,
+      pending: this.ctx.isPending(i.id, MOVE_TAG),
     };
   }
 
@@ -279,9 +324,12 @@ export class CalendarPage implements OnInit {
    * @returns Resolves once loaded.
    */
   private async loadHolidays(project: ProjectDto): Promise<void> {
+    // Previews wait for the new calendar.
+    this.holidaysLoaded.set(false);
     try {
       if (project.ownerId === null) {
         this.holidayList.set((await this.holidaysApi.forProject(project.id)).holidays);
+        this.holidaysLoaded.set(true);
         return;
       }
       if (!project.settings.useInstanceHolidays) {
@@ -291,8 +339,10 @@ export class CalendarPage implements OnInit {
       const mine = await this.reportsApi.myCalendar(this.today(), this.today());
       this.holidayList.set(mine.holidays.filter((h) => h.projectId === null));
     } catch {
-      // Holidays only shade the calendar; without them it still works.
+      // Holidays only shade the calendar; without them it still works, and
+      // previews come from the API.
       this.holidayList.set([]);
+      this.holidaysLoaded.set(false);
     }
   }
 
@@ -319,11 +369,11 @@ export class CalendarPage implements OnInit {
     const anchor = item?.dueDate ?? item?.startDate ?? null;
     if (item === undefined || anchor === null) return;
     const to = moveFinishTo(item, addDays(anchor, request.days), this.calendar());
-    if (this.personal() || item.adHoc) {
-      await this.saveDirectly(item, to);
-      return;
-    }
-    await this.flow.change([{ item: item.id, ...to }]);
+    // The entry stays where it was dropped, in the pending style, until saved (v1.4.1).
+    await this.ctx.optimistic(item.id, to, MOVE_TAG, async () => {
+      if (this.personal() || item.adHoc) await this.saveDirectly(item, to);
+      else await this.flow.change([{ item: item.id, ...to }]);
+    });
   }
 
   /**

@@ -432,3 +432,38 @@ button.k-avatar {
     outline-offset: calc(-1 * var(--k-focus-width));
   }
 }
+
+/* An edit shown before the server saved it (v1.4.1, DESIGN §9.2): dimmed,
+   with a small spinner at its end; the spinner stands still with reduced
+   motion. */
+.k-pending {
+  position: relative;
+  opacity: 0.65;
+}
+
+.k-pending::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: var(--k-space-1);
+  width: var(--k-size-10px);
+  height: var(--k-size-10px);
+  box-sizing: border-box;
+  margin-top: calc(var(--k-size-10px) / -2);
+  border: calc(2 * var(--k-line)) solid var(--k-primary);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: k-pending-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .k-pending::after {
+    animation: none;
+  }
+}
+
+@keyframes k-pending-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

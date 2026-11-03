@@ -71,7 +71,7 @@ import {
   ProjectContext,
   type RemoteChange,
 } from '../../core/project-context';
-import { RescheduleFlow } from '../../core/reschedule';
+import { changePatch, RescheduleFlow } from '../../core/reschedule';
 import { parseWho, shareLabel, shareOf, sharesOf, whoText, withShareFor } from '../../core/shares';
 import { type ShareChoice, ShareButtons, ShareKeys } from '../../ui/share-buttons';
 import { SessionStore } from '../../core/session.store';
@@ -86,6 +86,7 @@ import {
   dueText,
   CELL_PADDING_PX,
   fitAvatars,
+  idColumnWidth,
   durationText,
   halfX,
   applyOutlineMoves,
@@ -201,7 +202,7 @@ const PLAN_COLUMNS: readonly ColumnId[] = [
 
 /** Every column; the first eight are shown by default. */
 const COLUMNS: Column[] = [
-  { id: 'key', label: '#', width: 68, edit: null },
+  { id: 'key', label: 'ID', width: 68, edit: null },
   { id: 'title', label: 'Title', width: 200, edit: 'text' },
   { id: 'start', label: 'Start', width: 104, edit: 'text' },
   { id: 'days', label: 'Days', width: 48, edit: 'text' },
@@ -771,6 +772,7 @@ interface BarDraft {
                 [class.dragged]="rowDrag.view()?.hidden?.has(i)"
                 [style.translate]="rowShift(i)"
                 [class.k-live-flash]="ctx.flashing().has(r.node.id)"
+                [appPresenceMark]="otherMover(r.node.id)"
                 [attr.title]="changedBy(r.node.id)"
                 [attr.aria-selected]="r.node.item ? selected().has(r.node.id) : null"
               >
@@ -799,6 +801,8 @@ interface BarDraft {
                       [class.num]="c.id === 'days' || c.id === 'work' || c.id === 'progress'"
                       [class.title]="c.id === 'title'"
                       [class.focus]="focus().row === i && focus().col === ci"
+                      [class.k-pending]="ctx.isPending(r.node.id, c.id)"
+                      [attr.aria-busy]="ctx.isPending(r.node.id, c.id) || null"
                       [appPresenceMark]="otherEditor(r.node.id, c.id)"
                       [attr.tabindex]="focus().row === i && focus().col === ci ? 0 : -1"
                       [attr.aria-readonly]="!editable(r, c) || null"
@@ -828,6 +832,9 @@ interface BarDraft {
                     </div>
                   }
                   <div class="cell" role="gridcell" [style.width.px]="check">
+                    @if (!barPeople(r) && moverTag(r.node.id); as pm) {
+                      <app-presence-tag [entry]="pm" place="inside" what="this row" />
+                    }
                     @if (r.node.item; as it) {
                       <button
                         mat-icon-button
@@ -911,6 +918,14 @@ interface BarDraft {
                         </div>
                       }
                       <div class="blabel" [style.left.px]="b.left + b.width + 8">
+                        @if (moverTag(it.id); as pm) {
+                          <app-presence-tag
+                            [entry]="pm"
+                            place="inline"
+                            what="this bar"
+                            [announce]="false"
+                          />
+                        }
                         @if (ctx.presenceByItem().get(it.id); as people) {
                           <app-presence
                             [people]="people"
@@ -1050,9 +1065,19 @@ interface BarDraft {
                 ><app-icon name="grip" [size]="12"
               /></span>
             }
-            <a class="key k-key" [routerLink]="['items', it.number]" tabindex="-1">{{ it.key }}</a>
+            <a
+              class="key k-key"
+              [routerLink]="['items', it.number]"
+              tabindex="-1"
+              [attr.title]="it.key"
+              [attr.aria-label]="it.key"
+              >{{ it.number }}</a
+            >
           } @else {
-            <span class="k-key title-only">{{ r.node.ref.key }}</span>
+            <span class="k-key title-only" [attr.title]="r.node.ref.key"
+              ><span aria-hidden="true">{{ r.node.ref.number }}</span
+              ><span class="visually-hidden">{{ r.node.ref.key }}</span></span
+            >
           }
         }
         @case ('title') {
@@ -1316,6 +1341,13 @@ export class TimelinePage implements OnInit {
   private barHold: ItemHold | null = null;
   /** Lets the header's "Go to" show rows here (DESIGN §9.1). */
   private readonly locator = this.ctx.registerLocator((id) => this.goTo(id), inject(DestroyRef));
+  /** True once the links and holidays are loaded, for local reschedule previews (v1.4.1). */
+  private readonly planReady = signal(false);
+  /** Offers the links and calendar for previews in the browser (v1.4.1). */
+  private readonly planSource = this.ctx.registerPlan(
+    () => (this.planReady() ? { edges: this.edges(), calendar: this.calendar() } : null),
+    inject(DestroyRef),
+  );
   /** Ends holds when the page closes, so the item does not stay busy (M10). */
   private readonly holdsEnd = inject(DestroyRef).onDestroy(() => {
     void this.editHold?.release();
@@ -1498,7 +1530,14 @@ export class TimelinePage implements OnInit {
   protected readonly maxWidth = MAX_WIDTH;
 
   protected readonly columns = computed(() =>
-    this.visibleColumns().map((c) => ({ ...c, width: this.widths()[c.id] ?? c.width })),
+    this.visibleColumns().map((c) => ({
+      ...c,
+      width: this.widths()[c.id] ?? (c.id === 'key' ? this.idWidth() : c.width),
+    })),
+  );
+  /** Default ID column width: the longest item number fits (v1.4.1). */
+  private readonly idWidth = computed(() =>
+    idColumnWidth(this.ctx.items().reduce((max, i) => Math.max(max, i.number), 0)),
   );
   /** The columns shown, at their default widths. */
   private readonly visibleColumns = computed(() =>
@@ -1538,7 +1577,10 @@ export class TimelinePage implements OnInit {
     return pruneTree(
       roots,
       (i) =>
-        (text === '' || i.title.toLowerCase().includes(text) || i.key.toLowerCase() === text) &&
+        (text === '' ||
+          i.title.toLowerCase().includes(text) ||
+          i.key.toLowerCase() === text ||
+          String(i.number) === text) &&
         (this.typeFilter() === '' || i.type === this.typeFilter()) &&
         (this.assigneeFilter() === '' || i.assigneeIds.includes(this.assigneeFilter())) &&
         (this.showDone() || i.status !== ItemStatus.DONE),
@@ -1659,6 +1701,8 @@ export class TimelinePage implements OnInit {
    * Loads fresh data and the links, then shows the item named in `?item=`.
    */
   ngOnInit(): void {
+    // The dependents dialog opens at once on the first date change (v1.4.1).
+    void this.flow.preload();
     void (async () => {
       try {
         await this.ctx.refresh();
@@ -1686,6 +1730,7 @@ export class TimelinePage implements OnInit {
     ]);
     this.edges.set(timeline.edges);
     this.holidayInfo.set(holidays);
+    this.planReady.set(true);
   }
 
   /**
@@ -2267,6 +2312,8 @@ export class TimelinePage implements OnInit {
     if (r === undefined || c === undefined || !this.editable(r, c)) return;
     const item = r.node.item!;
     this.focus.set({ row, col });
+    // A repeated Enter or F2 on a cell whose edit is still saving does nothing (v1.4.1).
+    if (this.ctx.isPending(item.id, c.id)) return;
     // Typing in the Who cell edits it as text ("Ann, Bo 25"); Enter opens the menu.
     if (c.edit === 'menu' && !(c.id === 'who' && typed !== null)) {
       this.openMenu(c.id, item, row, col);
@@ -2391,7 +2438,9 @@ export class TimelinePage implements OnInit {
       return;
     }
     const item = await this.afterMissed(r.node.item, missed, COLUMN_WRITES[c.id] ?? [], 'editing');
-    if (item !== null) await this.saveCell(item, c.id, e.value.trim());
+    // The same cell's earlier edit is still saving: this commit is a repeat (v1.4.1).
+    if (item !== null && !this.ctx.isPending(item.id, c.id))
+      await this.saveCell(item, c.id, e.value.trim());
   }
 
   /**
@@ -2451,7 +2500,8 @@ export class TimelinePage implements OnInit {
   }
 
   /**
-   * Someone else dragging a bar, for its outline.
+   * Someone else dragging a bar or moving rows, for the outline of the bar
+   * and of the whole row (v1.4.1).
    *
    * @param itemId Item id.
    * @returns Their presence, or null.
@@ -2461,6 +2511,18 @@ export class TimelinePage implements OnInit {
       this.ctx.presenceByItem().get(itemId),
       (p) => p.action === PresenceAction.MOVING,
     );
+  }
+
+  /**
+   * The mover whose name tag a row shows (v1.4.1): only the first of the
+   * rows someone moves together carries it; the others are outlined only.
+   *
+   * @param itemId Item id.
+   * @returns Their presence, or null.
+   */
+  protected moverTag(itemId: string): PresenceEntryDto | null {
+    const entry = this.otherMover(itemId);
+    return entry !== null && (entry.itemIds?.[0] ?? entry.itemId) === itemId ? entry : null;
   }
 
   /**
@@ -2487,7 +2549,8 @@ export class TimelinePage implements OnInit {
   }
 
   /**
-   * Saves one cell's new text.
+   * Saves one cell's new text. The new value shows at once in the pending
+   * style and goes back if the save fails or is cancelled (v1.4.1).
    *
    * @param item The item.
    * @param column The column.
@@ -2499,17 +2562,19 @@ export class TimelinePage implements OnInit {
     if (project === null) return;
     try {
       switch (column) {
-        case 'title':
+        case 'title': {
           if (value === '' || value === item.title) return;
-          this.ctx.upsert(
-            await this.api.update(project.id, item.id, { title: value.slice(0, ITEM_TITLE_MAX) }),
+          const title = value.slice(0, ITEM_TITLE_MAX);
+          await this.ctx.optimistic(item.id, { title }, column, async () =>
+            this.ctx.upsert(await this.api.update(project.id, item.id, { title })),
           );
           return;
+        }
         case 'start':
         case 'due': {
           if (value === (column === 'start' ? this.startText(item) : this.dueText(item))) return;
           const change = this.dateChange(item, column, value);
-          if (change !== null) await this.reschedule([change]);
+          if (change !== null) await this.rescheduleCell(item, column, change);
           return;
         }
         case 'days': {
@@ -2533,14 +2598,12 @@ export class TimelinePage implements OnInit {
             days,
             this.calendar(),
           );
-          await this.reschedule([
-            {
-              item: item.id,
-              startDate: start,
-              startSecondHalf: item.startDate !== null && item.startSecondHalf,
-              ...finish,
-            },
-          ]);
+          await this.rescheduleCell(item, column, {
+            item: item.id,
+            startDate: start,
+            startSecondHalf: item.startDate !== null && item.startSecondHalf,
+            ...finish,
+          });
           return;
         }
         case 'pred':
@@ -2556,8 +2619,14 @@ export class TimelinePage implements OnInit {
             this.toast.show(`No member matches ${parsed.unknown.join(', ')}`);
             return;
           }
-          this.ctx.upsert(
-            await this.api.update(project.id, item.id, { assignees: parsed.assignees }),
+          const patch = {
+            assigneeIds: parsed.assignees.map((a) => a.userId),
+            assigneeShares: parsed.assignees,
+          };
+          await this.ctx.optimistic(item.id, patch, column, async () =>
+            this.ctx.upsert(
+              await this.api.update(project.id, item.id, { assignees: parsed.assignees }),
+            ),
           );
           return;
         }
@@ -2565,6 +2634,25 @@ export class TimelinePage implements OnInit {
     } catch (error) {
       this.toast.error(error);
     }
+  }
+
+  /**
+   * Sends a typed date change through the reschedule flow, showing the new
+   * dates at once in the pending style (v1.4.1).
+   *
+   * @param item The item.
+   * @param column The edited cell's column.
+   * @param change The change.
+   * @returns Resolves once applied, cancelled or refused.
+   */
+  private async rescheduleCell(
+    item: WorkItemDto,
+    column: ColumnId,
+    change: RescheduleChangeRequest,
+  ): Promise<void> {
+    await this.ctx.optimistic(item.id, changePatch(change), column, () =>
+      this.flow.change([change]),
+    );
   }
 
   /**
@@ -2626,10 +2714,21 @@ export class TimelinePage implements OnInit {
     const add = ids.filter((id) => !current.includes(id));
     const remove = current.filter((id) => !ids.includes(id));
     if (add.length === 0 && remove.length === 0) return;
-    for (const id of add) await this.api.addDependency(project.id, item.id, { blockingItemId: id });
-    for (const id of remove) await this.api.removeDependency(project.id, item.id, id);
-    await this.loadEdges();
-    await this.reschedule([{ item: item.id }]);
+    // The new links show at once (v1.4.1); a failure reloads the saved ones.
+    this.edges.update((edges) => [
+      ...edges.filter((e) => e.blockedItemId !== item.id),
+      ...ids.map((id) => ({ blockingItemId: id, blockedItemId: item.id })),
+    ]);
+    await this.ctx.optimistic(item.id, {}, 'pred', async () => {
+      try {
+        for (const id of add)
+          await this.api.addDependency(project.id, item.id, { blockingItemId: id });
+        for (const id of remove) await this.api.removeDependency(project.id, item.id, id);
+      } finally {
+        await this.loadEdges();
+      }
+      await this.reschedule([{ item: item.id }]);
+    });
   }
 
   // --- Rescheduling ------------------------------------------------------
@@ -2832,8 +2931,29 @@ export class TimelinePage implements OnInit {
    * @returns Resolves once saved.
    */
   protected async setStatus(item: WorkItemDto, status: ItemStatus): Promise<void> {
+    await this.saveMenu(item, 'status', { status });
+  }
+
+  /**
+   * Saves a cell menu's choice, showing it at once in the pending style
+   * (v1.4.1); a failure shows the saved value again with the error.
+   *
+   * @param item The item.
+   * @param column The cell's column.
+   * @param change The fields to change.
+   * @returns Resolves once saved.
+   */
+  private async saveMenu(
+    item: WorkItemDto,
+    column: ColumnId,
+    change: Pick<Partial<WorkItemDto>, 'status' | 'type' | 'sprintId'>,
+  ): Promise<void> {
+    const project = this.ctx.project();
+    if (project === null) return;
     try {
-      this.ctx.upsert(await this.api.update(this.ctx.project()!.id, item.id, { status }));
+      await this.ctx.optimistic(item.id, change, column, async () =>
+        this.ctx.upsert(await this.api.update(project.id, item.id, change)),
+      );
     } catch (error) {
       this.toast.error(error);
     }
@@ -2892,11 +3012,7 @@ export class TimelinePage implements OnInit {
    * @returns Resolves once saved.
    */
   protected async setSprint(item: WorkItemDto, sprintId: string | null): Promise<void> {
-    try {
-      this.ctx.upsert(await this.api.update(this.ctx.project()!.id, item.id, { sprintId }));
-    } catch (error) {
-      this.toast.error(error);
-    }
+    await this.saveMenu(item, 'sprint', { sprintId });
   }
 
   /**
@@ -3899,11 +4015,7 @@ export class TimelinePage implements OnInit {
    */
   protected async setType(item: WorkItemDto, type: ItemType): Promise<void> {
     if (type === item.type) return;
-    try {
-      this.ctx.upsert(await this.api.update(this.ctx.project()!.id, item.id, { type }));
-    } catch (error) {
-      this.toast.error(error);
-    }
+    await this.saveMenu(item, 'type', { type });
   }
 
   /**

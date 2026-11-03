@@ -30,6 +30,8 @@ export interface CalendarEntry extends ScheduleDates {
   canMove: boolean;
   /** Who else is on it, e.g. "Ann is editing", or null. */
   presence: string | null;
+  /** A move is shown before the server saved it (v1.4.1); optional. */
+  pending?: boolean;
   /** Project name on cross-project calendars, else null. */
   project: string | null;
 }

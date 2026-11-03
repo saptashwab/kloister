@@ -67,7 +67,13 @@ change pending, administrator); the API checks every request.
 - Its capability helpers (`has()`, item `can` flags) decide which controls to show; the API
   decides what is allowed.
 - `RescheduleFlow` (`core/reschedule.ts`), also provided by the project shell, handles every date
-  change with dependent moves, previews and Undo (see [SCHEDULING.md](SCHEDULING.md)).
+  change with dependent moves, previews and Undo (see [SCHEDULING.md](SCHEDULING.md)). Pages that
+  know the links and calendar register them (`ProjectContext.registerPlan`) so previews are planned
+  in the browser (v1.4.1).
+- Pending edits (v1.4.1): `ProjectContext.optimistic(id, patch, tag, save)` shows an edit at once
+  and restores the newest saved copy when the save fails or is cancelled; `isPending(id, tag)`
+  drives the `.k-pending` style (DESIGN §9.2). The logic is the store-agnostic `PendingEdits` in
+  `core/pending-edits.ts`, which the My work calendar also uses for its own list.
 - Item references (M12): `core/rich-text.ts` turns stored marks into links (`forDisplay`), keeps
   them through editing (`forEditing`) and offers `#`/key autocomplete in the editor. The
   `appItemRefs` directive (`ui/item-refs.ts`) opens links inside the app and shows the hover card,

@@ -6,6 +6,7 @@ import {
   auditMessage,
   LIVE_CHANNEL,
   type LiveMessage,
+  fitPresence,
   payloadOf,
   publishNotifications,
 } from './live-events.js';
@@ -233,5 +234,42 @@ describe('PgListener', () => {
     expect(messages).toEqual([{ k: 'setting' }]);
     await listener.stop();
     expect(listener.listening).toBe(false);
+  });
+});
+
+describe('presence payloads (v1.4.1)', () => {
+  const uuid = (n: number) => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`;
+  const message = (assignees: number, moved: number) => ({
+    k: 'presence' as const,
+    s: 'stream',
+    u: uuid(0),
+    p: uuid(1),
+    i: uuid(2),
+    f: {
+      c: uuid(3),
+      a: Array.from({ length: assignees }, (_v, n) => uuid(100 + n)),
+      b: null,
+      t: null,
+    },
+    a: 'moving' as const,
+    fl: null,
+    v: 'timeline' as const,
+    is: Array.from({ length: moved }, (_v, n) => uuid(1000 + n)),
+  });
+
+  it('keeps a full list of moved rows within the limit', () => {
+    const full = message(3, 99);
+    expect(fitPresence(full)).toBe(full);
+    expect(payloadOf(full)).not.toBeNull();
+  });
+
+  it('trims the moved rows to fit, and never turns presence into a resync', () => {
+    const big = message(120, 99);
+    const fitted = fitPresence(big);
+    expect(fitted.i).toBe(big.i);
+    expect(fitted.is!.length).toBeLessThan(99);
+    expect(payloadOf(fitted)).not.toBeNull();
+    const huge = { ...message(300, 0), is: undefined };
+    expect(payloadOf(huge)).toBeNull();
   });
 });

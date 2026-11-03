@@ -53,6 +53,9 @@ interface TimelineInternals {
     announce: boolean,
     release?: (apply: boolean) => void,
   ): Promise<void>;
+  text: { set(value: string): void };
+  setStatus(item: WorkItemDetailDto, status: string): Promise<void>;
+  columns(): { id: string; width: number }[];
 }
 
 const readOnly = {
@@ -89,7 +92,10 @@ describe('TimelinePage (M9)', () => {
       outline: vi.fn(),
       addDependency: vi.fn().mockResolvedValue(undefined),
     };
-    const flow = { change: vi.fn().mockResolvedValue(null) };
+    const flow = {
+      change: vi.fn().mockResolvedValue(null),
+      preload: vi.fn().mockResolvedValue(undefined),
+    };
     const holidaysApi = {
       forProject: vi.fn().mockResolvedValue({
         holidays: [],
@@ -158,11 +164,12 @@ describe('TimelinePage (M9)', () => {
   it('shows rows in hierarchy order with half days, durations and the plan total', async () => {
     const { root } = await render([epic, a, b]);
     const rows = [...root.querySelectorAll('[role="row"]')];
-    expect(rows.map((r) => r.querySelector('.k-key')?.textContent?.trim())).toEqual([
-      'KLO-1',
-      'KLO-2',
-      'KLO-3',
-    ]);
+    // The ID column shows plain numbers; the full key is the name (v1.4.1).
+    const keys = rows.map((r) => r.querySelector('.k-key'));
+    expect(keys.map((k) => k?.textContent?.trim())).toEqual(['1', '2', '3']);
+    expect(keys.map((k) => k?.getAttribute('aria-label'))).toEqual(['KLO-1', 'KLO-2', 'KLO-3']);
+    expect(keys.map((k) => k?.getAttribute('title'))).toEqual(['KLO-1', 'KLO-2', 'KLO-3']);
+    expect(root.querySelectorAll('.row.head .cell')[1]?.textContent?.trim()).toBe('ID');
     expect(rows[1]?.textContent).toContain('5 Nov, 2nd half');
     expect(rows[1]?.textContent).toContain('11 Nov, 1st half');
     // 5 Nov 2nd half to 11 Nov 1st half is 4 working days; the epic spans 6.5.
@@ -194,6 +201,90 @@ describe('TimelinePage (M9)', () => {
       dueDate: '2026-11-12',
       dueFirstHalf: false,
     });
+  });
+
+  it('shows a typed date at once while it saves, and goes back when cancelled (v1.4.1)', async () => {
+    const { page, flow, fixture, root } = await render([epic, a, b]);
+    const ctx = TestBed.inject(ProjectContext);
+    let answer!: (result: null) => void;
+    flow.change.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    page.startEdit(1, 2, null);
+    page.editValue('9 Nov 2026');
+    const saving = page.commit(null);
+    await settle(fixture);
+    const cell = root.querySelector('#c-1-2');
+    expect(cell?.classList).toContain('k-pending');
+    expect(cell?.getAttribute('aria-busy')).toBe('true');
+    expect(cell?.textContent).toContain('9 Nov');
+    expect(ctx.itemsById().get('i2')?.startDate).toBe('2026-11-09');
+    // A repeated Enter on the cell still saving opens no second edit.
+    page.startEdit(1, 2, null);
+    await settle(fixture);
+    expect(root.querySelector('#c-1-2 input')).toBeNull();
+    // The dialog was cancelled: the saved dates show again.
+    answer(null);
+    await saving;
+    await settle(fixture);
+    expect(ctx.itemsById().get('i2')?.startDate).toBe('2026-11-05');
+    expect(root.querySelector('#c-1-2')?.classList).not.toContain('k-pending');
+    expect(flow.change).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a menu choice at once and puts it back when refused (v1.4.1)', async () => {
+    const { page, itemsApi, fixture } = await render([epic, a, b]);
+    const ctx = TestBed.inject(ProjectContext);
+    let refuse!: (error: Error) => void;
+    itemsApi.update.mockReturnValueOnce(new Promise((_resolve, reject) => (refuse = reject)));
+    const saving = page.setStatus(a, 'DONE');
+    expect(ctx.itemsById().get('i2')?.status).toBe('DONE');
+    expect(ctx.isPending('i2', 'status')).toBe(true);
+    refuse(new Error('refused'));
+    await saving;
+    await settle(fixture);
+    expect(ctx.itemsById().get('i2')?.status).toBe('NOT_STARTED');
+    expect(ctx.isPending('i2')).toBe(false);
+  });
+
+  it('finds rows by key or plain number and sizes the ID column to fit (v1.4.1)', async () => {
+    const big = makeItem(12345, { title: 'Far away' });
+    const { page, fixture, root } = await render([epic, a, b, big]);
+    const titles = () =>
+      [...root.querySelectorAll('[role="row"] .cell.title')].map((c) => c.textContent?.trim());
+    page.text.set('3');
+    await settle(fixture);
+    expect(titles().some((t) => t?.includes('Review'))).toBe(true);
+    expect(titles().some((t) => t?.includes('Draft copy'))).toBe(false);
+    page.text.set('klo-3');
+    await settle(fixture);
+    expect(titles().some((t) => t?.includes('Review'))).toBe(true);
+    // Five digits fit the default width; a dragged width stays.
+    expect(page.columns()[0]?.width).toBe(76);
+  });
+
+  it('outlines every row someone moves and tags only the first (v1.4.1)', async () => {
+    const { fixture, root } = await render([epic, a, b]);
+    const ctx = TestBed.inject(ProjectContext);
+    ctx.presence.set([
+      {
+        userId: 'u1',
+        itemId: 'i2',
+        action: 'moving',
+        field: null,
+        view: 'timeline',
+        itemIds: ['i2', 'i3'],
+      },
+    ]);
+    await settle(fixture);
+    const rows = [...root.querySelectorAll('.rows > .row, [role="row"]')].filter((r) =>
+      r.id.startsWith('row-'),
+    );
+    const byId = (id: string) => rows.find((r) => r.id === `row-${id}`);
+    expect(byId('i2')?.classList).toContain('k-pm-strong');
+    expect(byId('i3')?.classList).toContain('k-pm-strong');
+    expect(byId('i1')?.classList).not.toContain('k-pm-strong');
+    expect(byId('i2')?.querySelector('.blabel app-presence-tag')).not.toBeNull();
+    expect(byId('i3')?.querySelector('app-presence-tag')).toBeNull();
+    expect(byId('i2')?.querySelector('.bar')?.classList).toContain('k-pm-strong');
   });
 
   it('sets a status on the selected rows and links them in order', async () => {

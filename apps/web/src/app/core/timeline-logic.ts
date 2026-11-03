@@ -941,3 +941,23 @@ export function fitAvatars(count: number, width: number, size = 22, overlap = 6)
   if (count <= room) return { shown: count, more: 0 };
   return { shown: room - 1, more: count - room + 1 };
 }
+
+/** Width of a row's drag grip with its margin and the cell gap, in px (`_timeline-drag.scss`). */
+const GRIP_PX = 20;
+/** Width of one digit of `.k-key` (0.75rem monospace), rounded up, in px. */
+const MONO_DIGIT_PX = 8;
+/** Narrowest default ID column: room for its "ID" header and resize handle, in px. */
+const MIN_ID_PX = 48;
+
+/**
+ * Default width of the timeline ID column (v1.4.1): the grip and the
+ * longest item number in the project, so no number is clipped. A width the
+ * person dragged replaces it.
+ *
+ * @param maxNumber The highest item number shown.
+ * @returns Width in px.
+ */
+export function idColumnWidth(maxNumber: number): number {
+  const digits = String(Math.max(1, Math.floor(maxNumber))).length;
+  return Math.max(MIN_ID_PX, CELL_PADDING_PX + GRIP_PX + digits * MONO_DIGIT_PX);
+}

@@ -13,6 +13,12 @@ export const LIVE_MAX_STREAMS_PER_USER = 10;
 /** Most item ids in one `ids` filter of the item list. */
 export const ITEM_IDS_FILTER_MAX = 100;
 
+/**
+ * Most items one presence report may list (v1.4.1): the rows someone drags
+ * together on the timeline.
+ */
+export const PRESENCE_ITEMS_MAX = 100;
+
 /** Items changed by one transaction above which a project resync is sent instead. */
 export const LIVE_RESYNC_THRESHOLD = 200;
 
@@ -161,6 +167,11 @@ export interface PresenceEntryDto {
   field: PresenceField | null;
   /** The project page they are on, or null when not reported. */
   view: PresenceView | null;
+  /**
+   * With `moving` only (v1.4.1): every item being moved together that the
+   * viewer may see, `itemId` first. Absent when one item is moved.
+   */
+  itemIds?: string[];
 }
 
 /** Data of `presence`: everyone else on the project, as the viewer may see them. */
@@ -196,6 +207,11 @@ export interface LivePresenceRequest {
   field: PresenceField | null;
   /** The project page the tab shows; optional, null or absent for none. */
   view?: PresenceView | null;
+  /**
+   * With `moving` only (v1.4.1): every item being moved together, at most
+   * {@link PRESENCE_ITEMS_MAX}; `itemId` is the first. Optional.
+   */
+  itemIds?: string[];
 }
 
 /** Answer of `GET /events/status`. */

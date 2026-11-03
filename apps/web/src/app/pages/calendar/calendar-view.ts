@@ -167,7 +167,11 @@ export class CalendarStyles {}
               <ul>
                 @for (e of d.entries; track e.id) {
                   <li>
-                    <a class="c-item" [class.done]="e.status === 'DONE'" [routerLink]="e.link"
+                    <a
+                      class="c-item"
+                      [class.done]="e.status === 'DONE'"
+                      [class.k-pending]="e.pending"
+                      [routerLink]="e.link"
                       ><ng-container *ngTemplateOutlet="label; context: { $implicit: e }"
                     /></a>
                   </li>
@@ -225,6 +229,7 @@ export class CalendarStyles {}
                   class="c-item"
                   [class.done]="s.entry.status === 'DONE'"
                   [class.moving]="moving()?.id === s.entry.id"
+                  [class.k-pending]="s.entry.pending"
                   [class.before]="s.before"
                   [class.after]="s.after"
                   [class.movable]="s.entry.canMove"

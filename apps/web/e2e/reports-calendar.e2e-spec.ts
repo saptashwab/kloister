@@ -171,7 +171,7 @@ test('shares are set inline and by typing, and the Member’s workload follows l
   // Typing in the timeline's Who cell sets people and shares: "Mia 25".
   await pm.goto(`/p/${k}/timeline`);
   const who = pm
-    .locator('[role="row"]', { has: pm.locator('.k-key', { hasText: new RegExp(`^${k}-1$`) }) })
+    .locator('[role="row"]', { has: pm.locator(`.k-key[title="${k}-1"]`) })
     .locator('[role="gridcell"][id^="c-"]')
     .nth(6);
   await who.click();
@@ -219,7 +219,7 @@ test('a calendar drag keeps the duration, offers Undo and shows on the other per
   const member = await person(browser, USERS.member);
   await member.goto(`/p/${k}/timeline`);
   const due = member
-    .locator('[role="row"]', { has: member.locator('.k-key', { hasText: new RegExp(`^${k}-1$`) }) })
+    .locator('[role="row"]', { has: member.locator(`.k-key[title="${k}-1"]`) })
     .locator('[role="gridcell"][id^="c-"]')
     .nth(4);
   await expect(due).not.toBeEmpty();

@@ -14,6 +14,8 @@ export interface RescheduleDialogData {
   today: string;
   /** The caller is a PM and may switch the project to automatic moving. */
   canSwitch: boolean;
+  /** A note above the plan, e.g. that it changed meanwhile (v1.4.1); optional. */
+  note?: string | null;
 }
 
 /** The person's choice: move dependents, change only the requested items, or cancel (null). */
@@ -69,6 +71,12 @@ const KEPT_REASON: Record<KeptReason, string> = {
       background: var(--k-primary-soft);
       color: var(--k-primary-ink);
     }
+    .note {
+      padding: var(--k-space-2) var(--k-space-3);
+      border-radius: var(--k-radius-md);
+      background: var(--k-warn-soft);
+      color: var(--k-warn-ink);
+    }
     ul {
       margin: var(--k-space-2) 0 0;
       padding-left: var(--k-space-6);
@@ -77,6 +85,9 @@ const KEPT_REASON: Record<KeptReason, string> = {
   template: `
     <h2 mat-dialog-title>{{ title() }}</h2>
     <mat-dialog-content>
+      @if (data.note) {
+        <p class="note" role="status">{{ data.note }}</p>
+      }
       <p>{{ intro() }}</p>
       @if (moves().length > 0) {
         <div class="moves" role="list" aria-label="Proposed moves">

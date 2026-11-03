@@ -236,6 +236,72 @@ test('the Member sees where the PM works: the field, the card, the page and Go t
   await member.context().close();
 });
 
+test('the Member sees the rows the PM drags together on the timeline (v1.4.1)', async ({
+  browser,
+}) => {
+  const pm = await person(browser, USERS.pm);
+  const member = await person(browser, USERS.member);
+  const buckets = await read<{ items: { id: string; name: string }[] }>(
+    pm.request,
+    `projects/${PROJECT_KEY}/buckets`,
+  );
+  const members = await read<{ items: { userId: string; email: string }[] }>(
+    pm.request,
+    `projects/${PROJECT_KEY}/members`,
+  );
+  const mine = members.items.find((m) => m.email === USERS.member)?.userId ?? '';
+  const task = (title: string) =>
+    create(pm.request, {
+      type: 'TASK',
+      title,
+      bucketId: buckets.items.find((b) => b.name === 'To Do')?.id,
+      assigneeIds: [mine],
+      startDate: '2026-11-16',
+      dueDate: '2026-11-18',
+    });
+  const first = await task('Row drag one');
+  const second = await task('Row drag two');
+  const still = await task('Row drag stays');
+
+  await member.goto(`/p/${PROJECT_KEY}/timeline`);
+  await expect(member.locator(`#row-${first.id}`)).toBeVisible();
+  await pm.goto(`/p/${PROJECT_KEY}/timeline`);
+  await pm.getByRole('checkbox', { name: `Select ${first.key}` }).click();
+  await pm
+    .getByRole('checkbox', { name: `Select ${second.key}` })
+    .click({ modifiers: ['Control'] });
+  // The PM picks both rows up by the first one's grip and holds them.
+  await pm.locator(`#row-${first.id}`).hover();
+  const grip = (await pm.locator(`#row-${first.id} .grip`).boundingBox())!;
+  await pm.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await pm.mouse.down();
+  await pm.mouse.move(grip.x + grip.width / 2, grip.y + grip.height * 3, { steps: 8 });
+  await expect(pm.locator('.drag-card')).toContainText('+1 item');
+
+  // Both rows are outlined in the PM's colour; only the first carries the tag.
+  await expect(member.locator(`#row-${first.id}`)).toHaveClass(/k-pm-strong/, { timeout: 15_000 });
+  await expect(member.locator(`#row-${second.id}`)).toHaveClass(/k-pm-strong/);
+  await expect(member.locator(`#row-${still.id}`)).not.toHaveClass(/k-pm-strong/);
+  await expect(member.locator(`#row-${first.id} .blabel app-presence-tag`)).toHaveText('Pat');
+  await expect(member.locator(`#row-${second.id} app-presence-tag`)).toHaveCount(0);
+  await expect(member.locator(`#row-${first.id} .bar`)).toHaveClass(/k-pm-strong/);
+  await snap(member, 'live-presence-row-drag');
+  await member.locator('app-presence-head').getByRole('button', { name: 'Pat Manager' }).click();
+  await expect(member.getByRole('dialog', { name: 'Pat Manager' })).toContainText(
+    'Pat Manager is moving 2 rows',
+  );
+  await snap(member, 'live-presence-row-drag-hover-card');
+
+  // Escape puts the rows back; the outlines go once presence catches up.
+  await pm.keyboard.press('Escape');
+  await pm.mouse.up();
+  await expect(member.locator(`#row-${second.id}`)).not.toHaveClass(/k-pm-strong/, {
+    timeout: 15_000,
+  });
+  await pm.context().close();
+  await member.context().close();
+});
+
 test('the bell updates without a reload and the chip shows a lost connection', async ({
   browser,
 }) => {

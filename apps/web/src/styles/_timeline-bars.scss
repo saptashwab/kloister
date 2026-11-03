@@ -28,6 +28,17 @@ app-timeline {
   .bar.progress {
     background: var(--bar);
   }
+  // Someone else drags this bar (v1.4.1): a thick outline with a soft halo,
+  // so it stands out on every bar colour.
+  .bar.k-pm.k-pm-strong {
+    outline: var(--k-size-3px) solid var(--pm-ink);
+    outline-offset: var(--k-focus-width);
+    box-shadow: 0 0 0 var(--k-size-7px) color-mix(in srgb, var(--pm-ink) 25%, transparent);
+  }
+  // The mover's name tag beside the bar, in the label that is never clipped.
+  .blabel .k-pm-tag {
+    pointer-events: auto;
+  }
   .bar.blocked {
     background: repeating-linear-gradient(45deg, var(--bar-soft) 0 4px, var(--k-warn-soft) 4px 8px);
     border-color: var(--k-warn-ink);

@@ -2,8 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import {
   type HalfDay,
-  PinAction,
-  type PlanChange,
   type PlanItem,
   planSchedule,
   RescheduleMode,
@@ -11,6 +9,7 @@ import {
   sameDates,
   type ScheduleDates,
   type TimelineDto,
+  toPlanChange,
   type WorkItemDto,
 } from '@kloister/shared';
 import type { AuthContext } from '../auth/auth-context.js';
@@ -25,7 +24,7 @@ import { readableText } from '../items/snapshot-format.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { type ProjectAccess, ProjectAccessService } from '../projects/project-access.service.js';
 import { msProjectXml } from './msproject.js';
-import type { RescheduleChangeDto, RescheduleDto } from './timeline.dto.js';
+import type { RescheduleDto } from './timeline.dto.js';
 
 /**
  * The project timeline (SPEC §6.4, docs/M9-PLAN.md §4–5): the dependency
@@ -166,14 +165,18 @@ export class TimelineService {
       }
 
       // Ad-hoc items are not part of the plan (M12): they never move or block.
+      // Only the columns the planner and the permission facts need are read
+      // (v1.4.1); changed items come back in full from the update below.
       const rows = await tx.workItem.findMany({
         where: this.items.scoped(access, { adHoc: false }),
-        include: this.items.include(access),
+        select: planSelect(this.access.itemScopeFilter(access)),
       });
       const rowsById = new Map(rows.map((r) => [r.id, r]));
       const planItems = rows.map((r) => this.planItem(access, r));
       const edges = await this.visibleEdges(tx, access);
-      const changes = dto.changes.map((c, i) => planChange(c, requested[i]));
+      const changes = dto.changes.map((c, i) =>
+        toPlanChange(c, requested[i].id, datesOf(requested[i])),
+      );
       const calendar = await this.holidays.calendar(access, tx);
       let plan = planSchedule(planItems, edges, changes, calendar);
       if (dto.mode === RescheduleMode.ONLY) {
@@ -281,7 +284,7 @@ export class TimelineService {
    * @param row The item.
    * @returns The plan item.
    */
-  private planItem(access: ProjectAccess, row: ItemRow): PlanItem {
+  private planItem(access: ProjectAccess, row: PlanRow): PlanItem {
     return {
       id: row.id,
       ...datesOf(row),
@@ -315,12 +318,62 @@ export class TimelineService {
 }
 
 /**
+ * The columns a reschedule reads of every plan row (v1.4.1): dates, halves,
+ * pin, status, the reference and version, and the permission facts.
+ *
+ * @param scope The caller's visibility, for the facts' counts.
+ * @returns The select.
+ */
+function planSelect(scope: Prisma.WorkItemWhereInput) {
+  return {
+    id: true,
+    number: true,
+    type: true,
+    title: true,
+    status: true,
+    updatedAt: true,
+    startDate: true,
+    startSecondHalf: true,
+    dueDate: true,
+    dueFirstHalf: true,
+    startNoEarlierThan: true,
+    startNoEarlierThanSecondHalf: true,
+    createdById: true,
+    bucketId: true,
+    teamId: true,
+    sprintId: true,
+    assignees: { select: { userId: true } },
+    _count: {
+      select: {
+        children: { where: scope },
+        blockedBy: { where: { blockingItem: scope } },
+        blocks: { where: { blockedItem: scope } },
+      },
+    },
+  } satisfies Prisma.WorkItemSelect;
+}
+
+/** An item row as a reschedule reads it. */
+type PlanRow = Prisma.WorkItemGetPayload<{ select: ReturnType<typeof planSelect> }>;
+
+/** The date and pin columns of an item row. */
+type DateRow = Pick<
+  ItemRow,
+  | 'startDate'
+  | 'startSecondHalf'
+  | 'dueDate'
+  | 'dueFirstHalf'
+  | 'startNoEarlierThan'
+  | 'startNoEarlierThanSecondHalf'
+>;
+
+/**
  * The scheduling fields of an item row.
  *
  * @param row The item.
  * @returns Its dates.
  */
-function datesOf(row: ItemRow): ScheduleDates {
+function datesOf(row: DateRow): ScheduleDates {
   return {
     startDate: fromDbDate(row.startDate),
     startSecondHalf: row.startSecondHalf,
@@ -335,7 +388,7 @@ function datesOf(row: ItemRow): ScheduleDates {
  * @param row The item.
  * @returns The pin, or null.
  */
-function pinOf(row: ItemRow): HalfDay | null {
+function pinOf(row: DateRow): HalfDay | null {
   return row.startNoEarlierThan === null
     ? null
     : { date: fromDbDate(row.startNoEarlierThan)!, second: row.startNoEarlierThanSecondHalf };
@@ -350,36 +403,4 @@ function pinOf(row: ItemRow): HalfDay | null {
  */
 function samePin(a: HalfDay | null, b: HalfDay | null): boolean {
   return a === b || (a !== null && b !== null && a.date === b.date && a.second === b.second);
-}
-
-/**
- * Turns a requested change into the planner's form, filling omitted date
- * fields from the item. A change naming no date field only reschedules the
- * item from its predecessors.
- *
- * @param change The request.
- * @param row The item.
- * @returns The plan change.
- */
-function planChange(change: RescheduleChangeDto, row: ItemRow): PlanChange {
-  const current = datesOf(row);
-  const touchesDates =
-    change.startDate !== undefined ||
-    change.startSecondHalf !== undefined ||
-    change.dueDate !== undefined ||
-    change.dueFirstHalf !== undefined;
-  const startDate = change.startDate === undefined ? current.startDate : change.startDate;
-  const dueDate = change.dueDate === undefined ? current.dueDate : change.dueDate;
-  const dates: ScheduleDates = {
-    startDate,
-    startSecondHalf: startDate !== null && (change.startSecondHalf ?? current.startSecondHalf),
-    dueDate,
-    dueFirstHalf: dueDate !== null && (change.dueFirstHalf ?? current.dueFirstHalf),
-  };
-  const pin = change.pinTo !== undefined ? PinAction.KEEP : (change.pin ?? PinAction.AUTO);
-  return {
-    id: row.id,
-    ...(touchesDates ? { dates } : {}),
-    pin,
-  };
 }

@@ -6,13 +6,15 @@ import {
   ITEM_IDS_FILTER_MAX,
   type LabelDto,
   LiveEvent,
+  PRESENCE_ITEMS_MAX,
   MAX_PAGE_LIMIT,
   type Page,
   type LiveItemDto,
   type LiveItemsDto,
   type LivePresenceDto,
   type LivePresenceRequest,
-  type PresenceAction,
+  type PlanEdge,
+  PresenceAction,
   type PresenceEntryDto,
   type PresenceField,
   type PresenceView,
@@ -23,6 +25,7 @@ import {
   type SprintDto,
   type TeamDto,
   TeamRole,
+  type WorkCalendar,
   type WorkItemDto,
 } from '@kloister/shared';
 import { firstValueFrom, Subject } from 'rxjs';
@@ -31,6 +34,7 @@ import { apiUrl, errorMessage } from './api';
 import { fetchAll, ItemsApiService } from './items-api.service';
 import { CHANGED_TEXT_MS, changedText, HIGHLIGHT_MS, personName } from './live-logic';
 import { LiveService } from './live.service';
+import { PendingEdits } from './pending-edits';
 import { ProjectsApiService } from './projects-api.service';
 
 /** How long item events are gathered before the changed items are refetched (M10). */
@@ -70,6 +74,17 @@ export type LocateResult = 'open' | 'done' | 'hidden';
 
 /** A page's way of showing an item for "Go to". */
 export type ItemLocator = (id: string) => LocateResult;
+
+/**
+ * What a page knows of the plan beyond the items (v1.4.1): the visible
+ * links and the working-day calendar, for reschedule previews in the browser.
+ */
+export interface PlanSource {
+  /** Links whose both ends the caller can see, as the timeline endpoint lists them. */
+  edges: readonly PlanEdge[];
+  /** The project's working-day calendar. */
+  calendar: WorkCalendar;
+}
 
 /**
  * State of the project being viewed, shared by the project's pages (board,
@@ -125,16 +140,25 @@ export class ProjectContext {
   readonly recent = signal<ReadonlyMap<string, { text: string; at: number }>>(new Map());
   /** Everyone else on the project, as the API lets the caller see them. */
   readonly presence = signal<readonly PresenceEntryDto[]>([]);
-  /** Presence by item id. */
+  /** Presence by item id; rows moved together are each listed (v1.4.1). */
   readonly presenceByItem = computed(() => {
     const map = new Map<string, PresenceEntryDto[]>();
     for (const entry of this.presence())
-      if (entry.itemId !== null) map.set(entry.itemId, [...(map.get(entry.itemId) ?? []), entry]);
+      for (const id of entry.itemIds ?? (entry.itemId === null ? [] : [entry.itemId]))
+        map.set(id, [...(map.get(id) ?? []), entry]);
     return map;
   });
 
   /** Items by id. */
   readonly itemsById = computed(() => new Map(this.items().map((i) => [i.id, i])));
+  /**
+   * Edits shown before the server confirmed them (v1.4.1); see
+   * {@link optimistic}.
+   */
+  readonly edits = new PendingEdits<WorkItemDto>(
+    (id) => this.itemsById().get(id),
+    (item) => this.store(item),
+  );
   /** Members by user id. */
   readonly membersById = computed(() => new Map(this.members().map((m) => [m.userId, m])));
   /** Buckets by id. */
@@ -188,6 +212,8 @@ export class ProjectContext {
   private page: PresenceView | null = null;
   /** The open page's way of showing an item, for "Go to" (DESIGN §9.1). */
   private locator: ItemLocator | null = null;
+  /** The open page's links and calendar, for local reschedule previews (v1.4.1). */
+  private planSource: (() => PlanSource | null) | null = null;
 
   /**
    * Follows the project on the live stream and handles its events.
@@ -305,7 +331,11 @@ export class ProjectContext {
     this.sprints.set(sprints);
     this.members.set(members);
     this.teams.set(teams);
-    this.items.set(this.keepBusy(items));
+    // Edits still saving stay on top of the reloaded copies. Busy items keep
+    // their copy, and their waiting change stays the server's own copy.
+    this.items.set(
+      this.keepBusy(items).map((i) => (this.busy.has(i.id) ? i : this.edits.incoming(i))),
+    );
     this.loaded.set(true);
   }
 
@@ -402,11 +432,27 @@ export class ProjectContext {
     this.report();
   }
 
-  /** Reports the newest activity, or none, with the page. */
+  /**
+   * Reports the newest activity, or none, with the page. While several
+   * items are moved together (rows dragged on the timeline, v1.4.1), one
+   * report lists them all, the first held one leading.
+   */
   private report(): void {
-    const latest = [...this.presenceSources.values()].at(-1);
+    const sources = [...this.presenceSources.values()];
+    const latest = sources.at(-1);
+    const moved =
+      latest?.action === PresenceAction.MOVING
+        ? [
+            ...new Set(
+              sources.flatMap((s) =>
+                s.action === PresenceAction.MOVING && s.itemId !== null ? [s.itemId] : [],
+              ),
+            ),
+          ].slice(0, PRESENCE_ITEMS_MAX)
+        : [];
     this.live.report({
       ...(latest ?? { itemId: null, action: null, field: null }),
+      ...(moved.length > 1 ? { itemId: moved[0], itemIds: moved } : {}),
       view: this.page,
     });
   }
@@ -438,6 +484,32 @@ export class ProjectContext {
     };
     destroyRef.onDestroy(unregister);
     return unregister;
+  }
+
+  /**
+   * Lets the open page offer its links and calendar for reschedule previews
+   * in the browser (v1.4.1) until it is destroyed. The newest page wins.
+   *
+   * @param source The links and calendar, or null while not loaded.
+   * @param destroyRef The page's lifetime.
+   * @returns Unregisters it early.
+   */
+  registerPlan(source: () => PlanSource | null, destroyRef: DestroyRef): () => void {
+    this.planSource = source;
+    const unregister = (): void => {
+      if (this.planSource === source) this.planSource = null;
+    };
+    destroyRef.onDestroy(unregister);
+    return unregister;
+  }
+
+  /**
+   * The open page's links and calendar, when it has loaded them.
+   *
+   * @returns The plan source, or null.
+   */
+  plan(): PlanSource | null {
+    return this.planSource?.() ?? null;
   }
 
   /**
@@ -652,6 +724,48 @@ export class ProjectContext {
    * @param item The item from the API.
    */
   upsert(item: WorkItemDto): void {
+    this.store(this.edits.incoming(item));
+  }
+
+  /**
+   * Shows an edit at once, in the pending style, while `save` runs (v1.4.1,
+   * DESIGN §9.2). The save stores the server's copy as usual; when it
+   * throws, or ends without storing one (a cancelled confirmation), the item
+   * shows its last known copy again, including changes from others that
+   * arrived meanwhile. Errors are rethrown for the caller's toast.
+   *
+   * @param id Item id.
+   * @param patch The fields the edit changes.
+   * @param tag The field or cell it names, for the pending style.
+   * @param save Saves the edit.
+   * @returns The save's result.
+   */
+  optimistic<R>(
+    id: string,
+    patch: Partial<WorkItemDto>,
+    tag: string,
+    save: () => Promise<R>,
+  ): Promise<R> {
+    return this.edits.run(id, patch, tag, save);
+  }
+
+  /**
+   * Whether an item, or one field of it, has an edit still saving.
+   *
+   * @param id Item id.
+   * @param tag The field or cell; any when omitted.
+   * @returns True while saving.
+   */
+  isPending(id: string, tag?: string): boolean {
+    return this.edits.has(id, tag);
+  }
+
+  /**
+   * Writes a copy to the item list as it is.
+   *
+   * @param item The copy.
+   */
+  private store(item: WorkItemDto): void {
     this.items.update((items) => {
       const index = items.findIndex((i) => i.id === item.id);
       if (index === -1) return [...items, item];

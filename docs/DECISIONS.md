@@ -1,5 +1,47 @@
 # Decisions
 
+## v1.4.1 timeline presence, ID column and edits that show at once (2026-11-04)
+
+- Owner-approved set after reviewing the presence screenshots and a report that timeline date edits felt
+  broken. Choices made while building, closest to SPEC:
+- **Moving shows on the row.** Presence says only "moving", so a bar drag and a row drag look the same to others:
+  both outline the whole grid row and give the bar a 3 px outline with a soft halo. The name tag sits in the bar's
+  label, which is never clipped, or at the row end without a bar; it stays hidden from screen readers where the
+  row's small presence avatars already announce the person (one announcement per row, as before).
+- **Rows moved together.** The presence report gained an optional `itemIds` list for `moving` (additive, at most
+  `PRESENCE_ITEMS_MAX` = 100, each id visible to the reporter or 404). Entries carry `itemIds` filtered per viewer
+  with the same visibility check as `itemId`; `itemId` is the first item the viewer may see. Only ids travel on the
+  PostgreSQL channel, since facts for 100 items would pass its payload limit and turn into a resync; each API
+  process looks the listed items' facts up itself (one query per new list, reused for heartbeat copies, dropped
+  when a newer report overtook it). Personal spaces still have no presence. The web app merges every held `moving`
+  item into one report, so no extra request is sent. Fresh-context review follow-ups: a fact lookup that an item
+  change raced is repeated (per-project change counter), an oversized presence message is trimmed or dropped
+  rather than turned into a resync, and a reload while an item is held keeps the server's copy as the waiting
+  change, so a failed pending edit is never handed over as someone else's change.
+- **ID column.** Header "ID", plain numbers like the Pred. column; the key stays the cell's tooltip and
+  accessible name (the link's `aria-label`; summary rows of hidden ancestors keep a visually hidden key), and
+  search matches either. The default width is computed from the longest number (`idColumnWidth`); a dragged
+  width is still remembered per browser. Exports, bar labels, Copy link and other pages keep the key.
+- **Pending edits.** One store-agnostic helper (`core/pending-edits.ts`) behind `ProjectContext.optimistic`, so
+  the My work calendar, which has no project store, uses the same logic for its own list. Copies arriving while
+  an edit is pending (the save's own answer, live updates, reloads) become the new base with the edit kept on
+  top; a rollback restores that base, so a remote change that arrived meanwhile is never lost. A predecessor edit
+  shows its new links at once and reloads the saved links when it fails. A cell whose edit is still saving
+  ignores another Enter or F2; other cells stay editable.
+- **Preview in the browser.** The API's request-to-plan conversion moved to the shared package
+  (`toPlanChange`), and the shared `previewReschedule` plans with the same function and planner over the
+  caller's visible, non-ad-hoc items (as saved, without pending edits), the visible links and the holiday
+  calendar. The timeline and project calendar offer their links and calendar through
+  `ProjectContext.registerPlan`; the board, the drawer opened from the board and the My work calendar fall back
+  to the API preview, as do Undo (exact pins) and items the browser cannot plan. A 409 on apply reloads, shows
+  the API's preview again with the note "The plan changed meanwhile" and allows one more attempt.
+- **Lighter reschedule.** The API reads plan rows with a narrow select (dates, halves, pins, status, reference,
+  version and the permission facts with their scoped counts) instead of the full item include; changed items come
+  back in full from the ordinary update as before. Permissions, audit entries and results are unchanged; the
+  existing timeline database tests cover it.
+- **Dialog preload.** The timeline and calendar pages import the dependents dialog when they open; it stays a lazy
+  chunk, so the initial bundle does not grow.
+
 ## Field-level live presence (2026-11-04)
 
 - Owner-approved design (DESIGN §9.1): presence shows at the field, cell, card or bar in the person's colour; name

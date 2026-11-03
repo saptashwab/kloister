@@ -1,5 +1,16 @@
 import type { ItemRefDto, WorkItemDto } from './items.js';
-import type { HalfDay, KeptReason, PinAction, PlanEdge, ScheduleDates } from './schedule.js';
+import {
+  type HalfDay,
+  type KeptReason,
+  NO_HOLIDAYS,
+  PinAction,
+  type PlanChange,
+  type PlanEdge,
+  type PlanItem,
+  planSchedule,
+  type ScheduleDates,
+  type WorkCalendar,
+} from './schedule.js';
 
 /** Response of `GET /projects/:id/timeline` (SPEC §6.4). */
 export interface TimelineDto {
@@ -96,4 +107,92 @@ export interface RescheduleResultDto {
   items: WorkItemDto[];
   /** Shared by the audit entries of this reschedule; null for a preview. */
   rescheduleId: string | null;
+}
+
+/**
+ * Turns a requested change into the planner's form, filling omitted date
+ * fields from the item. A change naming no date field only reschedules the
+ * item from its predecessors. The API and the web app's local preview
+ * (v1.4.1) both use it, so they plan the same change.
+ *
+ * @param change The request.
+ * @param id The item's id.
+ * @param current The item's dates now.
+ * @returns The plan change.
+ */
+export function toPlanChange(
+  change: RescheduleChangeRequest,
+  id: string,
+  current: ScheduleDates,
+): PlanChange {
+  const touchesDates =
+    change.startDate !== undefined ||
+    change.startSecondHalf !== undefined ||
+    change.dueDate !== undefined ||
+    change.dueFirstHalf !== undefined;
+  const startDate = change.startDate === undefined ? current.startDate : change.startDate;
+  const dueDate = change.dueDate === undefined ? current.dueDate : change.dueDate;
+  const dates: ScheduleDates = {
+    startDate,
+    startSecondHalf: startDate !== null && (change.startSecondHalf ?? current.startSecondHalf),
+    dueDate,
+    dueFirstHalf: dueDate !== null && (change.dueFirstHalf ?? current.dueFirstHalf),
+  };
+  const pin = change.pinTo !== undefined ? PinAction.KEEP : (change.pin ?? PinAction.AUTO);
+  return { id, ...(touchesDates ? { dates } : {}), pin };
+}
+
+/** An item as a reschedule preview sees it: plan facts, reference and version. */
+export interface PreviewItem extends PlanItem {
+  /** The item's reference, for the dialog. */
+  ref: ItemRefDto;
+  /** Its version (`updatedAt`). */
+  version: string;
+}
+
+/**
+ * Plans a reschedule without saving it (v1.4.1): the same plan the API's
+ * `preview` mode answers when given the same visible, non-ad-hoc items,
+ * links and holidays. The web app uses it to open the confirmation at once;
+ * the apply still sends what was shown, so the API checks it again.
+ *
+ * @param items Visible items on the timeline (ad-hoc items left out).
+ * @param edges Links whose both ends are among them.
+ * @param changes The requested changes, each naming an item by id.
+ * @param cal The project's working-day calendar.
+ * @returns The preview, or null when a requested item is not among the items.
+ */
+export function previewReschedule(
+  items: readonly PreviewItem[],
+  edges: readonly PlanEdge[],
+  changes: readonly RescheduleChangeRequest[],
+  cal: WorkCalendar = NO_HOLIDAYS,
+): RescheduleResultDto | null {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const requested = changes.map((c) => byId.get(c.item));
+  if (requested.some((i) => i === undefined)) return null;
+  const plan = planSchedule(
+    items,
+    edges,
+    changes.map((c, n) => toPlanChange(c, requested[n]!.id, requested[n]!)),
+    cal,
+  );
+  return {
+    changes: plan.changes.map((c) => {
+      const item = byId.get(c.id)!;
+      return {
+        item: item.ref,
+        from: c.from,
+        to: c.to,
+        pinFrom: c.pinFrom,
+        pinTo: c.pinTo,
+        requested: c.requested,
+        snapped: c.snapped,
+        version: item.version,
+      };
+    }),
+    kept: plan.kept.map((k) => ({ item: byId.get(k.id)!.ref, reason: k.reason })),
+    items: [],
+    rescheduleId: null,
+  };
 }

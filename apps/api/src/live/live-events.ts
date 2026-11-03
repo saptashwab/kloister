@@ -81,6 +81,11 @@ export interface PresenceMessage {
   fl: PresenceField | null;
   /** Project page, or null (absent from older messages). */
   v?: PresenceView | null;
+  /**
+   * Further items moved together with `i` (v1.4.1), ids only so the payload
+   * stays small; each process looks their facts up itself.
+   */
+  is?: string[];
 }
 
 /** What an audited action means for live updates. */
@@ -278,9 +283,30 @@ export async function auditMessage(
 export function payloadOf(message: LiveMessage): string | null {
   const text = JSON.stringify(message);
   if (Buffer.byteLength(text) <= LIVE_PAYLOAD_MAX) return text;
+  // Presence is a hint: one too large is dropped, never turned into a resync.
+  if (message.k === 'presence') return null;
   return 'p' in message && typeof message.p === 'string'
     ? JSON.stringify({ k: 'resync', p: message.p } satisfies LiveMessage)
     : null;
+}
+
+/**
+ * Shortens a presence message's list of further moved items until it fits
+ * the payload limit (v1.4.1), so rows moved with an item that has very many
+ * assignees still show; the main item always stays.
+ *
+ * @param message The presence message.
+ * @returns The message, its list trimmed if needed.
+ */
+export function fitPresence(message: PresenceMessage): PresenceMessage {
+  let fitted = message;
+  while (
+    fitted.is !== undefined &&
+    fitted.is.length > 0 &&
+    Buffer.byteLength(JSON.stringify(fitted)) > LIVE_PAYLOAD_MAX
+  )
+    fitted = { ...fitted, is: fitted.is.slice(0, -Math.max(1, Math.ceil(fitted.is.length / 4))) };
+  return fitted;
 }
 
 /**

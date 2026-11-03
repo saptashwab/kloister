@@ -7,14 +7,17 @@ import {
   LiveEvent,
   type LiveItemDto,
   type LivePresenceRequest,
+  PresenceAction,
   type PresenceEntryDto,
   PRESENCE_DELAY_MS,
+  PRESENCE_ITEMS_MAX,
   PRESENCE_THROTTLE_MS,
   SystemRole,
 } from '@kloister/shared';
 import type { AuthContext } from '../auth/auth-context.js';
 import { SessionService } from '../auth/session.service.js';
 import { notFound } from '../common/api-exception.js';
+import type { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   type ProjectAccess,
@@ -23,6 +26,7 @@ import {
 } from '../projects/project-access.service.js';
 import { SettingsService } from '../settings/settings.service.js';
 import {
+  fitPresence,
   fromWire,
   type LiveMessage,
   type PresenceMessage,
@@ -85,6 +89,8 @@ interface PresenceEntry {
   updatedAt: number;
   /** When it was last confirmed, for expiry. */
   seenAt: number;
+  /** Facts of the further moved items (`message.is`), as found by this process. */
+  extra: Map<string, WireFacts>;
 }
 
 /** One change of an item: facts after and before, actor and acting tab. */
@@ -143,6 +149,14 @@ export class LiveHub implements OnModuleDestroy {
   private heartbeat: ReturnType<typeof setInterval> | undefined;
   private idleTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly presenceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Counts presence messages, so a late fact lookup never overwrites a newer report. */
+  private presenceRun = 0;
+  /** The latest presence message number of each stream. */
+  private readonly presenceSeq = new Map<string, number>();
+  /** Fact lookups of moved-item lists still running. */
+  private readonly lookups = new Set<Promise<void>>();
+  /** Counts item changes per project, so a fact lookup that raced one is repeated. */
+  private readonly factsEpoch = new Map<string, number>();
 
   /**
    * Receives its collaborators through Nest dependency injection.
@@ -337,26 +351,17 @@ export class LiveHub implements OnModuleDestroy {
     const access = stream.access;
     if (access === null) throw notFound('Item');
     if (body.itemId !== null) {
-      const row = await this.prisma.workItem.findFirst({
-        where: { id: body.itemId, projectId: access.project.id, deletedAt: null },
-        select: {
-          createdById: true,
-          bucketId: true,
-          teamId: true,
-          assignees: { select: { userId: true } },
-        },
+      const ids = [body.itemId, ...movedAlong(body)];
+      const rows = await this.prisma.workItem.findMany({
+        where: { id: { in: ids }, projectId: access.project.id, deletedAt: null },
+        select: FACTS_SELECT,
       });
-      const facts =
-        row === null
-          ? null
-          : {
-              createdById: row.createdById,
-              assigneeIds: row.assignees.map((a) => a.userId),
-              bucketId: row.bucketId,
-              teamId: row.teamId,
-              hasChildren: false,
-            };
-      if (facts === null || !this.access.canViewItem(access, facts)) throw notFound('Item');
+      // Every listed item must be visible, or the report names none of them.
+      if (
+        rows.length !== ids.length ||
+        rows.some((row) => !this.access.canViewItem(access, fromWire(toWire(row))))
+      )
+        throw notFound('Item');
     }
     if (access.project.ownerId !== null || stream.access !== access) return;
     const wait = stream.presenceAt + PRESENCE_THROTTLE_MS - Date.now();
@@ -376,7 +381,7 @@ export class LiveHub implements OnModuleDestroy {
    */
   receive(message: LiveMessage): void {
     if (message.k === 'presence') {
-      this.receivePresence(message);
+      this.receiveMoved(message);
       return;
     }
     this.queue.push(message);
@@ -395,8 +400,10 @@ export class LiveHub implements OnModuleDestroy {
    * @returns Resolves once idle.
    */
   async settle(): Promise<void> {
-    while (this.burstTimer !== undefined || this.queue.length > 0) {
-      await new Promise((resolve) => setTimeout(resolve, BURST_MS));
+    while (this.burstTimer !== undefined || this.queue.length > 0 || this.lookups.size > 0) {
+      await Promise.all([...this.lookups]);
+      if (this.burstTimer !== undefined || this.queue.length > 0)
+        await new Promise((resolve) => setTimeout(resolve, BURST_MS));
     }
     await this.flushing;
   }
@@ -417,6 +424,7 @@ export class LiveHub implements OnModuleDestroy {
       if (local !== undefined && local.projectId !== entry.message.p) {
         // A late join for a project the stream has left.
         this.presence.delete(id);
+        this.presenceSeq.delete(id);
         this.schedulePresence(entry.message.p);
       } else if (local !== undefined) {
         entry.seenAt = now;
@@ -424,6 +432,7 @@ export class LiveHub implements OnModuleDestroy {
         void sendLive(this.prisma, entry.message).catch(() => undefined);
       } else if (now - entry.seenAt > PRESENCE_TTL_MS) {
         this.presence.delete(id);
+        this.presenceSeq.delete(id);
         this.schedulePresence(entry.message.p);
       }
     }
@@ -742,6 +751,7 @@ export class LiveHub implements OnModuleDestroy {
     }
     // Personal spaces have no presence; neither has a stream without access.
     if (stream.access === null || stream.access.project.ownerId !== null) return;
+    const along = movedAlong(body);
     const message: PresenceMessage = {
       ...base,
       p: projectId,
@@ -750,9 +760,10 @@ export class LiveHub implements OnModuleDestroy {
       a: body.itemId === null ? null : body.action,
       fl: body.itemId === null || body.action !== 'editing' ? null : body.field,
       v: body.view ?? null,
+      ...(along.length > 0 ? { is: along } : {}),
     };
     void this.withFacts(message)
-      .then((m) => sendLive(this.prisma, m))
+      .then((m) => sendLive(this.prisma, fitPresence(m)))
       .catch(() => undefined);
   }
 
@@ -766,24 +777,50 @@ export class LiveHub implements OnModuleDestroy {
     if (message.i === null) return message;
     const row = await this.prisma.workItem.findFirst({
       where: { id: message.i, projectId: message.p ?? undefined, deletedAt: null },
-      select: {
-        createdById: true,
-        bucketId: true,
-        teamId: true,
-        assignees: { select: { userId: true } },
-      },
+      select: FACTS_SELECT,
     });
-    return row === null
-      ? { ...message, i: null, a: null, fl: null }
-      : {
-          ...message,
-          f: {
-            c: row.createdById,
-            a: row.assignees.map((a) => a.userId),
-            b: row.bucketId,
-            t: row.teamId,
-          },
-        };
+    return row === null ? withoutItem(message) : { ...message, f: toWire(row) };
+  }
+
+  /**
+   * Takes a presence message: one listing further moved items first has
+   * their facts looked up in this process (they are not on the wire), and is
+   * applied only if no newer message of the stream came meanwhile.
+   *
+   * @param message The message.
+   */
+  private receiveMoved(message: PresenceMessage): void {
+    const seq = ++this.presenceRun;
+    this.presenceSeq.set(message.s, seq);
+    const ids = message.is ?? [];
+    const known = this.presence.get(message.s);
+    if (message.p === null || ids.length === 0) {
+      this.receivePresence(message, new Map());
+      return;
+    }
+    // Heartbeat copies list the same items; their facts are kept current.
+    if (known !== undefined && known.message.p === message.p && sameIds(known.message.is, ids)) {
+      this.receivePresence(message, known.extra);
+      return;
+    }
+    const projectId = message.p;
+    const epoch = this.factsEpoch.get(projectId) ?? 0;
+    const lookup = this.prisma.workItem
+      .findMany({
+        where: { id: { in: ids }, projectId, deletedAt: null },
+        select: { id: true, ...FACTS_SELECT },
+      })
+      .then((rows) => new Map(rows.map((row) => [row.id, toWire(row)])))
+      // Without facts the listed items stay hidden; the main item still shows.
+      .catch(() => new Map<string, WireFacts>())
+      .then((extra) => {
+        if (this.presenceSeq.get(message.s) !== seq) return;
+        // An item changed while looking up: the facts may predate it, so look again.
+        if ((this.factsEpoch.get(projectId) ?? 0) !== epoch) this.receiveMoved(message);
+        else this.receivePresence(message, extra);
+      })
+      .finally(() => this.lookups.delete(lookup));
+    this.lookups.add(lookup);
   }
 
   /**
@@ -802,8 +839,9 @@ export class LiveHub implements OnModuleDestroy {
    * Updates the presence map from a channel message.
    *
    * @param message The message.
+   * @param extra Facts of its further moved items.
    */
-  private receivePresence(message: PresenceMessage): void {
+  private receivePresence(message: PresenceMessage, extra: Map<string, WireFacts>): void {
     // Joins and leaves of one stream may arrive out of order; a local stream
     // knows which project it follows now.
     const local = this.streams.get(message.s);
@@ -815,6 +853,7 @@ export class LiveHub implements OnModuleDestroy {
     const existing = this.presence.get(message.s);
     if (message.p === null) {
       this.presence.delete(message.s);
+      this.presenceSeq.delete(message.s);
       if (existing !== undefined) this.schedulePresence(existing.message.p);
       return;
     }
@@ -825,13 +864,15 @@ export class LiveHub implements OnModuleDestroy {
       !sameItem ||
       existing?.message.a !== message.a ||
       existing.message.fl !== message.fl ||
-      (existing.message.v ?? null) !== (message.v ?? null);
+      (existing.message.v ?? null) !== (message.v ?? null) ||
+      !sameIds(existing.message.is, message.is ?? []);
     this.presence.set(message.s, {
       message: { ...message, p: message.p },
       projectSince: sameProject ? existing.projectSince : now,
       itemSince: sameItem ? existing.itemSince : now,
       updatedAt: changed || existing === undefined ? now : existing.updatedAt,
       seenAt: now,
+      extra,
     });
     if (existing !== undefined && !sameProject) this.schedulePresence(existing.message.p);
     if (changed) this.schedulePresence(message.p);
@@ -845,17 +886,28 @@ export class LiveHub implements OnModuleDestroy {
    * @param changes Its changes.
    */
   private updatePresenceFacts(projectId: string, changes: ProjectBurst): void {
+    if (changes.items.size > 0)
+      this.factsEpoch.set(projectId, (this.factsEpoch.get(projectId) ?? 0) + 1);
     let touched = false;
     for (const entry of this.presence.values()) {
       const id = entry.message.i;
       if (entry.message.p !== projectId || id === null) continue;
+      // Further moved items: gone ones lose their facts and stay hidden.
+      for (const other of [...entry.extra.keys()]) {
+        const changed = changes.items.get(other);
+        if (changed === undefined) continue;
+        const now = changed[changed.length - 1].f;
+        if (now === null) entry.extra.delete(other);
+        else entry.extra.set(other, now);
+        touched = true;
+      }
       const list = changes.items.get(id);
       if (list === undefined) continue;
       const after = list[list.length - 1].f;
-      entry.message =
-        after === null
-          ? { ...entry.message, i: null, f: null, a: null, fl: null }
-          : { ...entry.message, f: after };
+      if (after === null) {
+        entry.message = { ...withoutItem(entry.message), p: entry.message.p, f: null };
+        entry.extra = new Map();
+      } else entry.message = { ...entry.message, f: after };
       touched = true;
     }
     if (touched) this.schedulePresence(projectId);
@@ -904,14 +956,25 @@ export class LiveHub implements OnModuleDestroy {
       const people: PresenceEntryDto[] = [...latest.values()]
         .map((entry) => {
           const m = entry.message;
+          const sees = (id: string): boolean => {
+            const facts = id === m.i ? m.f : entry.extra.get(id);
+            return facts != null && this.access.canViewItem(access, fromWire(facts));
+          };
+          // Each listed item is checked on its own: hidden ones never show.
           const visible =
-            m.i !== null &&
-            m.f !== null &&
-            now - entry.itemSince >= PRESENCE_DELAY_MS &&
-            this.access.canViewItem(access, fromWire(m.f));
-          return visible
-            ? { userId: m.u, itemId: m.i, action: m.a, field: m.fl, view: m.v ?? null }
-            : { userId: m.u, itemId: null, action: null, field: null, view: m.v ?? null };
+            m.i === null || now - entry.itemSince < PRESENCE_DELAY_MS
+              ? []
+              : [m.i, ...(m.is ?? [])].filter(sees);
+          if (visible.length === 0)
+            return { userId: m.u, itemId: null, action: null, field: null, view: m.v ?? null };
+          return {
+            userId: m.u,
+            itemId: visible[0],
+            action: m.a,
+            field: m.fl,
+            view: m.v ?? null,
+            ...(m.is !== undefined ? { itemIds: visible } : {}),
+          };
         })
         .sort((a, b) => a.userId.localeCompare(b.userId));
       const text = JSON.stringify(people);
@@ -920,4 +983,65 @@ export class LiveHub implements OnModuleDestroy {
       this.send(stream, LiveEvent.PRESENCE, { projectId, people });
     }
   }
+}
+
+/** The columns of an item its visibility facts come from. */
+const FACTS_SELECT = {
+  createdById: true,
+  bucketId: true,
+  teamId: true,
+  assignees: { select: { userId: true } },
+} as const satisfies Prisma.WorkItemSelect;
+
+/**
+ * An item's visibility facts, as carried on the channel.
+ *
+ * @param row The item's fact columns.
+ * @returns The facts.
+ */
+function toWire(row: Prisma.WorkItemGetPayload<{ select: typeof FACTS_SELECT }>): WireFacts {
+  return {
+    c: row.createdById,
+    a: row.assignees.map((a) => a.userId),
+    b: row.bucketId,
+    t: row.teamId,
+  };
+}
+
+/**
+ * A presence message without its item: the person shows as on the project.
+ *
+ * @param message The message.
+ * @returns The message without item, action, field or moved list.
+ */
+function withoutItem(message: PresenceMessage): PresenceMessage {
+  const rest = { ...message, i: null, a: null, fl: null };
+  delete rest.is;
+  return rest;
+}
+
+/**
+ * The further items of a presence report moved together with its item
+ * (v1.4.1): only with `moving`, without the item itself or repeats, at most
+ * {@link PRESENCE_ITEMS_MAX} in all.
+ *
+ * @param body The report.
+ * @returns The further item ids; empty for most reports.
+ */
+export function movedAlong(body: LivePresenceRequest): string[] {
+  if (body.itemId === null || body.action !== PresenceAction.MOVING) return [];
+  const along = new Set((body.itemIds ?? []).filter((id) => id !== body.itemId));
+  return [...along].slice(0, PRESENCE_ITEMS_MAX - 1);
+}
+
+/**
+ * Whether two lists of further moved items are the same.
+ *
+ * @param a One list, if any.
+ * @param b The other.
+ * @returns True when equal in order.
+ */
+function sameIds(a: readonly string[] | undefined, b: readonly string[]): boolean {
+  const list = a ?? [];
+  return list.length === b.length && list.every((id, i) => id === b[i]);
 }

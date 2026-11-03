@@ -29,6 +29,7 @@ const BUCKET_B = '55555555-5555-4555-8555-555555555555';
 const TEAM = '66666666-6666-4666-8666-666666666666';
 const ITEM = '77777777-7777-4777-8777-777777777777';
 const ITEM_2 = '78777777-7777-4777-8777-777777777777';
+const ITEM_3 = '79777777-7777-4777-8777-777777777777';
 
 const PM = '11111111-1111-4111-8111-111111111111';
 const OWN = '12111111-1111-4111-8111-111111111111';
@@ -99,6 +100,7 @@ function build(accesses: Map<string, ProjectAccess>) {
   const itemFacts = new Map<string, WireFacts>([
     [ITEM, facts()],
     [ITEM_2, facts({ b: BUCKET_B })],
+    [ITEM_3, facts()],
   ]);
   // Set below; the fake database delivers published messages to it.
   const loop: { hub: LiveHub | null } = { hub: null };
@@ -120,6 +122,13 @@ function build(accesses: Map<string, ProjectAccess>) {
     },
     workItem: {
       findFirst: ({ where }: { where: { id: string } }) => Promise.resolve(row(where.id)),
+      findMany: ({ where }: { where: { id: { in: string[] } } }) =>
+        Promise.resolve(
+          where.id.in.flatMap((id) => {
+            const found = row(id);
+            return found === null ? [] : [{ id, ...found }];
+          }),
+        ),
     },
     user: {
       findUnique: ({ where }: { where: { id: string } }) =>
@@ -701,6 +710,103 @@ describe('LiveHub presence', () => {
         field: null,
       }),
     ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("lists rows moved together, each filtered by the viewer's visibility (v1.4.1)", async () => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    const { hub, open, sent } = build(everyone);
+    const pm = open(PM);
+    const buckets = open(BUCKETS);
+    const own = open(OWN);
+    await hub.subscribe(pm.auth, pm.id, PROJECT);
+    await hub.subscribe(buckets.auth, buckets.id, PROJECT);
+    await hub.subscribe(own.auth, own.id, PROJECT);
+    // The PM drags three rows; the first is in bucket B.
+    await hub.reportPresence(pm.auth, pm.id, {
+      itemId: ITEM_2,
+      action: 'moving',
+      field: null,
+      itemIds: [ITEM_2, ITEM, ITEM_3, ITEM],
+      view: 'timeline',
+    });
+    await pass(1_000);
+    await hub.settle();
+    await pass(PRESENCE_DELAY_MS + 100);
+    // Only ids travel on the channel; repeats and the first item are not listed again.
+    const moving = sent.filter((m) => m.k === 'presence' && m.a === 'moving');
+    expect(moving.at(-1)).toMatchObject({ i: ITEM_2, is: [ITEM, ITEM_3] });
+    expect(JSON.stringify(moving.at(-1))).not.toContain('"fs"');
+    // Bucket B is hidden: the first row they may see leads the list.
+    expect(presence(buckets.received).at(-1)).toEqual([
+      {
+        userId: PM,
+        itemId: ITEM,
+        action: 'moving',
+        field: null,
+        view: 'timeline',
+        itemIds: [ITEM, ITEM_3],
+      },
+      { userId: OWN, itemId: null, action: null, field: null, view: null },
+    ]);
+    expect(JSON.stringify(presence(buckets.received))).not.toContain(ITEM_2);
+    // None of the rows is theirs: the PM shows as on the timeline only.
+    expect(presence(own.received).at(-1)).toEqual(
+      expect.arrayContaining([
+        { userId: PM, itemId: null, action: null, field: null, view: 'timeline' },
+      ]),
+    );
+    expect(JSON.stringify(presence(own.received))).not.toContain(ITEM);
+  });
+
+  it("hides a moved row once it leaves the viewer's scope (v1.4.1)", async () => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    const { hub, open, itemFacts } = build(everyone);
+    const pm = open(PM);
+    const buckets = open(BUCKETS);
+    await hub.subscribe(pm.auth, pm.id, PROJECT);
+    await hub.subscribe(buckets.auth, buckets.id, PROJECT);
+    await hub.reportPresence(pm.auth, pm.id, {
+      itemId: ITEM,
+      action: 'moving',
+      field: null,
+      itemIds: [ITEM, ITEM_3],
+    });
+    await pass(1_000);
+    await hub.settle();
+    await pass(PRESENCE_DELAY_MS + 100);
+    expect(presence(buckets.received).at(-1)).toEqual([
+      expect.objectContaining({ itemId: ITEM, itemIds: [ITEM, ITEM_3] }),
+    ]);
+    // ITEM_3 moves to bucket B, out of this viewer's scope.
+    itemFacts.set(ITEM_3, facts({ b: BUCKET_B }));
+    hub.receive({
+      k: 'item',
+      p: PROJECT,
+      u: PM,
+      c: null,
+      i: [{ id: ITEM_3, f: facts({ b: BUCKET_B }), b: facts() }],
+    });
+    await pass(100);
+    await hub.settle();
+    expect(presence(buckets.received).at(-1)).toEqual([
+      expect.objectContaining({ itemId: ITEM, itemIds: [ITEM] }),
+    ]);
+  });
+
+  it('refuses a moved list with an item the caller cannot see (v1.4.1)', async () => {
+    const { hub, open, sent } = build(everyone);
+    const viewer = open(BUCKETS);
+    await hub.subscribe(viewer.auth, viewer.id, PROJECT);
+    const before = sent.length;
+    await expect(
+      hub.reportPresence(viewer.auth, viewer.id, {
+        itemId: ITEM,
+        action: 'moving',
+        field: null,
+        itemIds: [ITEM, ITEM_2],
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(sent.slice(before).filter((m) => m.k === 'presence' && m.i !== null)).toEqual([]);
   });
 
   it('keeps no presence in personal spaces', async () => {

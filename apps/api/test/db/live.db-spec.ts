@@ -136,13 +136,14 @@ describe('live updates (db)', () => {
   }
 
   /**
-   * Waits for a condition, failing after five seconds.
+   * Waits for a condition, failing after five seconds by default.
    *
    * @param check The condition.
+   * @param ms How long to wait at most.
    * @returns Resolves once it holds.
    */
-  async function until(check: () => boolean): Promise<void> {
-    const deadline = Date.now() + 5_000;
+  async function until(check: () => boolean, ms = 5_000): Promise<void> {
+    const deadline = Date.now() + ms;
     while (!check()) {
       if (Date.now() > deadline) throw new Error('timed out');
       await new Promise((resolve) => setTimeout(resolve, 25));
@@ -309,6 +310,43 @@ describe('live updates (db)', () => {
       body: { itemId: null, action: null, field: null, view: 'board' },
     });
     expect(foreign.statusCode).toBe(404);
+  });
+
+  it('shows rows moved together only as far as each viewer may see them (v1.4.1)', async () => {
+    const hidden = await seedItem(prisma, projectId, { createdById: ids.pm, bucketId: todo });
+    const first = await seedItem(prisma, projectId, { createdById: ids.scoped, bucketId: todo });
+    const second = await seedItem(prisma, projectId, { createdById: ids.scoped, bucketId: todo });
+    const pm = await open('pm');
+    const scoped = await open('scoped');
+    await follow('pm', pm);
+    await follow('scoped', scoped);
+    const moving = (name: Name, stream: OpenStream, itemIds: string[]) =>
+      call(app, 'PUT', `/api/v1/events/${stream.id}/presence`, {
+        sid: sids[name],
+        body: { itemId: itemIds[0], action: 'moving', field: null, itemIds },
+      });
+    // A list naming an item outside the caller's scope is refused like an unknown item.
+    expect((await moving('scoped', scoped, [first.id, hidden.id])).statusCode).toBe(404);
+    // At most 100 items.
+    const many = Array.from(
+      { length: 101 },
+      (_v, n) => `${String(n).padStart(8, '0')}-0000-4000-8000-000000000000`,
+    );
+    expect((await moving('scoped', scoped, many)).statusCode).toBe(400);
+    expect((await moving('scoped', scoped, [first.id, second.id])).statusCode).toBe(204);
+    // The PM drags the hidden item first, then the scoped Member's two.
+    expect((await moving('pm', pm, [hidden.id, first.id, second.id])).statusCode).toBe(204);
+    const pmEntry = () =>
+      events(scoped, 'presence')
+        .flatMap((e) => e.data['people'] as Record<string, unknown>[])
+        .filter((p) => p['userId'] === ids.pm && p['action'] === 'moving');
+    await until(() => pmEntry().length > 0, 10_000);
+    expect(pmEntry().at(-1)).toMatchObject({
+      itemId: first.id,
+      itemIds: [first.id, second.id],
+    });
+    // The hidden item never reaches the scoped Member.
+    expect(JSON.stringify(events(scoped, 'presence'))).not.toContain(hidden.id);
   });
 
   it('filters the item list by ids within the caller’s scope, at most 100', async () => {

@@ -105,7 +105,7 @@ async function snap(page: Page, name: string): Promise<void> {
  */
 function cell(page: Page, key: string, column: number) {
   return page
-    .locator('[role="row"]', { has: page.locator('.k-key', { hasText: new RegExp(`^${key}$`) }) })
+    .locator('[role="row"]', { has: page.locator(`.k-key[title="${key}"]`) })
     .locator('[role="gridcell"][id^="c-"]')
     .nth(column);
 }
@@ -172,6 +172,20 @@ test('asks before moving on existing projects and lets a PM switch to automatic'
   expect(off.ok()).toBe(true);
   await page.goto(`/p/${k}/timeline`);
   await expect(page.getByText('Dependent moves are confirmed')).toBeVisible();
+  // The ID column shows plain numbers; the full key is the cell's name (v1.4.1).
+  await expect(page.locator('.row.head .cell').nth(1)).toHaveText('ID');
+  const id = cell(page, `${k}-3`, 0).locator('.k-key');
+  await expect(id).toHaveText('3');
+  await expect(id).toHaveAccessibleName(`${k}-3`);
+  // Search finds a row by its plain number and by its key.
+  const search = page.getByRole('textbox', { name: 'Search', exact: true });
+  await search.fill('4');
+  await expect(page.locator('[role="row"]', { hasText: 'Editorial review' })).toBeVisible();
+  await expect(page.locator('[role="row"]', { hasText: 'Draft copy' })).toHaveCount(0);
+  await search.fill(`${k}-4`);
+  await expect(page.locator('[role="row"]', { hasText: 'Editorial review' })).toBeVisible();
+  await search.fill('');
+  await snap(page, 'timeline-id-column');
   const due = cell(page, `${k}-3`, 4);
   await due.click();
   await page.keyboard.press('Enter');
@@ -181,11 +195,17 @@ test('asks before moving on existing projects and lets a PM switch to automatic'
   await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: /Move 2 dependent items/ });
   await expect(dialog).toBeVisible();
+  // The typed date shows at once, pending, while the dialog asks (v1.4.1).
+  await expect(due).toHaveClass(/k-pending/);
+  await expect(due).toContainText('5 Nov');
+  await snap(page, 'timeline-pending-cell');
   await expect(dialog.getByText('Always move dependent items in this project')).toBeVisible();
   await snap(page, 'timeline-confirm-dialog');
   await dialog.getByText('Always move dependent items in this project').click();
   await dialog.getByRole('button', { name: 'Move 2 items' }).click();
   await expect(page.getByText('Dependent items move automatically')).toBeVisible();
+  await expect(due).not.toHaveClass(/k-pending/);
+  await expect(due).toContainText('5 Nov');
   await expect
     .poll(() => datesOf(page, plan, plan.ids.launch))
     // Draft ends Thu 5 Nov, so Review moves to Fri 6 – Mon 9 Nov and Launch to Tue 10 Nov.

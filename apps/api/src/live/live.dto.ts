@@ -3,12 +3,23 @@ import {
   type LiveSubscribeRequest,
   type LiveWorkRequest,
   PRESENCE_FIELDS,
+  PRESENCE_ITEMS_MAX,
   PRESENCE_VIEWS,
   PresenceAction,
   type PresenceField,
   type PresenceView,
 } from '@kloister/shared';
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength, ValidateIf } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  ValidateIf,
+} from 'class-validator';
 import { LowercaseUuid } from '../common/uuid.js';
 
 /** Body of `PUT /events/:streamId/project`. */
@@ -53,4 +64,16 @@ export class LivePresenceDto implements LivePresenceRequest {
   @ValidateIf((_o, value) => value !== null)
   @IsIn(Object.keys(PRESENCE_VIEWS))
   view?: PresenceView | null;
+
+  /**
+   * Every item being moved together, with `moving` only (v1.4.1); `itemId`
+   * is the first. Each must be visible to the caller.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(PRESENCE_ITEMS_MAX)
+  @ArrayUnique()
+  @LowercaseUuid()
+  @IsUUID(undefined, { each: true })
+  itemIds?: string[];
 }

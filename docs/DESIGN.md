@@ -323,8 +323,13 @@ There are no live mouse cursors and no live typing preview.
   team, type, parent, description, checklist) gets the outline and tag while someone edits it; a note being
   written outlines the activity area. This replaces the 16 px avatar beside the field label.
 - **Timeline**: the cell someone edits (Title, Start, Days, Due, Pred., Who, Status, Type, Sprint, and Bucket or
-  Priority when edited in the drawer) gets the outline and tag; a bar being dragged gets the outline. Opening a
-  Who, Status, Type or Sprint cell menu counts as editing that field.
+  Priority when edited in the drawer) gets the outline and tag. Opening a Who, Status, Type or Sprint cell menu
+  counts as editing that field. While someone moves a bar or drags rows (v1.4.1), the whole grid row is outlined,
+  and the bar gets a thicker 3 px outline with a 7 px halo at 25 % of the person colour, so it shows on every bar
+  colour. The name tag sits in the bar's label beside the bar, in the flow of the label text; a row without a bar
+  (unscheduled items, summary rows) carries it at the row end. When several rows move together, every row the
+  viewer can see is outlined and only the first carries the tag; the header hover card says "Di is moving 3 rows",
+  counting only rows the viewer can see.
 - **Board cards**: a faint edge while someone has the card open, a strong outline and tag ("Ann is moving this
   card") while they move or edit it.
 - **Backlog rows**: a faint left edge while someone views the item; while they edit, the Status, Sprint, Bucket
@@ -337,6 +342,17 @@ There are no live mouse cursors and no live typing preview.
   row and selects it without opening the drawer; elsewhere it opens the drawer. An item the viewer's filters hide
   opens anyway, with the toast "Hidden by your filters on this view". Marks and tags have no Go to.
 - Visibility is unchanged: only items the viewer may see are marked, and personal spaces have no presence.
+
+### 9.2 Edits that show at once (v1.4.1)
+
+A saved edit never shows the old value while the server works. The new value appears at once in the
+**pending** style (`.k-pending`): the element is dimmed to 65 % and a 10 px spinner ring in `--k-primary` turns at
+its end; with reduced motion the ring stands still. The element also gets `aria-busy`. When the save fails, or a
+confirmation such as the dependents dialog is cancelled, the last saved value shows again and the usual error
+toast explains a failure. Changes from others that arrive meanwhile are kept: they show with the pending edit on
+top, and a rollback restores them rather than the older copy. Timeline cells (Title, Start, Due, Days, Pred., Who,
+and the Status, Type and Sprint menus) and moves on the project and My work calendars use it. A second Enter or F2
+on a cell whose edit is still saving does nothing.
 
 ## 10. Item drawer
 
@@ -607,6 +623,10 @@ The approved mockups (layout A, spreadsheet first) set the look; docs/M9-PLAN.md
 - **Layout.** One scroll area: the grid on the left stays in place while the bars scroll sideways,
   and the header row stays on top. Rows are 34 px, matching the grid and the bar tracks. A plan strip
   above shows the plan's span, working days, days of work, the item count and conflicts.
+- **ID column (v1.4.1).** The first column is headed **ID** and shows the plain item number ("10"), as the Pred.
+  column does; the full key ("KLO-10") is the cell's tooltip and accessible name, and search finds a row by either.
+  Its default width fits the project's longest number with the drag grip; a width the person dragged is kept.
+  Other pages keep showing keys.
 - **Cells.** Keys in mono, titles indented 16 px per level with the type tile and a disclosure
   toggle for parents. Summary rows (parents) use `--k-ground`, bold muted values and read-only cells.
   The focused cell has a 2 px inset primary ring; an edited cell holds an input with a 2 px primary

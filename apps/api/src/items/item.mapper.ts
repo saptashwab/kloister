@@ -50,6 +50,12 @@ export const REF_SELECT = {
 /** An item row loaded with {@link REF_SELECT}. */
 export type RefRow = Prisma.WorkItemGetPayload<{ select: typeof REF_SELECT }>;
 
+/** The columns of an item row its permission facts come from. */
+export type FactsRow = Pick<
+  ItemRow,
+  'createdById' | 'bucketId' | 'teamId' | 'startDate' | 'dueDate' | 'sprintId' | '_count'
+> & { assignees: { userId: string }[] };
+
 /**
  * Extracts the facts the permission checks need from an item row.
  * `hasChildren` reflects the children the caller can see; deleting counts
@@ -58,7 +64,7 @@ export type RefRow = Prisma.WorkItemGetPayload<{ select: typeof REF_SELECT }>;
  * @param row The item.
  * @returns The facts.
  */
-export function itemFacts(row: ItemRow): ItemFacts {
+export function itemFacts(row: FactsRow): ItemFacts {
   return {
     createdById: row.createdById,
     assigneeIds: row.assignees.map((a) => a.userId),

@@ -87,7 +87,11 @@ Rules:
 
 1. Every requested item is resolved through the visibility filter first, so a hidden item answers
    404 before any other check. Each must pass the plan rule (`canPlanItem`), else 403.
-2. The planner runs on all visible items and links with the project's calendar.
+2. The planner runs on all visible items and links with the project's calendar. Since v1.4.1
+   only the columns the planner and the permission checks need are read for these items (dates,
+   halves, pin, status, reference, version and the visibility facts); the changed items come back
+   in full from the ordinary item update. Requests become plan changes through the shared
+   `toPlanChange` (`packages/shared/src/timeline.ts`).
 3. `mode` decides what happens:
    - `preview`: return the plan; nothing changes;
    - `apply`: apply the requested changes and the dependent moves;
@@ -111,6 +115,20 @@ The project setting `autoMoveDependents` decides how the web app uses this route
   requested items change, it applies directly; otherwise a dialog lists the moves and kept items
   and asks whether to move the dependent items, change only the requested ones, or cancel. A PM can
   switch automatic moving on from the dialog.
+
+Since v1.4.1 the preview is planned in the browser when the open page knows the plan: the timeline
+and the project calendar register their visible links and holiday calendar with
+`ProjectContext.registerPlan`, and `RescheduleFlow` runs the shared `previewReschedule` over the
+store's visible, non-ad-hoc items as saved (pending edits left out). That is the same input the
+API's preview uses, so the dialog opens at once. The apply still sends `previewed` and `expect`,
+so the API plans again; on 409 the flow reloads, asks the API for its preview and shows the
+dialog again with the note "The plan changed meanwhile". Without a registered plan (the board, the
+My work calendar), for an exact pin (Undo) or for an item the browser cannot plan, the API previews
+as before. The dialog's code is preloaded when the timeline or a calendar opens; it stays a lazy
+chunk.
+
+The typed or dropped dates show at once in the pending style while the flow runs, and go back
+if it is cancelled or refused (DESIGN §9.2).
 
 Either way the toast offers **Undo**, which sends the old dates and exact pins of every changed
 item in `only` mode, with their new versions as `expect`: all or nothing, refused if any of them

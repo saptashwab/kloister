@@ -2,9 +2,13 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import {
+  type PlanEdge,
+  type PreviewItem,
+  previewReschedule,
   ProjectPermission,
   type RescheduleChangeRequest,
   type RescheduleResultDto,
+  type WorkCalendar,
   type WorkItemDto,
 } from '@kloister/shared';
 import { firstValueFrom } from 'rxjs';
@@ -36,6 +40,65 @@ export interface RescheduleTarget {
   refresh(): Promise<void>;
   /** The project now moves dependent items without asking. */
   switched(): void;
+  /**
+   * What a preview in the browser needs (v1.4.1); null when not known, so
+   * the API previews instead. Optional.
+   */
+  plan?(): LocalPlan | null;
+}
+
+/** The plan as the browser knows it, for a local preview (v1.4.1). */
+export interface LocalPlan {
+  /** The caller's visible, non-ad-hoc items as saved (no unsaved edits). */
+  items: readonly PreviewItem[];
+  /** Links whose both ends are visible. */
+  edges: readonly PlanEdge[];
+  /** The project's working-day calendar. */
+  calendar: WorkCalendar;
+}
+
+/** The note shown when an apply found the plan changed (v1.4.1). */
+export const PLAN_CHANGED_NOTE = 'The plan changed meanwhile. Please check the moves again.';
+
+/**
+ * The fields a date change shows at once, before the server confirms it
+ * (v1.4.1): only the date fields the change names.
+ *
+ * @param change The change.
+ * @returns The fields to show.
+ */
+export function changePatch(change: RescheduleChangeRequest): Partial<WorkItemDto> {
+  const patch: Partial<WorkItemDto> = {};
+  if (change.startDate !== undefined) {
+    patch.startDate = change.startDate;
+    patch.startSecondHalf = change.startDate !== null && (change.startSecondHalf ?? false);
+  } else if (change.startSecondHalf !== undefined) patch.startSecondHalf = change.startSecondHalf;
+  if (change.dueDate !== undefined) {
+    patch.dueDate = change.dueDate;
+    patch.dueFirstHalf = change.dueDate !== null && (change.dueFirstHalf ?? false);
+  } else if (change.dueFirstHalf !== undefined) patch.dueFirstHalf = change.dueFirstHalf;
+  return patch;
+}
+
+/**
+ * An item as a local preview sees it.
+ *
+ * @param item The saved item.
+ * @returns The preview item.
+ */
+export function previewItem(item: WorkItemDto): PreviewItem {
+  return {
+    id: item.id,
+    startDate: item.startDate,
+    startSecondHalf: item.startSecondHalf,
+    dueDate: item.dueDate,
+    dueFirstHalf: item.dueFirstHalf,
+    status: item.status,
+    pin: item.startNoEarlierThan,
+    editable: item.can.plan,
+    ref: { id: item.id, number: item.number, key: item.key, type: item.type, title: item.title },
+    version: item.updatedAt,
+  };
 }
 
 /**
@@ -45,6 +108,11 @@ export interface RescheduleTarget {
  * moves anything else is confirmed in a dialog first. Either way the toast
  * offers Undo, which restores every changed item's dates and pins unless one
  * changed since (all or nothing, enforced by the API's version check).
+ *
+ * The preview is planned in the browser when the open page knows the links
+ * and calendar (v1.4.1), so the dialog opens at once; the apply sends what
+ * was shown and the API plans again. When the plans differ (409) the API's
+ * preview is shown, with a note that the plan changed meanwhile.
  *
  * Provided by the project shell, next to the {@link ProjectContext} it updates.
  */
@@ -74,45 +142,124 @@ export class RescheduleFlow {
       if (target.autoMove) {
         return await this.applyWithRetry(target, changes);
       }
-      const plan = await this.api.reschedule(target.projectId, { mode: 'preview', changes });
-      if (plan.changes.length === 0) {
-        // E.g. a start typed before the predecessors allow, on an item that
-        // already starts as early as it can.
-        this.toast.show('Nothing changed: the dates already fit their predecessors');
-        return null;
+      let plan = this.localPreview(target, changes) ?? (await this.serverPreview(target, changes));
+      let note: string | null = null;
+      for (;;) {
+        if (plan.changes.length === 0) {
+          // E.g. a start typed before the predecessors allow, on an item that
+          // already starts as early as it can.
+          this.toast.show('Nothing changed: the dates already fit their predecessors');
+          return null;
+        }
+        const quiet =
+          note === null &&
+          plan.kept.length === 0 &&
+          plan.changes.every((c) => c.requested && !c.snapped);
+        const choice = quiet ? { move: true, always: false } : await this.ask(target, plan, note);
+        if (choice === null) return null;
+        if (choice.always && !target.autoMove) {
+          const updated = await this.projects.update(target.projectId, {
+            settings: { autoMoveDependents: true },
+          });
+          if (this.ctx?.project()?.id === updated.id) this.ctx.project.set(updated);
+          target.switched();
+        }
+        try {
+          return await this.apply(target, changes, choice.move ? 'apply' : 'only', plan);
+        } catch (error) {
+          // Once: the plan changed since it was shown, so the API's plan is shown.
+          if (!(error instanceof HttpErrorResponse) || error.status !== 409 || note !== null)
+            throw error;
+          await target.refresh();
+          plan = await this.serverPreview(target, changes);
+          note = PLAN_CHANGED_NOTE;
+        }
       }
-      const quiet = plan.kept.length === 0 && plan.changes.every((c) => c.requested && !c.snapped);
-      if (quiet) return await this.apply(target, changes, 'apply', plan);
-      const { RescheduleDialog } = await import('../pages/timeline/reschedule-dialog');
-      const ref = this.dialog.open<
-        InstanceType<typeof RescheduleDialog>,
-        RescheduleDialogData,
-        RescheduleChoice
-      >(RescheduleDialog, {
-        data: {
-          plan,
-          today: dayOf(new Date()),
-          canSwitch: target.canSwitch,
-        },
-        width: 'var(--k-size-640px)',
-        maxWidth: 'calc(100vw - var(--k-space-8))',
-        enterAnimationDuration: dialogMotion(),
-        exitAnimationDuration: dialogMotion(),
-      });
-      const choice = await firstValueFrom(ref.afterClosed());
-      if (choice === null || choice === undefined) return null;
-      if (choice.always) {
-        const updated = await this.projects.update(target.projectId, {
-          settings: { autoMoveDependents: true },
-        });
-        if (this.ctx?.project()?.id === updated.id) this.ctx.project.set(updated);
-        target.switched();
-      }
-      return await this.apply(target, changes, choice.move ? 'apply' : 'only', plan);
     } catch (error) {
       this.toast.error(error);
       return null;
     }
+  }
+
+  /**
+   * Loads the confirmation dialog's code ahead of the first date change, so
+   * it opens at once (v1.4.1). It stays a lazy chunk.
+   *
+   * @returns Resolves once loaded; a failure is left to the first real use.
+   */
+  async preload(): Promise<void> {
+    try {
+      await import('../pages/timeline/reschedule-dialog');
+    } catch {
+      // Offline or a new deployment; the dialog loads when needed.
+    }
+  }
+
+  /**
+   * Plans the change in the browser (v1.4.1) when the target knows the
+   * plan and nothing needs the API: no exact pins (Undo), and every
+   * requested item is a visible timeline item the caller may plan.
+   *
+   * @param target Where.
+   * @param changes The requested changes.
+   * @returns The preview, or null to ask the API.
+   */
+  private localPreview(
+    target: RescheduleTarget,
+    changes: RescheduleChangeRequest[],
+  ): RescheduleResultDto | null {
+    if (changes.some((c) => c.pinTo !== undefined)) return null;
+    const plan = target.plan?.() ?? null;
+    if (plan === null) return null;
+    const byId = new Map(plan.items.map((i) => [i.id, i]));
+    const resolved = changes.map((c) => ({ ...c, item: target.version(c.item)?.id ?? c.item }));
+    // Ad-hoc, hidden or unplannable items: the API answers with the reason.
+    if (resolved.some((c) => byId.get(c.item)?.editable !== true)) return null;
+    const preview = previewReschedule(plan.items, plan.edges, resolved, plan.calendar);
+    // "Nothing changed" is left to the API, in case the store is behind.
+    return preview === null || preview.changes.length === 0 ? null : preview;
+  }
+
+  /**
+   * Asks the API for the preview.
+   *
+   * @param target Where.
+   * @param changes The requested changes.
+   * @returns The preview.
+   */
+  private serverPreview(
+    target: RescheduleTarget,
+    changes: RescheduleChangeRequest[],
+  ): Promise<RescheduleResultDto> {
+    return this.api.reschedule(target.projectId, { mode: 'preview', changes });
+  }
+
+  /**
+   * Shows the preview for confirmation.
+   *
+   * @param target Where.
+   * @param plan The preview.
+   * @param note A note above it, e.g. that the plan changed meanwhile.
+   * @returns The choice, or null when cancelled.
+   */
+  private async ask(
+    target: RescheduleTarget,
+    plan: RescheduleResultDto,
+    note: string | null,
+  ): Promise<{ move: boolean; always: boolean } | null> {
+    const { RescheduleDialog } = await import('../pages/timeline/reschedule-dialog');
+    const ref = this.dialog.open<
+      InstanceType<typeof RescheduleDialog>,
+      RescheduleDialogData,
+      RescheduleChoice
+    >(RescheduleDialog, {
+      data: { plan, today: dayOf(new Date()), canSwitch: target.canSwitch, note },
+      width: 'var(--k-size-640px)',
+      maxWidth: 'calc(100vw - var(--k-space-8))',
+      enterAnimationDuration: dialogMotion(),
+      exitAnimationDuration: dialogMotion(),
+    });
+    return (await firstValueFrom(ref.afterClosed())) ?? null;
   }
 
   /**
@@ -135,6 +282,19 @@ export class RescheduleFlow {
       },
       refresh: () => ctx.refresh(),
       switched: () => undefined,
+      plan: () => {
+        const source = ctx.plan();
+        if (source === null || !ctx.writable()) return null;
+        return {
+          // As saved: edits still waiting are not the current dates.
+          items: ctx
+            .items()
+            .filter((i) => !i.adHoc)
+            .map((i) => previewItem(ctx.edits.base(i.id) ?? i)),
+          edges: source.edges,
+          calendar: source.calendar,
+        };
+      },
     };
   }
 

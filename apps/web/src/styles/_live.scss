@@ -118,6 +118,14 @@ tr.k-pm-faint > td:first-child {
   border-radius: 0 0 0 var(--k-radius-sm);
 }
 
+/* In the flow of a line of text, such as a timeline bar's label (v1.4.1). */
+.k-pm-tag.inline {
+  position: static;
+  display: inline-block;
+  flex: none;
+  transform: none;
+}
+
 .k-pm-tag.short {
   width: var(--k-space-4);
   max-width: var(--k-space-4);

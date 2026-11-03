@@ -8,12 +8,14 @@ import {
   type MyCalendarDto,
   type ScheduleDates,
   workCalendar,
+  type WorkItemDto,
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
 import type { CalendarEntry } from '../../core/calendar-logic';
 import { Today } from '../../core/today';
 import { ItemsApiService } from '../../core/items-api.service';
 import { LiveService } from '../../core/live.service';
+import { PendingEdits } from '../../core/pending-edits';
 import { ReportsApiService } from '../../core/reports-api.service';
 import { RescheduleFlow, type RescheduleTarget } from '../../core/reschedule';
 import type { WorkFilter } from '../../core/work-logic';
@@ -66,6 +68,14 @@ export class WorkCalendar {
   protected readonly phone = phoneLayout();
   protected readonly error = signal('');
   private readonly data = signal<MyCalendarDto | null>(null);
+  /** Moves shown before the server saved them (v1.4.1). */
+  private readonly edits = new PendingEdits<CalendarItemDto>(
+    (id) => this.data()?.items.find((i) => i.id === id),
+    (item) =>
+      this.data.update((d) =>
+        d === null ? d : { ...d, items: d.items.map((i) => (i.id === item.id ? item : i)) },
+      ),
+  );
   private range: { from: string; to: string } | null = null;
   private run = 0;
 
@@ -152,7 +162,8 @@ export class WorkCalendar {
     try {
       const data = await this.api.myCalendar(range.from, range.to);
       if (run !== this.run) return;
-      this.data.set(data);
+      // Moves still saving stay where they were dropped.
+      this.data.set({ ...data, items: data.items.map((i) => this.edits.incoming(i)) });
       this.error.set('');
     } catch (error) {
       if (run === this.run) this.error.set(errorMessage(error));
@@ -198,6 +209,7 @@ export class WorkCalendar {
       link: ['/p', project?.key ?? 'personal', 'items', i.number],
       canMove: i.canPlan,
       presence: null,
+      pending: this.edits.has(i.id),
       project: project === undefined ? null : project.key === null ? 'Personal' : project.name,
     };
   }
@@ -221,10 +233,22 @@ export class WorkCalendar {
       ),
     );
     const to = moveFinishTo(item, addDays(anchor, request.days), cal);
-    if (project.key === null || item.adHoc) {
-      await this.saveDirectly(item, to);
-      return;
-    }
+    // The entry stays where it was dropped, in the pending style, until saved (v1.4.1).
+    await this.edits.run(item.id, to, 'dates', () =>
+      project.key === null || item.adHoc ? this.saveDirectly(item, to) : this.reschedule(item, to),
+    );
+  }
+
+  /**
+   * Moves an item through its project's reschedule flow.
+   *
+   * @param item The item.
+   * @param to The new dates.
+   * @returns Resolves once applied, cancelled or refused.
+   */
+  private async reschedule(item: CalendarItemDto, to: ScheduleDates): Promise<void> {
+    const project = this.projects().get(item.projectId);
+    if (project === undefined) return;
     const target: RescheduleTarget = {
       projectId: project.id,
       autoMove: project.autoMoveDependents,
@@ -233,7 +257,11 @@ export class WorkCalendar {
         const found = this.data()?.items.find((i) => i.id === ref || String(i.number) === ref);
         return found === undefined ? undefined : { id: found.id, updatedAt: found.updatedAt };
       },
-      store: () => void this.reload(),
+      // The changed items show at once; the reload fills in the rest.
+      store: (items) => {
+        for (const changed of items) this.storeDates(changed);
+        void this.reload();
+      },
       refresh: () => this.reload(),
       switched: () =>
         this.data.update((d) =>
@@ -251,6 +279,28 @@ export class WorkCalendar {
   }
 
   /**
+   * Stores the saved dates of a changed item, if listed.
+   *
+   * @param changed The item from the API.
+   */
+  private storeDates(changed: WorkItemDto): void {
+    const listed = this.data()?.items.find((i) => i.id === changed.id);
+    if (listed === undefined) return;
+    const item = this.edits.incoming({
+      ...listed,
+      startDate: changed.startDate,
+      startSecondHalf: changed.startSecondHalf,
+      dueDate: changed.dueDate,
+      dueFirstHalf: changed.dueFirstHalf,
+      status: changed.status,
+      updatedAt: changed.updatedAt,
+    });
+    this.data.update((d) =>
+      d === null ? d : { ...d, items: d.items.map((i) => (i.id === item.id ? item : i)) },
+    );
+  }
+
+  /**
    * Saves dates without the planner (personal tasks and ad-hoc items), with Undo.
    *
    * @param item The item.
@@ -265,7 +315,7 @@ export class WorkCalendar {
       dueFirstHalf: item.dueFirstHalf,
     };
     try {
-      await this.items.update(item.projectId, item.id, to);
+      this.storeDates(await this.items.update(item.projectId, item.id, to));
       await this.reload();
       this.toast.show(`${item.key} moved`, async () => {
         try {

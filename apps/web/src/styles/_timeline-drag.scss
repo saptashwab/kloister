@@ -2,6 +2,19 @@
 // loaded with the timeline route only. Dragging feels like the board's cards:
 // a card follows the pointer and the rows slide apart to open the gap.
 app-timeline {
+  // Someone else moves this row (v1.4.1): the whole row is outlined, drawn
+  // above the cells, which paint over an ordinary outline.
+  .row.k-pm.k-pm-strong {
+    outline: none;
+  }
+  .row.k-pm.k-pm-strong::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    border: var(--k-focus-width) solid var(--pm-ink);
+    pointer-events: none;
+  }
   // Shown on hover or focus of the row; always on touch screens.
   .grip {
     display: inline-flex;

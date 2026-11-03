@@ -225,14 +225,17 @@ export interface PresenceItemRef {
  * @param entry Their presence.
  * @param name Their name.
  * @param item The item they have open, when the viewer has it.
- * @returns E.g. "Ann is editing the due date of KLO-42 · Fix login", or
- *   "Viewing the timeline" without an item.
+ * @returns E.g. "Ann is editing the due date of KLO-42 · Fix login", "Di is
+ *   moving 3 rows", or "Viewing the timeline" without an item.
  */
 export function presenceDoing(
   entry: PresenceEntryDto,
   name: string,
   item: PresenceItemRef | null,
 ): string {
+  // Rows moved together (v1.4.1): the count of those the viewer can see.
+  const rows = entry.itemIds?.length ?? 0;
+  if (entry.action === PresenceAction.MOVING && rows > 1) return `${name} is moving ${rows} rows`;
   if (entry.itemId === null || item === null) {
     if (entry.itemId !== null) return presenceSentence(entry, name);
     return entry.view === null ? 'On this project' : `Viewing ${PRESENCE_VIEWS[entry.view]}`;

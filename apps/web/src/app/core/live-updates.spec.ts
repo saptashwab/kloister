@@ -124,6 +124,10 @@ describe('live texts', () => {
     expect(presenceDoing(entry('noting', null), 'Ann', item)).toBe(
       'Ann is writing a note on KLO-42 · Fix login',
     );
+    // Rows moved together on the timeline (v1.4.1).
+    expect(
+      presenceDoing({ ...entry('moving', null), itemIds: ['i1', 'i2', 'i3'] }, 'Di', item),
+    ).toBe('Di is moving 3 rows');
     const away = { userId: 'u1', itemId: null, action: null, field: null } as const;
     expect(presenceDoing({ ...away, view: 'timeline' }, 'Ann', null)).toBe('Viewing the timeline');
     expect(presenceDoing({ ...away, view: null }, 'Ann', null)).toBe('On this project');
@@ -283,6 +287,30 @@ describe('ProjectContext live updates', () => {
     expect(ctx.changedBy('i1')).toBe('Moved by Pat just now');
   });
 
+  it('never hands over a failed pending edit as a change from others (v1.4.1)', async () => {
+    vi.useFakeTimers();
+    const { ctx } = setup();
+    await ctx.open('KLO');
+    await ctx.refresh();
+    // A title edit is still saving when the person starts editing the same row.
+    let refuse!: (error: Error) => void;
+    const saving = ctx.optimistic(
+      'i1',
+      { title: 'Not saved' },
+      'title',
+      () => new Promise<void>((_resolve, reject) => (refuse = reject)),
+    );
+    const hold = ctx.hold('i1', 'editing', 'dueDate');
+    await ctx.refresh();
+    refuse(new Error('refused'));
+    await expect(saving).rejects.toThrow('refused');
+    const missed = await hold.release(false);
+    // The waiting change is the server's copy, without the failed title.
+    expect(missed?.item?.title ?? makeItem(1).title).toBe(makeItem(1).title);
+    if (missed !== null) ctx.applyRemote(missed);
+    expect(ctx.itemsById().get('i1')?.title).toBe(makeItem(1).title);
+  });
+
   it('forgets removed items and tells the drawer', async () => {
     vi.useFakeTimers();
     const { ctx, events } = setup();
@@ -366,6 +394,46 @@ describe('ProjectContext live updates', () => {
       field: null,
       view: null,
     });
+  });
+
+  it('reports rows moved together in one report and marks each of them (v1.4.1)', async () => {
+    const { ctx, events, live } = setup();
+    await ctx.open('KLO');
+    ctx.view('i9');
+    const holds = ['i1', 'i2', 'i3'].map((id) => ctx.hold(id, 'moving'));
+    expect(live.report).toHaveBeenLastCalledWith({
+      itemId: 'i1',
+      action: 'moving',
+      field: null,
+      itemIds: ['i1', 'i2', 'i3'],
+      view: null,
+    });
+    for (const hold of holds) await hold.release();
+    expect(live.report).toHaveBeenLastCalledWith({
+      itemId: 'i9',
+      action: 'viewing',
+      field: null,
+      view: null,
+    });
+    events.next({
+      name: LiveEvent.PRESENCE,
+      data: {
+        projectId: makeProject().id,
+        people: [
+          {
+            userId: 'u9',
+            itemId: 'i2',
+            action: 'moving',
+            field: null,
+            view: 'timeline',
+            itemIds: ['i2', 'i3'],
+          },
+        ],
+      },
+    });
+    expect(ctx.presenceByItem().get('i2')).toHaveLength(1);
+    expect(ctx.presenceByItem().get('i3')).toHaveLength(1);
+    expect(ctx.presenceByItem().get('i1')).toBeUndefined();
   });
 });
 
