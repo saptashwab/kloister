@@ -14,7 +14,15 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDialog } from '@angular/material/dialog';
 import { MatTabsModule } from '@angular/material/tabs';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
-import { type CreateItemRequest, ItemType, ProjectPermission, SprintState } from '@kloister/shared';
+import {
+  type CreateItemRequest,
+  ItemType,
+  PRESENCE_VIEWS,
+  type PresenceEntryDto,
+  type PresenceView,
+  ProjectPermission,
+  SprintState,
+} from '@kloister/shared';
 import { filter, firstValueFrom, map } from 'rxjs';
 import { errorMessage } from '../../core/api';
 import { ItemsApiService } from '../../core/items-api.service';
@@ -29,7 +37,9 @@ import { dialogMotion } from '../../ui/motion';
 import { NewItemDialog, type NewItemData } from './new-item-dialog';
 import { PageActions } from '../../core/page-actions';
 import { SnapshotAction } from '../../ui/snapshot-action';
-import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
+import { drawerPath } from '../../core/live-logic';
+import { LiveStatusChip, LiveStyles } from '../../ui/live-ui';
+import { PresenceHead } from '../../ui/presence-head';
 
 /**
  * Frame of one project (`/p/:key/…`, DESIGN §7): breadcrumb, project name,
@@ -47,7 +57,7 @@ import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
   imports: [
     LiveStatusChip,
     LiveStyles,
-    PresenceAvatars,
+    PresenceHead,
     SnapshotAction,
     RouterOutlet,
     RouterLink,
@@ -131,7 +141,7 @@ import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
     @if (ctx.project(); as project) {
       <ng-template #actions let-slim>
         <app-live-status />
-        <app-presence [people]="ctx.presence()" [members]="ctx.membersById()" [actions]="false" />
+        <app-presence-head [people]="ctx.presence()" (goTo)="goTo($event)" />
         @if (slim) {
           <button
             type="button"
@@ -322,6 +332,13 @@ export class ProjectShellPage {
       this.url();
       untracked(() => this.fold.peek.set(false));
     });
+    // Others' header hover cards say which page the caller is on (DESIGN §9.1).
+    effect(() => {
+      const tab = this.activeTab() || 'board';
+      const view = Object.hasOwn(PRESENCE_VIEWS, tab) ? (tab as PresenceView) : null;
+      untracked(() => this.ctx.setPage(view));
+    });
+    inject(DestroyRef).onDestroy(() => this.ctx.setPage(null));
     inject(Shortcuts).register((key) => {
       if (key !== 'c' || !this.canCreate() || document.querySelector('.d-panel')) return false;
       void this.newItem();
@@ -340,6 +357,29 @@ export class ProjectShellPage {
         .then(() => (switched ? this.ctx.refresh() : undefined))
         .catch((error: unknown) => this.error.set(errorMessage(error)));
     });
+  }
+
+  /**
+   * "Go to" from a person's header hover card (DESIGN §9.1): the page shows
+   * the item (board and backlog scroll and flash it, the timeline selects
+   * its row) and the drawer opens unless the page keeps it closed. An item
+   * the page's filters hide still opens, with a note saying so.
+   *
+   * @param entry The person's presence.
+   * @returns Resolves once navigated.
+   */
+  protected async goTo(entry: PresenceEntryDto): Promise<void> {
+    const key = this.ctx.project()?.key;
+    const item = entry.itemId === null ? undefined : this.ctx.itemsById().get(entry.itemId);
+    if (!key || item === undefined) return;
+    const result = this.ctx.locate(item.id);
+    if (result === 'done') return;
+    if (result === 'hidden') this.toast.show('Hidden by your filters on this view');
+    const tab = this.activeTab();
+    const path = drawerPath(key, tab, item.number);
+    // Filters stay only when the drawer opens beside the same page.
+    const samePage = tab === '' || path.includes(tab);
+    await this.router.navigate(path, samePage ? { queryParamsHandling: 'preserve' } : {});
   }
 
   /**
@@ -375,11 +415,8 @@ export class ProjectShellPage {
       const item = await this.items.create(project.id, request);
       this.ctx.upsert(item);
       this.toast.show(`${item.key} created`);
-      const tab = this.activeTab();
       await this.router.navigate(
-        tab === 'backlog' || tab === 'timeline' || tab === 'calendar'
-          ? ['/p', project.key ?? 'personal', tab, 'items', item.number]
-          : ['/p', project.key ?? 'personal', 'items', item.number],
+        drawerPath(project.key ?? 'personal', this.activeTab(), item.number),
       );
     } catch (error) {
       this.toast.error(error);

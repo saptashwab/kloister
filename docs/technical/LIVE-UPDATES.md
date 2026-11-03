@@ -132,6 +132,9 @@ Events (data types are in `packages/shared/src/live.ts` and the [API reference](
 
 - A tab reports its project and, when relevant, the item it has open and what it is doing
   (`viewing`, `editing` a named field, `moving` a card or bar, `noting`), at most once a second.
+  Since 2026-11-04 it also names the project page it shows (`view`: board, backlog, timeline,
+  calendar, sprints, reports, settings or ado; a fixed list, so no free text travels). The page
+  is passed on to every viewer of the project, also when the item is hidden from them.
 - The hub publishes the entry on the same PostgreSQL channel, so every API process knows it. Each
   viewer receives only the people on the project whose item they can see; an entry on a hidden
   item shows the person without the item.
@@ -174,6 +177,15 @@ Events (data types are in `packages/shared/src/live.ts` and the [API reference](
   item events like the My work list.
 - An administrator on a cross-project visit gets no live updates for that project; the page shows
   changes after a reload.
+- Field-level presence (DESIGN §9.1): the project shell reports the open page with every presence
+  report (`ProjectContext.setPage`). `ui/presence-mark.ts` holds the `appPresenceMark` directive
+  (strong outline or faint edge in the person colour) and `app-presence-tag` (the name tag that
+  shrinks to a bar). The drawer marks its `data-presence` fields, the timeline its cells and bars
+  (an open cell menu reports an edit of that field), the board its cards and the backlog its rows
+  and cells. The header's `app-presence-head` (`ui/presence-head.ts`) shows avatars whose hover
+  cards say what each person does and offer Go to: the open page registers a locator with
+  `ProjectContext.registerLocator` that scrolls to and flashes (board, backlog) or selects
+  (timeline) the item, and the shell opens the drawer unless the page answers `done`.
 
 ## The admin switch
 

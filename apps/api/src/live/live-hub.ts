@@ -749,6 +749,7 @@ export class LiveHub implements OnModuleDestroy {
       f: null,
       a: body.itemId === null ? null : body.action,
       fl: body.itemId === null || body.action !== 'editing' ? null : body.field,
+      v: body.view ?? null,
     };
     void this.withFacts(message)
       .then((m) => sendLive(this.prisma, m))
@@ -821,7 +822,10 @@ export class LiveHub implements OnModuleDestroy {
     const sameProject = existing?.message.p === message.p;
     const sameItem = sameProject && existing?.message.i === message.i;
     const changed =
-      !sameItem || existing?.message.a !== message.a || existing.message.fl !== message.fl;
+      !sameItem ||
+      existing?.message.a !== message.a ||
+      existing.message.fl !== message.fl ||
+      (existing.message.v ?? null) !== (message.v ?? null);
     this.presence.set(message.s, {
       message: { ...message, p: message.p },
       projectSince: sameProject ? existing.projectSince : now,
@@ -906,8 +910,8 @@ export class LiveHub implements OnModuleDestroy {
             now - entry.itemSince >= PRESENCE_DELAY_MS &&
             this.access.canViewItem(access, fromWire(m.f));
           return visible
-            ? { userId: m.u, itemId: m.i, action: m.a, field: m.fl }
-            : { userId: m.u, itemId: null, action: null, field: null };
+            ? { userId: m.u, itemId: m.i, action: m.a, field: m.fl, view: m.v ?? null }
+            : { userId: m.u, itemId: null, action: null, field: null, view: m.v ?? null };
         })
         .sort((a, b) => a.userId.localeCompare(b.userId));
       const text = JSON.stringify(people);

@@ -29,24 +29,127 @@
   }
 }
 
-/* A cell or bar someone else is editing or dragging: a thin neutral
-   outline with their initials. */
-.k-live-other {
-  position: relative;
-  outline: var(--k-line) dashed var(--k-muted);
-  outline-offset: calc(-1 * var(--k-line));
+/* Field-level presence (DESIGN §9.1): where someone else is, in their
+   person colour (--pm pairs from presenceVars(); -d pairs in dark mode). */
+.k-pm,
+.k-pm-tag {
+  --pm-ink: var(--pm);
+  --pm-text: var(--pm-on);
 }
 
-.k-live-other[data-initials]::after {
-  content: attr(data-initials);
-  position: absolute;
-  top: calc(-1 * var(--k-size-6px));
-  right: 0;
-  padding: 0 var(--k-space-1);
+@mixin dark-presence {
+  .k-pm,
+  .k-pm-tag {
+    --pm-ink: var(--pm-d);
+    --pm-text: var(--pm-on-d);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    @include dark-presence;
+  }
+}
+
+:root[data-theme='dark'] {
+  @include dark-presence;
+}
+
+.k-pm {
+  position: relative;
+}
+
+/* A wrapper that carries a drawer field's mark and name tag. */
+span.pm-zone {
+  display: inline-flex;
+  align-items: center;
   border-radius: var(--k-radius-sm);
-  background: var(--k-muted);
-  color: var(--k-surface);
-  font-size: var(--k-size-10px);
-  line-height: 1.4;
-  pointer-events: none;
+}
+
+/* Editing, moving or writing a note: a strong outline (two classes, so
+   it beats components that switch outlines off). Grid and table cells sit
+   edge to edge and clip, so theirs goes inside. */
+.k-pm.k-pm-strong {
+  outline: var(--k-focus-width) solid var(--pm-ink);
+  outline-offset: var(--k-line);
+}
+
+.k-pm.k-pm-strong:is(td, [role='gridcell']) {
+  outline-offset: calc(-1 * var(--k-focus-width));
+}
+
+/* Viewing: a faint edge on the left. Table rows draw it on their first cell. */
+.k-pm-faint:not(tr) {
+  box-shadow: inset var(--k-size-3px) 0 0 color-mix(in srgb, var(--pm-ink) 55%, transparent);
+}
+
+tr.k-pm-faint > td:first-child {
+  box-shadow: inset var(--k-size-3px) 0 0 color-mix(in srgb, var(--pm-ink) 55%, transparent);
+}
+
+/* The name tag on the top right corner; it shrinks to a bar after a few
+   seconds and shows the name again on hover or focus. */
+.k-pm-tag {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0;
+  display: block;
+  max-width: var(--k-size-120px);
+  height: var(--k-size-18px);
+  padding: 0 var(--k-space-1);
+  overflow: hidden;
+  border-radius: var(--k-radius-sm);
+  background: var(--pm-ink);
+  color: var(--pm-text);
+  font-size: var(--k-size-11px);
+  font-weight: 600;
+  line-height: var(--k-size-18px);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transform: translateY(-70%);
+  transition:
+    max-width var(--k-motion) ease,
+    height var(--k-motion) ease;
+}
+
+.k-pm-tag.inside {
+  transform: none;
+  border-radius: 0 0 0 var(--k-radius-sm);
+}
+
+.k-pm-tag.short {
+  width: var(--k-space-4);
+  max-width: var(--k-space-4);
+  height: var(--k-size-5px);
+  padding: 0;
+}
+
+.k-pm-tag.short .k-pm-name {
+  visibility: hidden;
+}
+
+/* Hovering the element shows the name only for tags outside it; inside
+   tags would cover the element's own controls. */
+.k-pm-tag.short:hover,
+.k-pm:hover > .k-pm-tag.short:not(.inside),
+.k-pm:focus-within > .k-pm-tag.short,
+.k-pm:focus > .k-pm-tag.short {
+  width: auto;
+  max-width: var(--k-size-120px);
+  height: var(--k-size-18px);
+  padding: 0 var(--k-space-1);
+}
+
+.k-pm-tag.short:hover .k-pm-name,
+.k-pm:hover > .k-pm-tag.short:not(.inside) .k-pm-name,
+.k-pm:focus-within > .k-pm-tag.short .k-pm-name,
+.k-pm:focus > .k-pm-tag.short .k-pm-name {
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .k-pm-tag {
+    transition: none;
+  }
 }

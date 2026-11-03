@@ -7,7 +7,10 @@ import { Today } from '../../core/today';
 import { ProjectContext } from '../../core/project-context';
 import { ItemCopyAction } from '../../ui/item-copy-action';
 import { ItemLinkAction } from '../../ui/item-link-action';
+import { presenceVars } from '../../core/colour';
+import { isStrong, leadPresence } from '../../core/live-logic';
 import { PresenceAvatars } from '../../ui/live-ui';
+import { PresenceTag } from '../../ui/presence-mark';
 import { Avatar } from '../../ui/avatar';
 import { Icon } from '../../ui/icon';
 import { LabelPill } from '../../ui/label-pill';
@@ -18,7 +21,9 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
  * type, key, "Blocked", priority, title, labels, due date, checklist
  * progress and assignee avatars with their hover cards. Live updates (M10)
  * highlight it briefly after someone else changed it ("Changed by Ann just
- * now" on hover) and show who else has it open.
+ * now" on hover) and show who else has it open: a faint edge in their
+ * person colour while they view it, a strong outline and name tag while
+ * they move or edit it (DESIGN §9.1).
  *
  * The title is the card's link to the item drawer, so keyboard users reach
  * it with Tab; the board opens the drawer on clicks elsewhere on the card.
@@ -29,6 +34,7 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
     ItemCopyAction,
     ItemLinkAction,
     PresenceAvatars,
+    PresenceTag,
     RouterLink,
     Avatar,
     Icon,
@@ -42,6 +48,10 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
     '[class.done]': 'done()',
     '[class.k-live-flash]': 'flash()',
     '[attr.title]': 'changedBy()',
+    '[class.k-pm]': 'mark() !== null',
+    '[class.k-pm-strong]': 'strong()',
+    '[class.k-pm-faint]': 'mark() !== null && !strong()',
+    '[style]': 'markVars()',
   },
   styles: `
     :host {
@@ -60,6 +70,15 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
     .share {
       color: var(--k-muted);
       font-size: var(--k-body-sm);
+    }
+    /* Presence marks (DESIGN §9.1) stay inside the card, which clips. */
+    :host(.k-pm.k-pm-strong) {
+      outline-offset: calc(-1 * var(--k-focus-width));
+    }
+    :host(.k-pm-faint) {
+      box-shadow:
+        inset var(--k-size-3px) 0 0 color-mix(in srgb, var(--pm-ink) 55%, transparent),
+        var(--k-rest);
     }
     :host:focus-within,
     :host(.cdk-drag-preview) {
@@ -128,6 +147,11 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
   `,
   template: `
     @let i = item();
+    @if (mark(); as pm) {
+      @if (strong()) {
+        <app-presence-tag [entry]="pm" what="this card" place="inside" />
+      }
+    }
     @if (cover(); as colour) {
       <div class="cover" [style.background]="colour" aria-hidden="true"></div>
     }
@@ -268,6 +292,15 @@ export class ItemCard {
   protected readonly presence = computed(() => this.ctx.presenceByItem().get(this.item().id) ?? []);
   /** Members by user id, for presence names. */
   protected readonly members = this.ctx.membersById;
+  /** The person whose mark the card shows, or null. */
+  protected readonly mark = computed(() => leadPresence(this.presence()));
+  /** True while that person moves, edits or writes a note on it. */
+  protected readonly strong = computed(() => isStrong(this.mark()?.action ?? null));
+  /** Their person colour's properties. */
+  protected readonly markVars = computed(() => {
+    const mark = this.mark();
+    return mark === null ? null : presenceVars(mark.userId);
+  });
 
   /** True for Done items, which are dimmed. */
   protected readonly done = computed(() => this.item().status === ItemStatus.DONE);

@@ -1,5 +1,6 @@
 import {
   PRESENCE_FIELDS,
+  PRESENCE_VIEWS,
   PresenceAction,
   type PresenceEntryDto,
   type ProjectMemberDto,
@@ -161,4 +162,110 @@ export function changedText(name: string, moved: boolean): string {
  */
 export function headPeople(userIds: readonly string[], max = 4): { shown: string[]; more: number } {
   return { shown: userIds.slice(0, max), more: Math.max(0, userIds.length - max) };
+}
+
+/**
+ * Whether an action shows strongly (DESIGN §9.1): editing, moving and
+ * writing a note do; viewing is faint.
+ *
+ * @param action The action.
+ * @returns True for a strong mark.
+ */
+export function isStrong(action: PresenceAction | null): boolean {
+  return (
+    action === PresenceAction.EDITING ||
+    action === PresenceAction.MOVING ||
+    action === PresenceAction.NOTING
+  );
+}
+
+/**
+ * The person whose mark a field, cell, card or row shows: the first strong
+ * entry, else the first one. Entries are returned as given, so a template
+ * binding keeps its value until presence changes.
+ *
+ * @param entries Presence on the item, if any.
+ * @param accept Which entries belong to this place; all by default.
+ * @returns The entry, or null.
+ */
+export function leadPresence(
+  entries: readonly PresenceEntryDto[] | undefined,
+  accept: (entry: PresenceEntryDto) => boolean = () => true,
+): PresenceEntryDto | null {
+  let first: PresenceEntryDto | null = null;
+  for (const entry of entries ?? []) {
+    if (!accept(entry)) continue;
+    if (isStrong(entry.action)) return entry;
+    first ??= entry;
+  }
+  return first;
+}
+
+/**
+ * The short name on a presence tag: the first word of the display name.
+ *
+ * @param name The display name.
+ * @returns E.g. "Ann" for "Ann Lee".
+ */
+export function tagName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+/** The item a header hover card names. */
+export interface PresenceItemRef {
+  /** E.g. "KLO-42". */
+  key: string;
+  /** The title. */
+  title: string;
+}
+
+/**
+ * What a person is doing, for their header hover card (DESIGN §9.1).
+ *
+ * @param entry Their presence.
+ * @param name Their name.
+ * @param item The item they have open, when the viewer has it.
+ * @returns E.g. "Ann is editing the due date of KLO-42 · Fix login", or
+ *   "Viewing the timeline" without an item.
+ */
+export function presenceDoing(
+  entry: PresenceEntryDto,
+  name: string,
+  item: PresenceItemRef | null,
+): string {
+  if (entry.itemId === null || item === null) {
+    if (entry.itemId !== null) return presenceSentence(entry, name);
+    return entry.view === null ? 'On this project' : `Viewing ${PRESENCE_VIEWS[entry.view]}`;
+  }
+  const what = `${item.key} · ${item.title}`;
+  switch (entry.action) {
+    case PresenceAction.EDITING:
+      return entry.field === null
+        ? `${name} is editing ${what}`
+        : `${name} is editing ${PRESENCE_FIELDS[entry.field]} of ${what}`;
+    case PresenceAction.MOVING:
+      return `${name} is moving ${what}`;
+    case PresenceAction.NOTING:
+      return `${name} is writing a note on ${what}`;
+    default:
+      return `${name} is viewing ${what}`;
+  }
+}
+
+/** Project tabs whose routes have an item drawer. */
+const DRAWER_TABS: ReadonlySet<string> = new Set(['backlog', 'timeline', 'calendar']);
+
+/**
+ * Where an item's drawer opens from a project tab: beside that tab when it
+ * has a drawer, else beside the board.
+ *
+ * @param projectKey The project key.
+ * @param tab The current tab (`''` for the board).
+ * @param itemNumber The item number.
+ * @returns Router commands.
+ */
+export function drawerPath(projectKey: string, tab: string, itemNumber: number): unknown[] {
+  return DRAWER_TABS.has(tab)
+    ? ['/p', projectKey, tab, 'items', itemNumber]
+    : ['/p', projectKey, 'items', itemNumber];
 }

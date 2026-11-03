@@ -1,4 +1,9 @@
-import { AuditAction, type PresenceAction, type PresenceField } from '@kloister/shared';
+import {
+  AuditAction,
+  type PresenceAction,
+  type PresenceField,
+  type PresenceView,
+} from '@kloister/shared';
 import type { AuditRecord, DbClient } from '../audit/audit.service.js';
 import type { ItemFacts } from '../projects/project-access.service.js';
 import { currentClientId } from './client-id.js';
@@ -74,6 +79,8 @@ export interface PresenceMessage {
   a: PresenceAction | null;
   /** Field, or null. */
   fl: PresenceField | null;
+  /** Project page, or null (absent from older messages). */
+  v?: PresenceView | null;
 }
 
 /** What an audited action means for live updates. */

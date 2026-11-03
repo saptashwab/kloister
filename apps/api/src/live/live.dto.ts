@@ -3,8 +3,10 @@ import {
   type LiveSubscribeRequest,
   type LiveWorkRequest,
   PRESENCE_FIELDS,
+  PRESENCE_VIEWS,
   PresenceAction,
   type PresenceField,
+  type PresenceView,
 } from '@kloister/shared';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength, ValidateIf } from 'class-validator';
 import { LowercaseUuid } from '../common/uuid.js';
@@ -45,4 +47,10 @@ export class LivePresenceDto implements LivePresenceRequest {
   @ValidateIf((_o, value) => value !== null)
   @IsIn(Object.keys(PRESENCE_FIELDS))
   field: PresenceField | null;
+
+  /** Project page the tab shows; only known page keys, so no free text travels. */
+  @IsOptional()
+  @ValidateIf((_o, value) => value !== null)
+  @IsIn(Object.keys(PRESENCE_VIEWS))
+  view?: PresenceView | null;
 }

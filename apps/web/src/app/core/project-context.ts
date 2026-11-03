@@ -15,6 +15,7 @@ import {
   type PresenceAction,
   type PresenceEntryDto,
   type PresenceField,
+  type PresenceView,
   type ProjectDto,
   type ProjectMemberDto,
   ProjectPermission,
@@ -59,6 +60,16 @@ export interface ItemHold {
    */
   release(apply?: boolean): Promise<RemoteChange | null>;
 }
+
+/**
+ * What is left after a page showed an item for "Go to" (DESIGN §9.1):
+ * `open` its drawer, nothing (`done`), or open the drawer with the note
+ * that the item is `hidden` by the viewer's filters on this page.
+ */
+export type LocateResult = 'open' | 'done' | 'hidden';
+
+/** A page's way of showing an item for "Go to". */
+export type ItemLocator = (id: string) => LocateResult;
 
 /**
  * State of the project being viewed, shared by the project's pages (board,
@@ -160,6 +171,9 @@ export class ProjectContext {
   private batchTimer: ReturnType<typeof setTimeout> | undefined;
   private reloadTimer: ReturnType<typeof setTimeout> | undefined;
   private flashTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The "Go to" flash: its frame and its end, apart from change highlights. */
+  private goToFrame = 0;
+  private goToFlashTimer: ReturnType<typeof setTimeout> | undefined;
   /** Hold counts of busy items. */
   private readonly busy = new Map<string, number>();
   /** Changes waiting for busy items; `pending` while the refetch has not answered. */
@@ -170,6 +184,10 @@ export class ProjectContext {
   private holds = 0;
   /** Presence by source: the open item, then edits and holds; the newest wins. */
   private readonly presenceSources = new Map<string, LivePresenceRequest>();
+  /** The project page the caller is on, reported with every presence report. */
+  private page: PresenceView | null = null;
+  /** The open page's way of showing an item, for "Go to" (DESIGN §9.1). */
+  private locator: ItemLocator | null = null;
 
   /**
    * Follows the project on the live stream and handles its events.
@@ -217,6 +235,8 @@ export class ProjectContext {
       clearTimeout(this.batchTimer);
       clearTimeout(this.reloadTimer);
       clearTimeout(this.flashTimer);
+      clearTimeout(this.goToFlashTimer);
+      cancelAnimationFrame(this.goToFrame);
       this.live.follow(null);
     });
   }
@@ -242,6 +262,8 @@ export class ProjectContext {
       this.project.set(project);
       this.following = project.myRole !== null || project.ownerId !== null;
       this.live.follow(this.following ? project.id : null);
+      // Following resets the stream's report; the page and open item go again.
+      this.report();
       return project;
     });
     return this.projectLoad;
@@ -377,8 +399,75 @@ export class ProjectContext {
   setPresence(source: string, state: LivePresenceRequest | null): void {
     this.presenceSources.delete(source);
     if (state !== null) this.presenceSources.set(source, state);
+    this.report();
+  }
+
+  /** Reports the newest activity, or none, with the page. */
+  private report(): void {
     const latest = [...this.presenceSources.values()].at(-1);
-    this.live.report(latest ?? { itemId: null, action: null, field: null });
+    this.live.report({
+      ...(latest ?? { itemId: null, action: null, field: null }),
+      view: this.page,
+    });
+  }
+
+  /**
+   * Reports the project page the caller is on, so others' header hover
+   * cards can say "Viewing the timeline".
+   *
+   * @param view The page, or null.
+   */
+  setPage(view: PresenceView | null): void {
+    if (view === this.page) return;
+    this.page = view;
+    this.report();
+  }
+
+  /**
+   * Lets the open page show items for "Go to" (DESIGN §9.1) until it is
+   * destroyed. The newest page wins.
+   *
+   * @param locator Shows an item and says what is left to do.
+   * @param destroyRef The page's lifetime.
+   * @returns Unregisters it early.
+   */
+  registerLocator(locator: ItemLocator, destroyRef: DestroyRef): () => void {
+    this.locator = locator;
+    const unregister = (): void => {
+      if (this.locator === locator) this.locator = null;
+    };
+    destroyRef.onDestroy(unregister);
+    return unregister;
+  }
+
+  /**
+   * Shows an item on the open page for "Go to".
+   *
+   * @param id Item id.
+   * @returns What the caller still has to do; `open` when no page can show it.
+   */
+  locate(id: string): LocateResult {
+    return this.locator?.(id) ?? 'open';
+  }
+
+  /**
+   * Flashes an item's card, row or bar with the change highlight, without
+   * a "Changed by" text (for "Go to").
+   *
+   * @param id Item id.
+   */
+  flash(id: string): void {
+    const drop = (): void =>
+      this.flashing.update((ids) => new Set([...ids].filter((i) => i !== id)));
+    drop();
+    cancelAnimationFrame(this.goToFrame);
+    clearTimeout(this.goToFlashTimer);
+    // Adding it again on the next frame restarts the highlight animation;
+    // only this item ends with it, so others' highlights keep their time.
+    this.goToFrame = requestAnimationFrame(() => {
+      this.flashing.update((ids) => new Set([...ids, id]));
+      this.goToFlashTimer = setTimeout(drop, HIGHLIGHT_MS);
+    });
   }
 
   /**

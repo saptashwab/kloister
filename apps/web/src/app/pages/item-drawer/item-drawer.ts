@@ -14,7 +14,6 @@ import {
   ViewEncapsulation,
 } from '@angular/core';
 import { CdkTrapFocus } from '@angular/cdk/a11y';
-import { NgTemplateOutlet } from '@angular/common';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatDialog } from '@angular/material/dialog';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -54,7 +53,7 @@ import { dueState, dueText, revertMove, shortDate, undoFields } from '../../core
 import { ItemsApiService } from '../../core/items-api.service';
 import { TrashApiService } from '../../core/trash-api.service';
 import { PRIORITY_LABELS, SPRINT_STATE_LABELS, TYPE_LABELS } from '../../core/labels';
-import { changedFields, personName, personWithRole } from '../../core/live-logic';
+import { changedFields, leadPresence, personName, personWithRole } from '../../core/live-logic';
 import { ProjectContext, type RemoteChange } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
 import { nextShare, shareLabel, shareOf, sharesOf, withShareFor } from '../../core/shares';
@@ -70,6 +69,7 @@ import { ViewImages } from '../../ui/image-viewer';
 import { ItemRefs, ItemRefStyles, type RefLookup } from '../../ui/item-refs';
 import { LabelPill } from '../../ui/label-pill';
 import { PresenceAvatars } from '../../ui/live-ui';
+import { PresenceMark, PresenceTag } from '../../ui/presence-mark';
 import { PriorityIcon, StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
 import { ItemCopyAction } from '../../ui/item-copy-action';
@@ -128,8 +128,9 @@ const FIELD_NAMES: Record<string, string> = {
     ItemLinkAction,
     ShareButtons,
     ShareKeysDirective,
-    NgTemplateOutlet,
     PresenceAvatars,
+    PresenceMark,
+    PresenceTag,
     CdkTrapFocus,
     DateField,
     TimeField,
@@ -290,85 +291,103 @@ const FIELD_NAMES: Record<string, string> = {
               <app-type-icon [type]="d.type" [large]="true" />
               <span class="k-key">{{ d.key }} · {{ typeLabels[d.type] }}</span>
             </div>
-            <h1 class="d-title" data-presence="title">
-              @if (editingTitle()) {
-                <input
-                  #titleInput
-                  class="title-input"
-                  aria-label="Title"
-                  [value]="d.title"
-                  [attr.maxlength]="titleMax"
-                  (keydown.enter)="saveTitle($any($event.target))"
-                  (keydown.escape)="cancelTitle($event)"
-                  (blur)="saveTitle($any($event.target))"
-                />
-              } @else if (canPlan()) {
-                <button
-                  type="button"
-                  class="title-btn"
-                  title="Edit the title"
-                  (click)="editTitle()"
-                >
+            @let pmTitle = editor(['title']);
+            <div class="pm-zone" [appPresenceMark]="pmTitle">
+              @if (pmTitle) {
+                <app-presence-tag [entry]="pmTitle" />
+              }
+              <h1 class="d-title" data-presence="title">
+                @if (editingTitle()) {
+                  <input
+                    #titleInput
+                    class="title-input"
+                    aria-label="Title"
+                    [value]="d.title"
+                    [attr.maxlength]="titleMax"
+                    (keydown.enter)="saveTitle($any($event.target))"
+                    (keydown.escape)="cancelTitle($event)"
+                    (blur)="saveTitle($any($event.target))"
+                  />
+                } @else if (canPlan()) {
+                  <button
+                    type="button"
+                    class="title-btn"
+                    title="Edit the title"
+                    (click)="editTitle()"
+                  >
+                    {{ d.title }}
+                  </button>
+                } @else {
                   {{ d.title }}
-                </button>
-              } @else {
-                {{ d.title }}
-              }
-            </h1>
+                }
+              </h1>
+            </div>
             <div class="d-pills">
-              @if (canEdit()) {
-                <mat-select
-                  class="pill-select"
-                  data-presence="status"
-                  aria-label="Status"
-                  panelWidth="200"
-                  [value]="d.status"
-                  (valueChange)="save({ status: $event })"
-                >
-                  <mat-select-trigger
-                    ><app-status-pill [status]="d.status" [large]="true"
-                  /></mat-select-trigger>
-                  @for (s of statuses; track s) {
-                    <mat-option [value]="s"><app-status-pill [status]="s" /></mat-option>
-                  }
-                </mat-select>
-              } @else {
-                <app-status-pill [status]="d.status" [large]="true" />
-              }
-              @if (canMove()) {
-                <mat-select
-                  class="pill-select"
-                  data-presence="bucket"
-                  aria-label="Bucket"
-                  panelWidth="220"
-                  [value]="d.bucketId ?? none"
-                  (valueChange)="moveTo($event)"
-                >
-                  <mat-select-trigger
-                    ><span class="bucket-pill"
-                      >{{ bucketName(d) }}<app-icon name="chevronDown" [size]="13" /></span
-                  ></mat-select-trigger>
-                  @if (!needsBucket()) {
-                    <mat-option [value]="none">Off the board</mat-option>
-                  }
-                  @for (b of ctx.buckets(); track b.id) {
-                    <mat-option [value]="b.id">{{ b.name }}</mat-option>
-                  }
-                </mat-select>
-              } @else {
-                <span class="bucket-pill" aria-label="Bucket">{{ bucketName(d) }}</span>
-              }
+              @let pmStatus = editor(['status']);
+              <span class="pm-zone" [appPresenceMark]="pmStatus">
+                @if (pmStatus) {
+                  <app-presence-tag [entry]="pmStatus" />
+                }
+                @if (canEdit()) {
+                  <mat-select
+                    class="pill-select"
+                    data-presence="status"
+                    aria-label="Status"
+                    panelWidth="200"
+                    [value]="d.status"
+                    (valueChange)="save({ status: $event })"
+                  >
+                    <mat-select-trigger
+                      ><app-status-pill [status]="d.status" [large]="true"
+                    /></mat-select-trigger>
+                    @for (s of statuses; track s) {
+                      <mat-option [value]="s"><app-status-pill [status]="s" /></mat-option>
+                    }
+                  </mat-select>
+                } @else {
+                  <app-status-pill [status]="d.status" [large]="true" />
+                }
+              </span>
+              @let pmBucket = editor(['bucket']);
+              <span class="pm-zone" [appPresenceMark]="pmBucket">
+                @if (pmBucket) {
+                  <app-presence-tag [entry]="pmBucket" />
+                }
+                @if (canMove()) {
+                  <mat-select
+                    class="pill-select"
+                    data-presence="bucket"
+                    aria-label="Bucket"
+                    panelWidth="220"
+                    [value]="d.bucketId ?? none"
+                    (valueChange)="moveTo($event)"
+                  >
+                    <mat-select-trigger
+                      ><span class="bucket-pill"
+                        >{{ bucketName(d) }}<app-icon name="chevronDown" [size]="13" /></span
+                    ></mat-select-trigger>
+                    @if (!needsBucket()) {
+                      <mat-option [value]="none">Off the board</mat-option>
+                    }
+                    @for (b of ctx.buckets(); track b.id) {
+                      <mat-option [value]="b.id">{{ b.name }}</mat-option>
+                    }
+                  </mat-select>
+                } @else {
+                  <span class="bucket-pill" aria-label="Bucket">{{ bucketName(d) }}</span>
+                }
+              </span>
             </div>
           </div>
 
           <dl class="fields">
             @if (ctx.project()?.ownerId === null) {
-              <dt>
-                Assignees<ng-container
-                  *ngTemplateOutlet="editing; context: { $implicit: ['assignees'] }"
-                />
-              </dt>
-              <dd data-presence="assignees">
+              <dt>Assignees</dt>
+              @let pmAssignees = editor(['assignees']);
+              <dd data-presence="assignees" [appPresenceMark]="pmAssignees">
+                @if (pmAssignees) {
+                  <app-presence-tag [entry]="pmAssignees" />
+                }
                 @if (canEdit()) {
                   <mat-select
                     class="k-inline"
@@ -437,10 +456,12 @@ const FIELD_NAMES: Record<string, string> = {
                 }
               </dd>
             }
-            <dt>
-              Labels<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['labels'] }" />
-            </dt>
-            <dd data-presence="labels">
+            <dt>Labels</dt>
+            @let pmLabels = editor(['labels']);
+            <dd data-presence="labels" [appPresenceMark]="pmLabels">
+              @if (pmLabels) {
+                <app-presence-tag [entry]="pmLabels" />
+              }
               @if (canEdit()) {
                 <mat-select
                   class="k-inline"
@@ -488,10 +509,12 @@ const FIELD_NAMES: Record<string, string> = {
               }
             </dd>
 
-            <dt>
-              Sprint<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['sprint'] }" />
-            </dt>
-            <dd data-presence="sprint">
+            <dt>Sprint</dt>
+            @let pmSprint = editor(['sprint']);
+            <dd data-presence="sprint" [appPresenceMark]="pmSprint">
+              @if (pmSprint) {
+                <app-presence-tag [entry]="pmSprint" />
+              }
               @if (!ownSprint(d)) {
                 <div class="plain">
                   @if (childSprints(d); as names) {
@@ -527,12 +550,12 @@ const FIELD_NAMES: Record<string, string> = {
               }
             </dd>
 
-            <dt>
-              Priority<ng-container
-                *ngTemplateOutlet="editing; context: { $implicit: ['priority'] }"
-              />
-            </dt>
-            <dd data-presence="priority">
+            <dt>Priority</dt>
+            @let pmPriority = editor(['priority']);
+            <dd data-presence="priority" [appPresenceMark]="pmPriority">
+              @if (pmPriority) {
+                <app-presence-tag [entry]="pmPriority" />
+              }
               @if (canEdit()) {
                 <mat-select
                   class="k-inline"
@@ -563,23 +586,22 @@ const FIELD_NAMES: Record<string, string> = {
               }
             </dd>
 
-            <dt>
-              Dates<ng-container
-                *ngTemplateOutlet="
-                  editing;
-                  context: { $implicit: ['startDate', 'dueDate', 'dueTime', 'duration'] }
-                "
-              />
-            </dt>
+            <dt>Dates</dt>
             <dd>
               <div class="dates">
                 @if (canPlan()) {
-                  <app-date-field
-                    data-presence="startDate"
-                    label="Start date"
-                    [value]="d.startDate"
-                    (valueChange)="saveDates({ startDate: $event })"
-                  />
+                  @let pmStart = editor(['startDate']);
+                  <span class="pm-zone" [appPresenceMark]="pmStart">
+                    @if (pmStart) {
+                      <app-presence-tag [entry]="pmStart" />
+                    }
+                    <app-date-field
+                      data-presence="startDate"
+                      label="Start date"
+                      [value]="d.startDate"
+                      (valueChange)="saveDates({ startDate: $event })"
+                    />
+                  </span>
                   @if (d.startDate) {
                     <mat-button-toggle-group
                       class="k-segmented halves"
@@ -593,13 +615,19 @@ const FIELD_NAMES: Record<string, string> = {
                     </mat-button-toggle-group>
                   }
                   <span class="muted" aria-hidden="true">→</span>
-                  <app-date-field
-                    data-presence="dueDate"
-                    label="Due date"
-                    [value]="d.dueDate"
-                    [min]="d.startDate"
-                    (valueChange)="saveDates({ dueDate: $event })"
-                  />
+                  @let pmDue = editor(['dueDate', 'duration']);
+                  <span class="pm-zone" [appPresenceMark]="pmDue">
+                    @if (pmDue) {
+                      <app-presence-tag [entry]="pmDue" />
+                    }
+                    <app-date-field
+                      data-presence="dueDate"
+                      label="Due date"
+                      [value]="d.dueDate"
+                      [min]="d.startDate"
+                      (valueChange)="saveDates({ dueDate: $event })"
+                    />
+                  </span>
                   @if (d.dueDate) {
                     <mat-button-toggle-group
                       class="k-segmented halves"
@@ -613,7 +641,11 @@ const FIELD_NAMES: Record<string, string> = {
                     </mat-button-toggle-group>
                   }
                 } @else {
-                  <span class="plain">
+                  @let pmDates = editor(['startDate', 'dueDate', 'dueTime', 'duration']);
+                  <span class="plain" [appPresenceMark]="pmDates">
+                    @if (pmDates) {
+                      <app-presence-tag [entry]="pmDates" />
+                    }
                     {{
                       d.startDate
                         ? short(d.startDate) + (d.startSecondHalf ? ', afternoon' : '')
@@ -633,12 +665,18 @@ const FIELD_NAMES: Record<string, string> = {
                 }
                 @if (canEdit()) {
                   @if (d.dueDate && (d.dueTime || addingTime())) {
-                    <app-time-field
-                      data-presence="dueTime"
-                      label="Due time"
-                      [value]="d.dueTime"
-                      (valueChange)="saveTime($event)"
-                    />
+                    @let pmTime = editor(['dueTime']);
+                    <span class="pm-zone" [appPresenceMark]="pmTime">
+                      @if (pmTime) {
+                        <app-presence-tag [entry]="pmTime" />
+                      }
+                      <app-time-field
+                        data-presence="dueTime"
+                        label="Due time"
+                        [value]="d.dueTime"
+                        (valueChange)="saveTime($event)"
+                      />
+                    </span>
                   } @else if (d.dueDate) {
                     <button type="button" class="k-action" (click)="addingTime.set(true)">
                       Add time
@@ -668,10 +706,12 @@ const FIELD_NAMES: Record<string, string> = {
             </dd>
 
             @if (ctx.teams().length > 0 || d.teamId) {
-              <dt>
-                Team<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['team'] }" />
-              </dt>
-              <dd data-presence="team">
+              <dt>Team</dt>
+              @let pmTeam = editor(['team']);
+              <dd data-presence="team" [appPresenceMark]="pmTeam">
+                @if (pmTeam) {
+                  <app-presence-tag [entry]="pmTeam" />
+                }
                 @if (canEdit()) {
                   <mat-select
                     class="k-inline"
@@ -693,10 +733,12 @@ const FIELD_NAMES: Record<string, string> = {
               </dd>
             }
 
-            <dt>
-              Type<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['type'] }" />
-            </dt>
-            <dd data-presence="type">
+            <dt>Type</dt>
+            @let pmType = editor(['type']);
+            <dd data-presence="type" [appPresenceMark]="pmType">
+              @if (pmType) {
+                <app-presence-tag [entry]="pmType" />
+              }
               @if (canPlan()) {
                 <mat-select
                   class="k-inline"
@@ -714,10 +756,12 @@ const FIELD_NAMES: Record<string, string> = {
               }
             </dd>
 
-            <dt>
-              Parent<ng-container *ngTemplateOutlet="editing; context: { $implicit: ['parent'] }" />
-            </dt>
-            <dd data-presence="parent">
+            <dt>Parent</dt>
+            @let pmParent = editor(['parent']);
+            <dd data-presence="parent" [appPresenceMark]="pmParent">
+              @if (pmParent) {
+                <app-presence-tag [entry]="pmParent" />
+              }
               @if (d.adHoc) {
                 <div class="plain"><span class="muted">Ad hoc items have no parent</span></div>
               } @else if (canPlan() && d.type !== epic) {
@@ -760,12 +804,16 @@ const FIELD_NAMES: Record<string, string> = {
             }
           </dl>
 
-          <section aria-labelledby="d-desc" data-presence="description">
-            <h2 id="d-desc">
-              Description<ng-container
-                *ngTemplateOutlet="editing; context: { $implicit: ['description'] }"
-              />
-            </h2>
+          @let pmDescription = editor(['description']);
+          <section
+            aria-labelledby="d-desc"
+            data-presence="description"
+            [appPresenceMark]="pmDescription"
+          >
+            @if (pmDescription) {
+              <app-presence-tag [entry]="pmDescription" />
+            }
+            <h2 id="d-desc">Description</h2>
             @if (canEdit()) {
               <app-rich-text-editor
                 [html]="d.description"
@@ -788,7 +836,11 @@ const FIELD_NAMES: Record<string, string> = {
             }
           </section>
 
-          <section aria-label="Checklist" data-presence="checklist">
+          @let pmChecklist = editor(['checklist']);
+          <section aria-label="Checklist" data-presence="checklist" [appPresenceMark]="pmChecklist">
+            @if (pmChecklist) {
+              <app-presence-tag [entry]="pmChecklist" />
+            }
             <app-item-checklist
               [projectId]="projectId()"
               [itemId]="d.id"
@@ -902,7 +954,11 @@ const FIELD_NAMES: Record<string, string> = {
             />
           </section>
 
-          <section aria-labelledby="d-activity" data-presence="note">
+          @let pmNote = noter();
+          <section aria-labelledby="d-activity" data-presence="note" [appPresenceMark]="pmNote">
+            @if (pmNote) {
+              <app-presence-tag [entry]="pmNote" />
+            }
             <app-item-activity
               [projectId]="projectId()"
               [itemId]="d.id"
@@ -923,19 +979,6 @@ const FIELD_NAMES: Record<string, string> = {
         }
       </div>
     </div>
-    <!-- Who else is editing one of these fields (M10). -->
-    <ng-template #editing let-fields>
-      @if (editors(fields); as people) {
-        @if (people.length > 0) {
-          <app-presence
-            class="field-presence"
-            [people]="people"
-            [members]="ctx.membersById()"
-            [size]="16"
-          />
-        }
-      }
-    </ng-template>
   `,
 })
 export class ItemDrawer {
@@ -1323,16 +1366,32 @@ export class ItemDrawer {
   }
 
   /**
-   * People editing one of the given fields of this item.
+   * Someone else editing one of the given fields of this item, for the
+   * field's outline and name tag (DESIGN §9.1).
    *
    * @param fields Presence fields.
-   * @returns Their presence.
+   * @returns Their presence, or null.
    */
-  protected editors(fields: readonly PresenceField[]): PresenceEntryDto[] {
+  protected editor(fields: readonly PresenceField[]): PresenceEntryDto | null {
     const id = this.detail()?.id;
-    if (id === undefined) return [];
-    return (this.ctx.presenceByItem().get(id) ?? []).filter(
+    if (id === undefined) return null;
+    return leadPresence(
+      this.ctx.presenceByItem().get(id),
       (p) => p.action === PresenceAction.EDITING && p.field !== null && fields.includes(p.field),
+    );
+  }
+
+  /**
+   * Someone else writing a note on this item, for the activity outline.
+   *
+   * @returns Their presence, or null.
+   */
+  protected noter(): PresenceEntryDto | null {
+    const id = this.detail()?.id;
+    if (id === undefined) return null;
+    return leadPresence(
+      this.ctx.presenceByItem().get(id),
+      (p) => p.action === PresenceAction.NOTING,
     );
   }
 

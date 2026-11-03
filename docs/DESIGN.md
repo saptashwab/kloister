@@ -300,6 +300,42 @@ columns show a dashed note ("No cards for Mia Member here").
 - **View all their work** lists that person's items across every project the viewer can open, each limited by the
   viewer's own access in that project (SPEC §6). M4.5 adds its API endpoint with permission tests.
 
+### 9.1 Field-level presence (2026-11-04)
+
+Where another person is working shows at the exact field, cell, card or bar, like cursor flags in shared documents.
+There are no live mouse cursors and no live typing preview.
+
+- **Person colour**: derived from the person's avatar colour, so the same person is always the same colour
+  (`presenceColours()` in `core/colour.ts`). Light mode uses the avatar's ink with white tag text; dark mode lightens
+  it until it reaches 4.5:1 on the dark surface and uses dark tag text. Outline, tag fill and tag text all meet AA
+  in both modes.
+- **Strength**: editing, moving and writing a note are strong, a 2 px outline in the person colour; viewing is faint,
+  a 3 px left edge at 55 % of the colour. Grid and table cells, and board cards, draw the outline inside because they
+  clip.
+- **Name tag**: a small tag on the top right corner of a strong mark shows the first name, then shrinks to a 16 × 5 px
+  bar after 3 seconds. Hovering the tag (or a drawer field), or focus in the marked element, shows the name again.
+  The full sentence ("Ann is editing the due date") is its tooltip and accessible name. A tag inside a card or cell
+  does not grow on hover of the whole element, so it never covers the element's own controls. With reduced motion
+  the tag changes size without a transition.
+- **Item drawer**: each field (title, status, bucket, assignees, labels, sprint, priority, start, due, due time,
+  team, type, parent, description, checklist) gets the outline and tag while someone edits it; a note being
+  written outlines the activity area. This replaces the 16 px avatar beside the field label.
+- **Timeline**: the cell someone edits (Title, Start, Days, Due, Pred., Who, Status, Type, Sprint, and Bucket or
+  Priority when edited in the drawer) gets the outline and tag; a bar being dragged gets the outline. Opening a
+  Who, Status, Type or Sprint cell menu counts as editing that field.
+- **Board cards**: a faint edge while someone has the card open, a strong outline and tag ("Ann is moving this
+  card") while they move or edit it.
+- **Backlog rows**: a faint left edge while someone views the item; while they edit, the Status, Sprint, Bucket
+  or Assignees cell of that field (else the Item cell) gets the outline and tag. Phone cards show either on the
+  whole card.
+- **Header avatars** stay. Each one is a real avatar with a hover card that says what the person is doing ("Ann is
+  editing the due date of KLO-42 · Fix login", or "Viewing the timeline" without an item) and, while they have an
+  item open, **Go to KLO-42**. Clicking the avatar opens the card, as everywhere. Go to on the board or backlog
+  scrolls to the card or row, flashes the change highlight and opens the drawer; on the timeline it scrolls to the
+  row and selects it without opening the drawer; elsewhere it opens the drawer. An item the viewer's filters hide
+  opens anyway, with the toast "Hidden by your filters on this view". Marks and tags have no Go to.
+- Visibility is unchanged: only items the viewer may see are marked, and personal spaces have no presence.
+
 ## 10. Item drawer
 
 - A 640 px drawer from the right (full width on phones) over `--k-scrim`, deep-linkable (SPEC §6). The board stays

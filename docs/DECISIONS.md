@@ -1,5 +1,41 @@
 # Decisions
 
+## Field-level live presence (2026-11-04)
+
+- Owner-approved design (DESIGN §9.1): presence shows at the field, cell, card or bar in the person's colour; name
+  tags shrink to a bar; viewing is faint and editing, moving and writing a note are strong; the header hover card
+  says what the person does and offers Go to. Choices made while building, closest to SPEC:
+- **Page in presence.** "Viewing the timeline" needs the page, which presence did not carry. The presence report
+  gained an optional `view` key from a fixed list (`PRESENCE_VIEWS`: board, backlog, timeline, calendar, sprints,
+  reports, settings, ado) and every presence entry carries `view` (null when not reported). Additive: older
+  clients that send no `view` keep working, unknown keys are refused with 400 like unknown fields. The page is
+  passed on to every viewer of the project, also when the item is hidden from them, the same way the person
+  already was; personal spaces still have no presence. No permission changed; the route's permission tests gained
+  rows for the new key.
+- **Person colour.** The avatar's ink colour, kept at 4.5:1 on the light surface with white tag text; in dark mode
+  lightened until 4.5:1 on the dark surface, with dark tag text (`presenceColours()`, unit-tested for every
+  avatar colour). Two people with the same avatar colour share a presence colour; the tag names them.
+  Contrast is checked against the default surfaces, as for tinted labels. The faint viewing edge (55 % of the
+  colour) is decorative and not held to a contrast ratio; who is viewing also shows in the header and the small
+  avatars. Tags inside timeline and backlog cells add "Ann is editing …" to those cells' accessible names while
+  someone is there.
+- **Where marks go.** Drawer fields wrap their control in a `pm-zone` so the tag stays outside the title heading's
+  accessible name. Board cards and grid or table cells clip, so their outline is drawn inside and their tag sits
+  inside the top right corner; those inside tags grow back on their own hover or focus in the element, not on
+  hover of the whole card or cell, so they never cover its controls. Bars get the outline only. The read-only
+  date line in the drawer shows any date edit. Duration edits (timeline Days) mark the drawer's due date.
+- **Backlog.** Its cells are not editable, so an edit anywhere marks the matching column (Status, Sprint, Bucket,
+  Assignees) or else the Item cell; the row's faint edge is for viewing. Phone cards show either on the whole card.
+- **Timeline menus.** Opening a Who, Status, Type or Sprint cell menu now reports an edit of that field (it did not
+  before); the cell mark also shows Bucket and Priority edits made in the drawer.
+- **Go to.** Pages register a locator with the project store. Board and backlog scroll to the item (smoothly unless
+  reduced motion), flash the existing highlight and the shell opens the drawer beside the page; the timeline
+  selects and focuses the row and keeps the drawer closed; pages without a locator open the drawer (calendar
+  beside itself, others beside the board). An item the page's filters or a closed parent hide opens anyway with
+  the toast "Hidden by your filters on this view".
+- **Header avatars** are now real avatars with hover cards (`ui/presence-head.ts`); the old header mode of
+  `app-presence` was removed. Small presence avatars on cards, rows and bars stay as they were.
+
 ## v1.4.0 consistency and gaps (2026-11-03)
 
 - Owner-approved set of eight fixes before v1.4.0. Choices made while building, closest to SPEC:

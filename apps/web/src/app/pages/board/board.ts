@@ -48,7 +48,8 @@ import { revertFields, revertMove, undoFields } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
 import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
 import { personName } from '../../core/live-logic';
-import { type ItemHold, ProjectContext } from '../../core/project-context';
+import { type ItemHold, type LocateResult, ProjectContext } from '../../core/project-context';
+import { scrollToElement } from '../../ui/motion';
 import { SessionStore } from '../../core/session.store';
 import { Shortcuts } from '../../core/shortcuts';
 import { Avatar, PERSON_FILTER, type PersonFilter } from '../../ui/avatar';
@@ -576,6 +577,7 @@ const QUICK_PEOPLE = 6;
               @for (item of column.items; track item.id) {
                 <app-item-card
                   class="open"
+                  [attr.data-card]="item.id"
                   cdkDrag
                   [cdkDragData]="item"
                   [cdkDragDisabled]="!canDrag(item)"
@@ -803,6 +805,25 @@ export class BoardPage implements OnInit, PersonFilter {
       sprints: this.ctx.sprints(),
     });
   });
+
+  /**
+   * "Go to" from a header hover card (DESIGN §9.1): scrolls to the card and
+   * flashes it; the shell then opens the drawer.
+   *
+   * @param id Item id.
+   * @returns `open`, or `hidden` when the filters hide the card.
+   */
+  private goTo(id: string): LocateResult {
+    if (!this.columns().some((c) => c.items.some((i) => i.id === id))) return 'hidden';
+    scrollToElement(this.element.querySelector(`app-item-card[data-card="${id}"]`));
+    this.ctx.flash(id);
+    return 'open';
+  }
+
+  /** The board's element, to find cards in it. */
+  private readonly element = inject<ElementRef<HTMLElement>>(ElementRef).nativeElement;
+  /** Lets the header's "Go to" show cards here. */
+  private readonly locator = this.ctx.registerLocator((id) => this.goTo(id), inject(DestroyRef));
 
   /**
    * Applies `?sprint=` to the sprint filter whenever it changes.

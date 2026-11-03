@@ -64,6 +64,24 @@ export const PRESENCE_FIELDS = {
 /** One of the {@link PRESENCE_FIELDS} keys. */
 export type PresenceField = keyof typeof PRESENCE_FIELDS;
 
+/**
+ * Project pages presence may name, with the words shown to others ("Viewing
+ * the timeline"). Only these keys are accepted, so no free text travels.
+ */
+export const PRESENCE_VIEWS = {
+  board: 'the board',
+  backlog: 'the backlog',
+  timeline: 'the timeline',
+  calendar: 'the calendar',
+  sprints: 'the sprints',
+  reports: 'the reports',
+  settings: 'the settings',
+  ado: 'the Azure DevOps transfer',
+} as const;
+
+/** One of the {@link PRESENCE_VIEWS} keys. */
+export type PresenceView = keyof typeof PRESENCE_VIEWS;
+
 /** Names of the events sent on the stream. */
 export const LiveEvent = {
   /** First event; carries the stream id for the control routes. */
@@ -141,6 +159,8 @@ export interface PresenceEntryDto {
   action: PresenceAction | null;
   /** The field they are editing, with `editing` only. */
   field: PresenceField | null;
+  /** The project page they are on, or null when not reported. */
+  view: PresenceView | null;
 }
 
 /** Data of `presence`: everyone else on the project, as the viewer may see them. */
@@ -174,6 +194,8 @@ export interface LivePresenceRequest {
   action: PresenceAction | null;
   /** Field being edited, with `editing` only. */
   field: PresenceField | null;
+  /** The project page the tab shows; optional, null or absent for none. */
+  view?: PresenceView | null;
 }
 
 /** Answer of `GET /events/status`. */

@@ -7529,6 +7529,21 @@
               "checklist",
               "dependencies"
             ]
+          },
+          "view": {
+            "type": "string",
+            "nullable": true,
+            "description": "Project page the tab shows; only known page keys, so no free text travels.",
+            "enum": [
+              "board",
+              "backlog",
+              "timeline",
+              "calendar",
+              "sprints",
+              "reports",
+              "settings",
+              "ado"
+            ]
           }
         },
         "required": ["itemId", "action", "field"]
@@ -10504,9 +10519,24 @@
             ],
             "nullable": true,
             "description": "The field they are editing, with `editing` only."
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "settings",
+              "board",
+              "backlog",
+              "timeline",
+              "calendar",
+              "sprints",
+              "reports",
+              "ado"
+            ],
+            "nullable": true,
+            "description": "The project page they are on, or null when not reported."
           }
         },
-        "required": ["userId", "itemId", "action", "field"]
+        "required": ["userId", "itemId", "action", "field", "view"]
       }
     },
     "responses": {

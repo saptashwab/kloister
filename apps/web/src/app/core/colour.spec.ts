@@ -10,6 +10,8 @@ import {
   LIGHT_TEXT,
   MIN_CONTRAST,
   parseHex,
+  presenceColours,
+  presenceVars,
   solidLabel,
   tintedLabel,
 } from './colour';
@@ -90,6 +92,23 @@ describe('colour', () => {
     }
     const id = '6f1c0f2e-5a7b-4c2e-9d3a-0b1c2d3e4f50';
     expect(avatarColours(id)).toBe(avatarColours(id));
+  });
+
+  it('gives each person one presence colour that is readable in both modes', () => {
+    const fills = new Set<string>();
+    for (let n = 0; n < 64; n++) {
+      const c = presenceColours(`user-${n}`);
+      fills.add(c.light.ink);
+      // Outline and tag on the surfaces (DESIGN §2.1), and tag text on the tag.
+      expect(contrastRatio(c.light.ink, '#FFFFFF')).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(c.dark.ink, '#161B24')).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(c.light.ink, c.light.on)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+      expect(contrastRatio(c.dark.ink, c.dark.on)).toBeGreaterThanOrEqual(MIN_CONTRAST);
+    }
+    // Derived from the avatar colours, so as many as there are avatar colours.
+    expect(fills.size).toBe(AVATAR_COLOURS.length);
+    expect(presenceVars('user-1')).toEqual(presenceVars('user-1'));
+    expect(Object.keys(presenceVars('user-1'))).toEqual(['--pm', '--pm-on', '--pm-d', '--pm-on-d']);
   });
 
   it('makes initials from display names', () => {

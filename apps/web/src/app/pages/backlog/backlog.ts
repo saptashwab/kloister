@@ -1,6 +1,7 @@
 import {
   Component,
   computed,
+  DestroyRef,
   effect,
   inject,
   input,
@@ -18,6 +19,8 @@ import {
   hasOwnSprint,
   ItemType,
   naturalChildType,
+  PresenceAction,
+  type PresenceEntryDto,
   ProjectPermission,
   SprintState,
   type WorkItemDto,
@@ -44,9 +47,12 @@ import { ItemsApiService } from '../../core/items-api.service';
 import { TYPE_LABELS } from '../../core/labels';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
+import { isStrong, leadPresence } from '../../core/live-logic';
 import { PresenceAvatars } from '../../ui/live-ui';
+import { PresenceMark, PresenceTag } from '../../ui/presence-mark';
 import { StatusPill, TypeIcon } from '../../ui/signals';
-import { ProjectContext } from '../../core/project-context';
+import { type LocateResult, ProjectContext } from '../../core/project-context';
+import { scrollToElement } from '../../ui/motion';
 import { SessionStore } from '../../core/session.store';
 import { PageActions } from '../../core/page-actions';
 import { NgTemplateOutlet } from '@angular/common';
@@ -54,6 +60,28 @@ import { phoneLayout, RowCardStyles } from '../../ui/row-cards';
 
 /** Id of the backlog's group row for ad-hoc items (M12); never an item id. */
 const AD_HOC_GROUP = 'ad-hoc';
+
+/** Where a presence mark goes on a backlog row (DESIGN §9.1). */
+type BacklogMark = 'viewing' | 'item' | 'status' | 'sprint' | 'bucket' | 'assignees';
+
+/**
+ * The backlog column that shows someone's edit: the column of the field,
+ * else the item column.
+ *
+ * @param entry Their presence.
+ * @returns The column.
+ */
+function backlogColumn(entry: PresenceEntryDto): BacklogMark {
+  switch (entry.field) {
+    case 'status':
+    case 'sprint':
+    case 'bucket':
+    case 'assignees':
+      return entry.field;
+    default:
+      return 'item';
+  }
+}
 
 /**
  * The backlog / hierarchy view (SPEC §6): the Epic → Feature → Story → Task
@@ -70,6 +98,8 @@ const AD_HOC_GROUP = 'ad-hoc';
   selector: 'app-backlog',
   imports: [
     PresenceAvatars,
+    PresenceMark,
+    PresenceTag,
     NgTemplateOutlet,
     RowCardStyles,
     RouterOutlet,
@@ -319,12 +349,18 @@ const AD_HOC_GROUP = 'ad-hoc';
       <ul class="k-row-cards" aria-label="Backlog">
         @for (row of rows(); track row.node.id) {
           @let item = row.node.item;
+          @let cardMark = rowMark(row.node.id, null);
           <li
             class="k-row-card"
+            [id]="'b-row-' + row.node.id"
             [class.k-live-flash]="ctx.flashing().has(row.node.id)"
             [attr.title]="changedBy(row.node.id)"
             [style.margin-inline-start.px]="row.depth * 16"
+            [appPresenceMark]="cardMark"
           >
+            @if (cardMark && strong(cardMark)) {
+              <app-presence-tag [entry]="cardMark" place="inside" />
+            }
             <div class="k-row-card-title">
               @if (item) {
                 <mat-checkbox
@@ -375,8 +411,10 @@ const AD_HOC_GROUP = 'ad-hoc';
             @for (row of rows(); track row.node.id) {
               @let item = row.node.item;
               <tr
+                [id]="'b-row-' + row.node.id"
                 [class.k-live-flash]="ctx.flashing().has(row.node.id)"
                 [attr.title]="changedBy(row.node.id)"
+                [appPresenceMark]="rowMark(row.node.id, 'viewing')"
               >
                 <td>
                   @if (item) {
@@ -387,22 +425,44 @@ const AD_HOC_GROUP = 'ad-hoc';
                     />
                   }
                 </td>
-                <td [style.padding-left.px]="10 + row.depth * 24">
+                @let mItem = rowMark(row.node.id, 'item');
+                <td [style.padding-left.px]="10 + row.depth * 24" [appPresenceMark]="mItem">
+                  @if (mItem) {
+                    <app-presence-tag [entry]="mItem" place="inside" />
+                  }
                   <ng-container *ngTemplateOutlet="itemCell; context: { $implicit: row }" />
                 </td>
-                <td>
+                @let mStatus = rowMark(row.node.id, 'status');
+                <td [appPresenceMark]="mStatus">
+                  @if (mStatus) {
+                    <app-presence-tag [entry]="mStatus" place="inside" />
+                  }
                   @if (item) {
                     <app-status-pill [status]="item.status" />
                   }
                 </td>
-                <td>
+                @let mSprint = rowMark(row.node.id, 'sprint');
+                <td [appPresenceMark]="mSprint">
+                  @if (mSprint) {
+                    <app-presence-tag [entry]="mSprint" place="inside" />
+                  }
                   {{ item ? sprintName(item) : '' }}
                   @if (item && outOfStorySprint(item)) {
                     <span class="k-pill warn" title="Not in its story's sprint">≠ story</span>
                   }
                 </td>
-                <td>{{ item ? bucketName(item) : '' }}</td>
-                <td>
+                @let mBucket = rowMark(row.node.id, 'bucket');
+                <td [appPresenceMark]="mBucket">
+                  @if (mBucket) {
+                    <app-presence-tag [entry]="mBucket" place="inside" />
+                  }
+                  {{ item ? bucketName(item) : '' }}
+                </td>
+                @let mAssignees = rowMark(row.node.id, 'assignees');
+                <td [appPresenceMark]="mAssignees">
+                  @if (mAssignees) {
+                    <app-presence-tag [entry]="mAssignees" place="inside" />
+                  }
                   {{ item ? assigneeNames(item) : '' }}
                   @if (ctx.presenceByItem().get(row.node.id); as people) {
                     <app-presence [people]="people" [members]="ctx.membersById()" [size]="16" />
@@ -483,6 +543,51 @@ export class BacklogPage implements OnInit {
     this.ctx.recent();
     return this.ctx.changedBy(id);
   }
+
+  /**
+   * Someone else's presence on a row's column (DESIGN §9.1): `viewing`
+   * for the row's faint edge; a column for an edit of its field (title and
+   * fields without a column, notes and moves go to the item column); null
+   * for a phone card, which shows anyone.
+   *
+   * @param id Item id.
+   * @param place The row, a column, or null for a phone card.
+   * @returns Their presence, or null.
+   */
+  protected rowMark(id: string, place: BacklogMark | null): PresenceEntryDto | null {
+    const entries = this.ctx.presenceByItem().get(id);
+    if (place === null) return leadPresence(entries);
+    if (place === 'viewing')
+      return leadPresence(entries, (p) => p.action === PresenceAction.VIEWING);
+    return leadPresence(entries, (p) => isStrong(p.action) && backlogColumn(p) === place);
+  }
+
+  /**
+   * Whether a presence shows strongly (a name tag on a phone card).
+   *
+   * @param entry The presence.
+   * @returns True for editing, moving and writing a note.
+   */
+  protected strong(entry: PresenceEntryDto): boolean {
+    return isStrong(entry.action);
+  }
+
+  /**
+   * "Go to" from a header hover card (DESIGN §9.1): scrolls to the row and
+   * flashes it; the shell then opens the drawer.
+   *
+   * @param id Item id.
+   * @returns `open`, or `hidden` when filters or a closed parent hide the row.
+   */
+  private goTo(id: string): LocateResult {
+    if (!this.rows().some((r) => r.node.id === id && r.node.item !== null)) return 'hidden';
+    scrollToElement(`b-row-${id}`);
+    this.ctx.flash(id);
+    return 'open';
+  }
+
+  /** Lets the header's "Go to" show rows here. */
+  private readonly locator = this.ctx.registerLocator((id) => this.goTo(id), inject(DestroyRef));
   /** Shows this view's Export… in the project header's page actions. */
   private readonly pageActions = inject(PageActions).register(() => ({
     source: this.ctx.project()?.id ?? '',

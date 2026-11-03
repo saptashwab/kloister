@@ -151,7 +151,7 @@ export class LiveController {
    *
    * @param auth The caller.
    * @param streamId The stream.
-   * @param body Item, action and field.
+   * @param body Item, action, field and page.
    * @returns Resolves once accepted (204).
    */
   @Put(':streamId/presence')
@@ -161,6 +161,10 @@ export class LiveController {
     @Param('streamId', ParseUUIDPipe) streamId: string,
     @Body() body: LivePresenceDto,
   ): Promise<void> {
-    return this.hub.reportPresence(auth, streamId, { ...body, field: body.field ?? null });
+    return this.hub.reportPresence(auth, streamId, {
+      ...body,
+      field: body.field ?? null,
+      view: body.view ?? null,
+    });
   }
 }

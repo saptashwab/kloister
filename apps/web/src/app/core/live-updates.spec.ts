@@ -1,5 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { DestroyRef, Injector } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { LiveEvent, type WorkItemDto } from '@kloister/shared';
 import { Subject } from 'rxjs';
@@ -7,10 +8,15 @@ import { makeItem, makeMember, makeProject } from '../../testing/fixtures';
 import { ItemsApiService } from './items-api.service';
 import {
   changedFields,
+  drawerPath,
   headPeople,
+  isStrong,
+  leadPresence,
   personWithRole,
+  presenceDoing,
   presenceLine,
   presenceSentence,
+  tagName,
 } from './live-logic';
 import {
   type LiveMessageEvent,
@@ -34,23 +40,29 @@ describe('live texts', () => {
 
   it('names what each person does', () => {
     expect(
-      presenceSentence({ userId: 'u1', itemId: 'i1', action: 'editing', field: 'dueDate' }, 'Ann'),
+      presenceSentence(
+        { userId: 'u1', itemId: 'i1', action: 'editing', field: 'dueDate', view: null },
+        'Ann',
+      ),
     ).toBe('Ann is editing the due date');
     expect(
       presenceSentence(
-        { userId: 'u1', itemId: 'i1', action: 'moving', field: null },
+        { userId: 'u1', itemId: 'i1', action: 'moving', field: null, view: null },
         'Ann',
         'this card',
       ),
     ).toBe('Ann is moving this card');
     expect(
-      presenceSentence({ userId: 'u1', itemId: 'i1', action: 'noting', field: null }, 'Ann'),
+      presenceSentence(
+        { userId: 'u1', itemId: 'i1', action: 'noting', field: null, view: null },
+        'Ann',
+      ),
     ).toBe('Ann is writing a note');
     expect(
       presenceLine(
         [
-          { userId: 'u1', itemId: 'i1', action: 'editing', field: 'dueDate' },
-          { userId: 'u2', itemId: 'i1', action: 'viewing', field: null },
+          { userId: 'u1', itemId: 'i1', action: 'editing', field: 'dueDate', view: null },
+          { userId: 'u2', itemId: 'i1', action: 'viewing', field: null, view: null },
         ],
         members,
       ),
@@ -66,6 +78,62 @@ describe('live texts', () => {
     const base = makeItem(1);
     expect(changedFields(base, { ...base, title: 'New' }, ['dueDate'])).toBe(false);
     expect(changedFields(base, { ...base, dueDate: '2026-11-03' }, ['dueDate'])).toBe(true);
+  });
+
+  it('picks the strongest presence for a field, card or row mark', () => {
+    const viewing = {
+      userId: 'u2',
+      itemId: 'i1',
+      action: 'viewing',
+      field: null,
+      view: null,
+    } as const;
+    const editing = {
+      userId: 'u1',
+      itemId: 'i1',
+      action: 'editing',
+      field: 'title',
+      view: null,
+    } as const;
+    expect(isStrong('viewing')).toBe(false);
+    expect(isStrong('moving')).toBe(true);
+    expect(isStrong('noting')).toBe(true);
+    expect(leadPresence([viewing, editing])).toBe(editing);
+    expect(leadPresence([viewing])).toBe(viewing);
+    expect(leadPresence([viewing, editing], (p) => p.field === 'dueDate')).toBeNull();
+    expect(leadPresence(undefined)).toBeNull();
+    expect(tagName('Ann Lee')).toBe('Ann');
+  });
+
+  it('says what a person is doing in their header hover card', () => {
+    const item = { key: 'KLO-42', title: 'Fix login' };
+    const entry = (action: 'viewing' | 'editing' | 'moving' | 'noting', field: 'dueDate' | null) =>
+      ({ userId: 'u1', itemId: 'i1', action, field, view: 'board' }) as const;
+    expect(presenceDoing(entry('editing', 'dueDate'), 'Ann', item)).toBe(
+      'Ann is editing the due date of KLO-42 · Fix login',
+    );
+    expect(presenceDoing(entry('editing', null), 'Ann', item)).toBe(
+      'Ann is editing KLO-42 · Fix login',
+    );
+    expect(presenceDoing(entry('viewing', null), 'Ann', item)).toBe(
+      'Ann is viewing KLO-42 · Fix login',
+    );
+    expect(presenceDoing(entry('moving', null), 'Ann', item)).toBe(
+      'Ann is moving KLO-42 · Fix login',
+    );
+    expect(presenceDoing(entry('noting', null), 'Ann', item)).toBe(
+      'Ann is writing a note on KLO-42 · Fix login',
+    );
+    const away = { userId: 'u1', itemId: null, action: null, field: null } as const;
+    expect(presenceDoing({ ...away, view: 'timeline' }, 'Ann', null)).toBe('Viewing the timeline');
+    expect(presenceDoing({ ...away, view: null }, 'Ann', null)).toBe('On this project');
+  });
+
+  it('opens drawers beside tabs that have one, else beside the board', () => {
+    expect(drawerPath('KLO', 'backlog', 4)).toEqual(['/p', 'KLO', 'backlog', 'items', 4]);
+    expect(drawerPath('KLO', 'timeline', 4)).toEqual(['/p', 'KLO', 'timeline', 'items', 4]);
+    expect(drawerPath('KLO', 'reports', 4)).toEqual(['/p', 'KLO', 'items', 4]);
+    expect(drawerPath('KLO', '', 4)).toEqual(['/p', 'KLO', 'items', 4]);
   });
 
   it('shows at most four people, then a count', () => {
@@ -193,7 +261,12 @@ describe('ProjectContext live updates', () => {
     await ctx.open('KLO');
     await ctx.refresh();
     const hold = ctx.hold('i1', 'moving');
-    expect(live.report).toHaveBeenLastCalledWith({ itemId: 'i1', action: 'moving', field: null });
+    expect(live.report).toHaveBeenLastCalledWith({
+      itemId: 'i1',
+      action: 'moving',
+      field: null,
+      view: null,
+    });
     events.next({
       name: LiveEvent.ITEM_CHANGED,
       data: { projectId: makeProject().id, items: [{ id: 'i1', actorId: 'u9' }] },
@@ -237,21 +310,62 @@ describe('ProjectContext live updates', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('reports the page with presence and lets the open page show items', async () => {
+    const { ctx, live } = setup();
+    // The shell reports its page before the project has loaded; following
+    // the project resets the stream's report, so the page is sent again.
+    ctx.setPage('timeline');
+    await ctx.open('KLO');
+    expect(live.follow).toHaveBeenCalled();
+    expect(live.report).toHaveBeenLastCalledWith({
+      itemId: null,
+      action: null,
+      field: null,
+      view: 'timeline',
+    });
+    ctx.view('i1');
+    expect(live.report).toHaveBeenLastCalledWith({
+      itemId: 'i1',
+      action: 'viewing',
+      field: null,
+      view: 'timeline',
+    });
+    // Without a page that can show items, "Go to" opens the drawer.
+    expect(ctx.locate('i1')).toBe('open');
+    const page = TestBed.inject(Injector).get(DestroyRef);
+    const locator = vi.fn().mockReturnValue('done');
+    const unregister = ctx.registerLocator(locator, page);
+    expect(ctx.locate('i1')).toBe('done');
+    expect(locator).toHaveBeenCalledWith('i1');
+    unregister();
+    expect(ctx.locate('i1')).toBe('open');
+  });
+
   it('keeps presence and reports the open item', async () => {
     const { ctx, events, live } = setup();
     await ctx.open('KLO');
     ctx.view('i1');
-    expect(live.report).toHaveBeenLastCalledWith({ itemId: 'i1', action: 'viewing', field: null });
+    expect(live.report).toHaveBeenLastCalledWith({
+      itemId: 'i1',
+      action: 'viewing',
+      field: null,
+      view: null,
+    });
     events.next({
       name: LiveEvent.PRESENCE,
       data: {
         projectId: makeProject().id,
-        people: [{ userId: 'u9', itemId: 'i1', action: 'editing', field: 'title' }],
+        people: [{ userId: 'u9', itemId: 'i1', action: 'editing', field: 'title', view: null }],
       },
     });
     expect(ctx.presenceByItem().get('i1')).toHaveLength(1);
     ctx.view(null);
-    expect(live.report).toHaveBeenLastCalledWith({ itemId: null, action: null, field: null });
+    expect(live.report).toHaveBeenLastCalledWith({
+      itemId: null,
+      action: null,
+      field: null,
+      view: null,
+    });
   });
 });
 

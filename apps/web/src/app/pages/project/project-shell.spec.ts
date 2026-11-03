@@ -2,12 +2,14 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
-import { makeProject, settle } from '../../../testing/fixtures';
+import { provideRouter, Router } from '@angular/router';
+import type { PresenceEntryDto } from '@kloister/shared';
+import { makeItem, makeMember, makeProject, settle } from '../../../testing/fixtures';
 import { Layout } from '../../core/layout';
 import { PageActions } from '../../core/page-actions';
 import { ProjectContext } from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
+import { ToastService } from '../../ui/toast.service';
 import { ProjectShellPage } from './project-shell';
 
 describe('ProjectShellPage folding (v1.4.0)', () => {
@@ -25,6 +27,8 @@ describe('ProjectShellPage folding (v1.4.0)', () => {
               project: signal(makeProject({ key: 'KLO', name: 'Demo project' })),
               presence: signal([]),
               membersById: signal(new Map()),
+              itemsById: signal(new Map()),
+              setPage: () => undefined,
               lost: signal(''),
               has: () => true,
               writable: () => true,
@@ -152,5 +156,107 @@ describe('ProjectShellPage folding (v1.4.0)', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await settle(fixture);
     expect(root.classList).not.toContain('k-peek');
+  });
+});
+
+describe('ProjectShellPage presence "Go to" (DESIGN §9.1)', () => {
+  const ann: PresenceEntryDto = {
+    userId: 'u-ann',
+    itemId: 'i1',
+    action: 'editing',
+    field: 'dueDate',
+    view: 'board',
+  };
+  const locate = vi.fn<(id: string) => string>();
+  const setPage = vi.fn();
+  const toast = { show: vi.fn(), error: vi.fn() };
+
+  beforeEach(() => {
+    locate.mockReset();
+    setPage.mockReset();
+    toast.show.mockReset();
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: ToastService, useValue: toast },
+      ],
+    });
+    TestBed.overrideComponent(ProjectShellPage, {
+      set: {
+        providers: [
+          {
+            provide: ProjectContext,
+            useValue: {
+              project: signal(makeProject({ key: 'KLO', name: 'Demo project' })),
+              presence: signal([ann]),
+              membersById: signal(new Map([['u-ann', makeMember('u-ann', 'Ann Lee')]])),
+              itemsById: signal(new Map([['i1', makeItem(42, { id: 'i1' })]])),
+              setPage,
+              locate,
+              lost: signal(''),
+              has: () => true,
+              writable: () => true,
+              open: () => Promise.resolve(),
+              refresh: () => Promise.resolve(),
+            },
+          },
+          PageActions,
+          { provide: RescheduleFlow, useValue: {} },
+        ],
+      },
+    });
+  });
+
+  /**
+   * Renders the shell and chooses "Go to" in Ann's hover card.
+   *
+   * @returns The router's navigate spy.
+   */
+  async function goTo() {
+    const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(ProjectShellPage);
+    fixture.componentRef.setInput('key', 'KLO');
+    await settle(fixture);
+    const root = fixture.nativeElement as HTMLElement;
+    root.querySelector<HTMLButtonElement>('app-presence-head button.k-avatar')!.click();
+    await settle(fixture);
+    const action = [...document.querySelectorAll<HTMLButtonElement>('.k-popover button')].find(
+      (b) => b.textContent?.includes('Go to KLO-42'),
+    );
+    action!.click();
+    await settle(fixture);
+    return navigate;
+  }
+
+  it('reports the board as the page the caller is on', async () => {
+    const fixture = TestBed.createComponent(ProjectShellPage);
+    fixture.componentRef.setInput('key', 'KLO');
+    await settle(fixture);
+    expect(setPage).toHaveBeenLastCalledWith('board');
+  });
+
+  it('lets the page show the item, then opens the drawer beside it', async () => {
+    locate.mockReturnValue('open');
+    const navigate = await goTo();
+    expect(locate).toHaveBeenCalledWith('i1');
+    expect(navigate).toHaveBeenCalledWith(['/p', 'KLO', 'items', 42], {
+      queryParamsHandling: 'preserve',
+    });
+    expect(toast.show).not.toHaveBeenCalled();
+  });
+
+  it('opens the drawer with a note when the page’s filters hide the item', async () => {
+    locate.mockReturnValue('hidden');
+    const navigate = await goTo();
+    expect(toast.show).toHaveBeenCalledWith('Hidden by your filters on this view');
+    expect(navigate).toHaveBeenCalled();
+  });
+
+  it('leaves the drawer closed when the page showed the item itself (timeline)', async () => {
+    locate.mockReturnValue('done');
+    const navigate = await goTo();
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

@@ -253,6 +253,49 @@ export function avatarColours(userId: string): { bg: string; fg: string } {
   return AVATAR_COLOURS[hash % AVATAR_COLOURS.length] ?? { bg: '#E0E7FF', fg: '#3730A3' };
 }
 
+/** A person's presence colour in one mode: outline and tag fill, and the tag text. */
+export interface PresenceInk {
+  /** Outline and name tag fill; at least 4.5:1 on the surface. */
+  ink: string;
+  /** Name tag text; at least 4.5:1 on {@link PresenceInk.ink}. */
+  on: string;
+}
+
+/**
+ * A person's presence colour (DESIGN §9.1), derived from their avatar
+ * colour so the same person is always the same colour: the avatar's ink,
+ * kept at 4.5:1 on the light surface, and a lightened ink for dark mode.
+ *
+ * @param userId The user id.
+ * @returns The light and dark mode colours.
+ */
+export function presenceColours(userId: string): { light: PresenceInk; dark: PresenceInk } {
+  const base = avatarColours(userId).fg;
+  const light = towardsContrast(towardsContrast(base, SURFACE.light, 'black'), LIGHT_TEXT, 'black');
+  const dark = towardsContrast(base, SURFACE.dark, 'white');
+  return {
+    light: { ink: light, on: LIGHT_TEXT },
+    dark: { ink: towardsContrast(dark, DARK_TEXT, 'white'), on: DARK_TEXT },
+  };
+}
+
+/**
+ * CSS custom properties for a presence outline and name tag, read by the
+ * `.k-pm` classes in `_live.scss` (dark mode uses the `-d` pair).
+ *
+ * @param userId The user id.
+ * @returns Property names and values.
+ */
+export function presenceVars(userId: string): Record<string, string> {
+  const c = presenceColours(userId);
+  return {
+    '--pm': c.light.ink,
+    '--pm-on': c.light.on,
+    '--pm-d': c.dark.ink,
+    '--pm-on-d': c.dark.on,
+  };
+}
+
 /**
  * Initials for an avatar, e.g. "Ann Lee" → "AL".
  *

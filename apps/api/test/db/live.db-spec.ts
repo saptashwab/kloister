@@ -292,6 +292,23 @@ describe('live updates (db)', () => {
       body: { itemId: null, action: 'editing', field: 'secret notes' },
     });
     expect(bad.statusCode).toBe(400);
+    // So is a page outside the known list; a known page is accepted.
+    const badView = await call(app, 'PUT', `/api/v1/events/${scoped.id}/presence`, {
+      sid: sids.scoped,
+      body: { itemId: null, action: null, field: null, view: 'secret page' },
+    });
+    expect(badView.statusCode).toBe(400);
+    const view = await call(app, 'PUT', `/api/v1/events/${scoped.id}/presence`, {
+      sid: sids.scoped,
+      body: { itemId: own.id, action: 'viewing', field: null, view: 'timeline' },
+    });
+    expect(view.statusCode).toBe(204);
+    // Someone else's stream stays refused with a page too.
+    const foreign = await call(app, 'PUT', `/api/v1/events/${scoped.id}/presence`, {
+      sid: sids.member,
+      body: { itemId: null, action: null, field: null, view: 'board' },
+    });
+    expect(foreign.statusCode).toBe(404);
   });
 
   it('filters the item list by ids within the caller’s scope, at most 100', async () => {

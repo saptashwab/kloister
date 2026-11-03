@@ -5,8 +5,10 @@ import { PROJECT_KEY, signIn, USERS } from './support';
 // Live updates and presence (M10) with two signed-in people in two browser
 // contexts: the PM changes things and the Member's screens follow without a
 // reload; an item the Member may not see never appears; an edit in progress
-// is not overwritten and shows the conflict notice; the bell updates; the
-// connection chip shows reconnecting and recovers.
+// is not overwritten and shows the conflict notice; field-level presence
+// marks the field and card the PM works on, and the header hover card goes
+// to it; the bell updates; the connection chip shows reconnecting and
+// recovers.
 
 const headers = { 'x-requested-with': 'kloister' };
 
@@ -159,6 +161,72 @@ test('the Member sees the PM’s changes live, never hidden items, and keeps edi
   });
   await expect(row.locator('.bar')).toBeVisible();
   await snap(member, 'live-timeline');
+  await pm.context().close();
+  await member.context().close();
+});
+
+test('the Member sees where the PM works: the field, the card, the page and Go to', async ({
+  browser,
+}) => {
+  const pm = await person(browser, USERS.pm);
+  const member = await person(browser, USERS.member);
+  const buckets = await read<{ items: { id: string; name: string }[] }>(
+    pm.request,
+    `projects/${PROJECT_KEY}/buckets`,
+  );
+  const members = await read<{ items: { userId: string; email: string }[] }>(
+    pm.request,
+    `projects/${PROJECT_KEY}/members`,
+  );
+  const item = await create(pm.request, {
+    type: 'TASK',
+    title: 'Live presence item',
+    bucketId: buckets.items.find((b) => b.name === 'To Do')?.id,
+    assigneeIds: [members.items.find((m) => m.email === USERS.member)?.userId ?? ''],
+  });
+  const editing = 'Pat Manager is editing the due date';
+
+  // The due date field the PM works in gets the PM's outline and name tag.
+  await member.goto(`/p/${PROJECT_KEY}/items/${item.number}`);
+  await expect(member.getByRole('dialog', { name: 'Item details' })).toBeVisible();
+  await pm.goto(`/p/${PROJECT_KEY}/items/${item.number}`);
+  await pm.getByRole('textbox', { name: 'Due date', exact: true }).click();
+  const field = member.locator('.pm-zone.k-pm-strong', {
+    has: member.getByRole('img', { name: editing }),
+  });
+  await expect(field).toBeVisible({ timeout: 15_000 });
+  await expect(field.locator('app-presence-tag')).toHaveText('Pat');
+  await snap(member, 'live-presence-field');
+
+  // On the board, the card carries the outline and tag too.
+  await member.goto(`/p/${PROJECT_KEY}`);
+  const card = member.locator(`app-item-card[data-card="${item.id}"]`);
+  await expect(card).toHaveClass(/k-pm-strong/, { timeout: 15_000 });
+  await expect(card.getByRole('img', { name: editing })).toBeAttached();
+  await snap(member, 'live-presence-card');
+
+  // The header hover card says what the PM does and goes to the item.
+  await member.locator('app-presence-head').getByRole('button', { name: 'Pat Manager' }).click();
+  const hover = member.getByRole('dialog', { name: 'Pat Manager' });
+  await expect(hover).toContainText(`${editing} of ${item.key} · Live presence item`);
+  await snap(member, 'live-presence-hover-card');
+  await hover.getByRole('button', { name: `Go to ${item.key}` }).click();
+  await expect(member).toHaveURL(new RegExp(`/p/${PROJECT_KEY}/items/${item.number}$`));
+  await expect(member.getByRole('dialog', { name: 'Item details' })).toBeVisible();
+
+  // Without an item open, the card names the PM's page and offers no Go to.
+  await pm.goto(`/p/${PROJECT_KEY}/timeline`);
+  await member.goto(`/p/${PROJECT_KEY}/backlog`);
+  const pat = member.locator('app-presence-head').getByRole('button', { name: 'Pat Manager' });
+  await expect(pat).toBeVisible({ timeout: 15_000 });
+  // The PM's page reload ends one stream and joins with another, so the
+  // avatar may be replaced while this waits; open its card again then.
+  const patCard = member.getByRole('dialog', { name: 'Pat Manager' });
+  await expect(async () => {
+    if (!(await patCard.isVisible())) await pat.click();
+    await expect(patCard).toContainText('Viewing the timeline', { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await expect(patCard.getByRole('button', { name: /^Go to/ })).toHaveCount(0);
   await pm.context().close();
   await member.context().close();
 });

@@ -577,18 +577,18 @@ describe('LiveHub presence', () => {
     });
     await pass(100);
     expect(presence(own.received).at(-1)).toEqual(
-      expect.arrayContaining([{ userId: PM, itemId: null, action: null, field: null }]),
+      expect.arrayContaining([{ userId: PM, itemId: null, action: null, field: null, view: null }]),
     );
     await pass(PRESENCE_DELAY_MS + 100);
     // Bucket B: the BUCKETS viewer sees the PM only as on the project.
     expect(presence(viewer.received).at(-1)).toEqual([
-      { userId: PM, itemId: null, action: null, field: null },
-      { userId: OWN, itemId: null, action: null, field: null },
+      { userId: PM, itemId: null, action: null, field: null, view: null },
+      { userId: OWN, itemId: null, action: null, field: null, view: null },
     ]);
     // OWN scope: the PM's item is not theirs, so it is hidden from them too.
     expect(presence(own.received).at(-1)).toEqual([
-      { userId: PM, itemId: null, action: null, field: null },
-      { userId: BUCKETS, itemId: null, action: null, field: null },
+      { userId: PM, itemId: null, action: null, field: null, view: null },
+      { userId: BUCKETS, itemId: null, action: null, field: null, view: null },
     ]);
     // The PM never sees themselves.
     expect(JSON.stringify(presence(pm.received))).not.toContain(PM);
@@ -606,7 +606,28 @@ describe('LiveHub presence', () => {
     await pass(1_000);
     await pass(PRESENCE_DELAY_MS + 100);
     expect(presence(viewer.received).at(-1)).toEqual([
-      { userId: PM, itemId: ITEM, action: 'editing', field: 'dueDate' },
+      { userId: PM, itemId: ITEM, action: 'editing', field: 'dueDate', view: null },
+    ]);
+  });
+
+  it('passes the page on, also to viewers who cannot see the item', async () => {
+    jest.useFakeTimers({ now: 1_000_000 });
+    const { hub, open } = build(everyone);
+    const pm = open(PM);
+    const viewer = open(BUCKETS);
+    await hub.subscribe(pm.auth, pm.id, PROJECT);
+    await hub.subscribe(viewer.auth, viewer.id, PROJECT);
+    await hub.reportPresence(pm.auth, pm.id, {
+      itemId: ITEM_2,
+      action: 'viewing',
+      field: null,
+      view: 'timeline',
+    });
+    await pass(1_000);
+    await pass(PRESENCE_DELAY_MS + 100);
+    // Bucket B is hidden from this viewer: the page shows, the item does not.
+    expect(presence(viewer.received).at(-1)).toEqual([
+      { userId: PM, itemId: null, action: null, field: null, view: 'timeline' },
     ]);
   });
 
@@ -686,7 +707,12 @@ describe('LiveHub presence', () => {
     const { hub, open, sent } = build(everyone);
     const pm = open(PM);
     await hub.subscribe(pm.auth, pm.id, PERSONAL);
-    await hub.reportPresence(pm.auth, pm.id, { itemId: null, action: null, field: null });
+    await hub.reportPresence(pm.auth, pm.id, {
+      itemId: null,
+      action: null,
+      field: null,
+      view: null,
+    });
     expect(sent.filter((m) => m.k === 'presence')).toEqual([]);
   });
 });

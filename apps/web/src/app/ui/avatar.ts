@@ -54,8 +54,9 @@ const POSITIONS: ConnectedPosition[] = [
 /**
  * A person's avatar (DESIGN §9): initials on a colour derived from the user
  * id. Hovering or keyboard-focusing it opens a hover card with their name,
- * email, any projected content (such as a share line), "Filter board to
- * this person" (on pages with a person filter) and "View all their work". Clicking filters the board where a filter exists,
+ * email, any projected content (such as a share line), actions projected
+ * with a `cardAction` attribute (such as "Go to"), "Filter board to this
+ * person" (on pages with a person filter) and "View all their work". Clicking filters the board where a filter exists,
  * and otherwise toggles the card. Esc closes the card.
  */
 @Component({
@@ -147,6 +148,8 @@ const POSITIONS: ConnectedPosition[] = [
           </div>
         </div>
         <div class="actions">
+          <!-- Actions of the page that shows the avatar, such as "Go to". -->
+          <ng-content select="[cardAction]" />
           @if (filter) {
             <button
               type="button"
@@ -305,8 +308,8 @@ export class Avatar implements OnDestroy {
     return [...(this.card()?.nativeElement.querySelectorAll<HTMLElement>('a, button') ?? [])];
   }
 
-  /** Closes the card immediately. */
-  protected closeNow(): void {
+  /** Closes the card immediately (also after a projected `cardAction`). */
+  closeNow(): void {
     this.schedule(false, 0);
   }
 

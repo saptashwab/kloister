@@ -34,6 +34,7 @@ import {
   naturalChildType,
   type PlanEdge,
   PresenceAction,
+  type PresenceEntryDto,
   type PresenceField,
   ProjectPermission,
   type ProjectHolidaysDto,
@@ -57,8 +58,19 @@ import { ItemsApiService } from '../../core/items-api.service';
 import { TrashApiService } from '../../core/trash-api.service';
 import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
 import { PageActions } from '../../core/page-actions';
-import { changedFields, CONFLICT_FIELDS, personName, personWithRole } from '../../core/live-logic';
-import { type ItemHold, ProjectContext, type RemoteChange } from '../../core/project-context';
+import {
+  changedFields,
+  CONFLICT_FIELDS,
+  leadPresence,
+  personName,
+  personWithRole,
+} from '../../core/live-logic';
+import {
+  type ItemHold,
+  type LocateResult,
+  ProjectContext,
+  type RemoteChange,
+} from '../../core/project-context';
 import { RescheduleFlow } from '../../core/reschedule';
 import { parseWho, shareLabel, shareOf, sharesOf, whoText, withShareFor } from '../../core/shares';
 import { type ShareChoice, ShareButtons, ShareKeys } from '../../ui/share-buttons';
@@ -106,6 +118,7 @@ import { Dialogs } from '../../ui/dialogs';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { Icon } from '../../ui/icon';
 import { PresenceAvatars } from '../../ui/live-ui';
+import { PresenceMark, PresenceTag } from '../../ui/presence-mark';
 import { StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
 import { dialogMotion } from '../../ui/motion';
@@ -147,8 +160,13 @@ const COLUMN_FIELDS: Partial<Record<ColumnId, PresenceField>> = {
   who: 'assignees',
   status: 'status',
   type: 'type',
+  bucket: 'bucket',
   sprint: 'sprint',
+  priority: 'priority',
 };
+
+/** Presence source name of an open cell menu (Who, Status, Type, Sprint). */
+const MENU_PRESENCE = 'timeline-menu';
 
 /** The item fields each text column writes, for the conflict notice (M10). */
 const COLUMN_WRITES: Partial<Record<ColumnId, readonly (keyof WorkItemDto)[]>> = {
@@ -273,6 +291,8 @@ interface BarDraft {
     EmptyState,
     Icon,
     PresenceAvatars,
+    PresenceMark,
+    PresenceTag,
     Skeleton,
     StaticAvatar,
     ShareButtons,
@@ -779,14 +799,16 @@ interface BarDraft {
                       [class.num]="c.id === 'days' || c.id === 'work' || c.id === 'progress'"
                       [class.title]="c.id === 'title'"
                       [class.focus]="focus().row === i && focus().col === ci"
-                      [class.k-live-other]="otherEditor(r.node.id, c.id) !== null"
-                      [attr.data-initials]="otherEditor(r.node.id, c.id)"
+                      [appPresenceMark]="otherEditor(r.node.id, c.id)"
                       [attr.tabindex]="focus().row === i && focus().col === ci ? 0 : -1"
                       [attr.aria-readonly]="!editable(r, c) || null"
                       (click)="focusCell(i, ci, false)"
                       (keydown.f2)="startEdit(i, ci, null)"
                       (dblclick)="startEdit(i, ci, null)"
                     >
+                      @if (otherEditor(r.node.id, c.id); as pm) {
+                        <app-presence-tag [entry]="pm" place="inside" />
+                      }
                       @if (editing(); as e) {
                         @if (e.row === i && e.col === ci) {
                           <input
@@ -867,8 +889,7 @@ interface BarDraft {
                           [class.blocked]="it.status === 'BLOCKED'"
                           [class.done]="it.status === 'DONE'"
                           [class.conflict]="conflictMap().has(it.id)"
-                          [class.k-live-other]="otherMover(it.id) !== null"
-                          [attr.data-initials]="otherMover(it.id)"
+                          [appPresenceMark]="otherMover(it.id)"
                           [style.left.px]="b.left"
                           [style.width.px]="b.width"
                           [style]="barVars(it)"
@@ -1267,6 +1288,7 @@ interface BarDraft {
       style="position: fixed; width: 0; height: 0"
       [matMenuTriggerFor]="activeMenu()"
       [matMenuTriggerData]="{ $implicit: menuItem() }"
+      (menuClosed)="ctx.setPresence(menuPresence, null)"
       [style.left.px]="menuAt().x"
       [style.top.px]="menuAt().y"
     ></span>
@@ -1292,10 +1314,13 @@ export class TimelinePage implements OnInit {
   private editHold: ItemHold | null = null;
   /** Holds the item of the bar being dragged (M10). */
   private barHold: ItemHold | null = null;
+  /** Lets the header's "Go to" show rows here (DESIGN §9.1). */
+  private readonly locator = this.ctx.registerLocator((id) => this.goTo(id), inject(DestroyRef));
   /** Ends holds when the page closes, so the item does not stay busy (M10). */
   private readonly holdsEnd = inject(DestroyRef).onDestroy(() => {
     void this.editHold?.release();
     void this.barHold?.release();
+    this.ctx.setPresence(MENU_PRESENCE, null);
     this.rowDrag.cancel();
   });
   /** Reloads the links and holidays when someone else changed them (M10). */
@@ -2063,6 +2088,16 @@ export class TimelinePage implements OnInit {
     this.flash.set(item.id);
     const index = this.rows().findIndex((r) => r.node.id === item.id);
     if (index >= 0) this.focus.set({ row: index, col: 1 });
+    this.scrollToItem(item);
+    setTimeout(() => this.flash.set(null), 2600);
+  }
+
+  /**
+   * Scrolls a row into the middle and its bar into view, once rendered.
+   *
+   * @param item The item.
+   */
+  private scrollToItem(item: WorkItemDto): void {
     afterNextRender(
       () => {
         document.getElementById(`row-${item.id}`)?.scrollIntoView({ block: 'center' });
@@ -2072,7 +2107,24 @@ export class TimelinePage implements OnInit {
       },
       { injector: this.injector },
     );
-    setTimeout(() => this.flash.set(null), 2600);
+  }
+
+  /**
+   * "Go to" from a header hover card (DESIGN §9.1): scrolls to the row,
+   * selects it and flashes it, without opening the drawer.
+   *
+   * @param id Item id.
+   * @returns `done`, or `hidden` when filters or a closed parent hide the row.
+   */
+  private goTo(id: string): LocateResult {
+    const index = this.rows().findIndex((r) => r.node.id === id);
+    const item = this.rows()[index]?.node.item;
+    if (index < 0 || !item) return 'hidden';
+    this.selected.set(new Set([id]));
+    this.focusCell(index, 1);
+    this.scrollToItem(item);
+    this.ctx.flash(id);
+    return 'done';
   }
 
   // --- Grid navigation and editing ----------------------------------------
@@ -2264,8 +2316,17 @@ export class TimelinePage implements OnInit {
             ? this.typeMenuRef()
             : this.sprintMenuRef(),
     );
+    // The cell's menu is an edit of its field for others (DESIGN §9.1).
+    this.ctx.setPresence(MENU_PRESENCE, {
+      itemId: item.id,
+      action: PresenceAction.EDITING,
+      field: COLUMN_FIELDS[column] ?? null,
+    });
     afterNextRender(() => this.menuAnchor()?.openMenu(), { injector: this.injector });
   }
+
+  /** The presence source of an open cell menu. */
+  protected readonly menuPresence = MENU_PRESENCE;
 
   private readonly statusMenuRef = viewChild.required<MatMenu>('statusMenu');
   private readonly whoMenuRef = viewChild.required<MatMenu>('whoMenu');
@@ -2373,33 +2434,33 @@ export class TimelinePage implements OnInit {
   }
 
   /**
-   * Initials of someone else editing a cell's field, for its outline.
+   * Someone else editing a cell's field, for its outline and name tag
+   * (DESIGN §9.1).
    *
    * @param itemId Item id.
    * @param column The cell's column.
-   * @returns Their initials, or null.
+   * @returns Their presence, or null.
    */
-  protected otherEditor(itemId: string, column: ColumnId): string | null {
+  protected otherEditor(itemId: string, column: ColumnId): PresenceEntryDto | null {
     const field = COLUMN_FIELDS[column];
-    const entry = this.ctx
-      .presenceByItem()
-      .get(itemId)
-      ?.find((p) => p.action === PresenceAction.EDITING && p.field === field);
-    return entry === undefined ? null : this.initials(entry.userId);
+    if (field === undefined) return null;
+    return leadPresence(
+      this.ctx.presenceByItem().get(itemId),
+      (p) => p.action === PresenceAction.EDITING && p.field === field,
+    );
   }
 
   /**
-   * Initials of someone else dragging a bar, for its outline.
+   * Someone else dragging a bar, for its outline.
    *
    * @param itemId Item id.
-   * @returns Their initials, or null.
+   * @returns Their presence, or null.
    */
-  protected otherMover(itemId: string): string | null {
-    const entry = this.ctx
-      .presenceByItem()
-      .get(itemId)
-      ?.find((p) => p.action === PresenceAction.MOVING);
-    return entry === undefined ? null : this.initials(entry.userId);
+  protected otherMover(itemId: string): PresenceEntryDto | null {
+    return leadPresence(
+      this.ctx.presenceByItem().get(itemId),
+      (p) => p.action === PresenceAction.MOVING,
+    );
   }
 
   /**
@@ -2411,21 +2472,6 @@ export class TimelinePage implements OnInit {
   protected changedBy(itemId: string): string | null {
     this.ctx.recent();
     return this.ctx.changedBy(itemId);
-  }
-
-  /**
-   * A person's initials.
-   *
-   * @param userId The person.
-   * @returns Up to two letters.
-   */
-  private initials(userId: string): string {
-    return personName(this.ctx.membersById(), userId)
-      .split(/\s+/)
-      .map((w) => w[0] ?? '')
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
   }
 
   /**

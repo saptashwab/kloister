@@ -90,6 +90,10 @@ change pending, administrator); the API checks every request.
   `confirm()`.
 - Phone layouts switch markup with `PHONE_QUERY` (`ui/row-cards.ts`, below 600 px) where styles
   alone are not enough, for example tables shown as stacked cards.
+- Live presence marks (DESIGN §9.1) use `appPresenceMark` and `app-presence-tag` from
+  `ui/presence-mark.ts` with a person colour from `presenceVars()` (`core/colour.ts`); the pure
+  choices (which entry a field shows, the hover card text, where a drawer opens) are in
+  `core/live-logic.ts`. Their styles are in `_live.scss`, loaded with the project pages.
 
 ## Keyboard and accessibility
 

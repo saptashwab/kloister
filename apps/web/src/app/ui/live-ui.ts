@@ -106,9 +106,9 @@ export class LiveStatusChip {
 }
 
 /**
- * Avatars of other people on an item or project (M10 plan section 4.5), with
- * what they do in the tooltip and for screen readers. At most four, then
- * "+3".
+ * Avatars of other people on an item (M10 plan section 4.5), with what they
+ * do in the tooltip and for screen readers. At most four, then "+3". The
+ * project header uses `PresenceHead`, whose avatars have hover cards.
  */
 @Component({
   selector: 'app-presence',
@@ -159,19 +159,13 @@ export class PresenceAvatars {
   readonly what = input('this item');
   /** Avatar size. */
   readonly size = input(20);
-  /** Show what people do, or only that they are here (the project header). */
-  readonly actions = input(true);
 
   /** Who shows, and how many more. */
   protected readonly head = computed(() => headPeople(this.people().map((p) => p.userId)));
 
   /** The tooltip. */
   protected readonly line = computed(() =>
-    this.actions()
-      ? presenceLine(this.people(), this.members(), this.what())
-      : `${this.people()
-          .map((p) => personName(this.members(), p.userId))
-          .join(', ')} ${this.people().length === 1 ? 'is' : 'are'} here too`,
+    presenceLine(this.people(), this.members(), this.what()),
   );
 
   /**
