@@ -191,9 +191,11 @@ test('the Member sees where the PM works: the field, the card, the page and Go t
   await expect(member.getByRole('dialog', { name: 'Item details' })).toBeVisible();
   await pm.goto(`/p/${PROJECT_KEY}/items/${item.number}`);
   await pm.getByRole('textbox', { name: 'Due date', exact: true }).click();
-  const field = member.locator('.pm-zone.k-pm-strong', {
-    has: member.getByRole('img', { name: editing }),
-  });
+  // Members see the plan read-only (only PMs and Leads change it), so the
+  // mark is on the read-only date line rather than an editable field.
+  const field = member
+    .getByRole('dialog', { name: 'Item details' })
+    .locator('.k-pm-strong', { has: member.getByRole('img', { name: editing }) });
   await expect(field).toBeVisible({ timeout: 15_000 });
   await expect(field.locator('app-presence-tag')).toHaveText('Pat');
   await snap(member, 'live-presence-field');
