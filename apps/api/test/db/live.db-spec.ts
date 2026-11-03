@@ -235,6 +235,9 @@ describe('live updates (db)', () => {
     expect((await work('outsider', member, null)).statusCode).toBe(404);
     expect((await work('member', member, 'nope')).statusCode).toBe(400);
 
+    // A refused request (the unknown person above) leaves the stream following
+    // nobody else, so the member follows the PM again.
+    expect((await work('member', member, ids.pm)).statusCode).toBe(204);
     const res = await app.inject({
       method: 'POST',
       url: `/api/v1/projects/${projectId}/items/${item.id}/move`,
