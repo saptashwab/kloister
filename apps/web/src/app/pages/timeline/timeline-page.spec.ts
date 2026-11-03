@@ -48,6 +48,11 @@ interface TimelineInternals {
   gridPane(): number;
   gridWidth(): number;
   gridShift(): number;
+  placeRows(
+    moves: { item: WorkItemDetailDto; move: { afterId: string | null } }[],
+    announce: boolean,
+    release?: (apply: boolean) => void,
+  ): Promise<void>;
 }
 
 const readOnly = {
@@ -281,6 +286,69 @@ describe('TimelinePage (M9)', () => {
     input.value = 'Proofread';
     await page.addRow(input);
     expect(itemsApi.outline).toHaveBeenCalledWith('p1', 'i9', { afterId: 'i2' });
+  });
+
+  it('shows dropped rows at once and puts them back when a save is refused (v1.3.2)', async () => {
+    const { page, itemsApi, fixture, root } = await render([epic, a, b]);
+    const order = () =>
+      [...root.querySelectorAll('[role="grid"] > .row')].map((row) => row.id.replace('row-', ''));
+    expect(order()).toEqual(['i1', 'i2', 'i3']);
+    let finish!: (value: unknown) => void;
+    itemsApi.outline.mockReturnValueOnce(new Promise((resolve) => (finish = resolve)));
+    // Review moves above Draft copy: shown before the server answers.
+    const saving = page.placeRows([{ item: b, move: { afterId: null } }], true);
+    fixture.detectChanges();
+    expect(order()).toEqual(['i1', 'i3', 'i2']);
+    finish(b);
+    await saving;
+    await settle(fixture);
+
+    // Undo sends Review back after Draft copy.
+    const show = vi.spyOn(TestBed.inject(ToastService), 'show');
+    itemsApi.outline.mockReset();
+    itemsApi.outline.mockResolvedValue(b);
+    await page.placeRows([{ item: b, move: { afterId: null } }], true);
+    const undo = show.mock.calls.at(-1)?.[1];
+    expect(show.mock.calls.at(-1)?.[0]).toBe('Moved KLO-3');
+    await undo?.();
+    expect(itemsApi.outline.mock.calls.map((call: unknown[]) => call.slice(1))).toEqual([
+      ['i3', { afterId: null }],
+      ['i3', { afterId: 'i2' }],
+    ]);
+
+    // Both rows go first, in the order Review, Draft copy: the second save is
+    // refused, so Review goes back on the server and both rows return here
+    // (before any reload, which is stubbed so it cannot hide a bad rollback).
+    vi.spyOn(TestBed.inject(ProjectContext), 'refresh').mockResolvedValue(undefined);
+    itemsApi.outline.mockReset();
+    itemsApi.outline
+      .mockResolvedValueOnce(b)
+      .mockRejectedValueOnce(new Error('Not there'))
+      .mockResolvedValue(b);
+    const release = vi.fn();
+    await page.placeRows(
+      [
+        { item: b, move: { afterId: null } },
+        { item: a, move: { afterId: 'i3' } },
+      ],
+      true,
+      release,
+    );
+    fixture.detectChanges();
+    expect(release).toHaveBeenCalledWith(false);
+    expect(itemsApi.outline.mock.calls.map((call: unknown[]) => call.slice(1))).toEqual([
+      ['i3', { afterId: null }],
+      ['i2', { afterId: 'i3' }],
+      ['i3', { afterId: 'i2' }],
+    ]);
+    expect(order()).toEqual(['i1', 'i2', 'i3']);
+
+    // Dropped where it already was: nothing is sent, and others' waiting changes show.
+    itemsApi.outline.mockReset();
+    const stay = vi.fn();
+    await page.placeRows([{ item: b, move: { afterId: 'i2' } }], true, stay);
+    expect(itemsApi.outline).not.toHaveBeenCalled();
+    expect(stay).toHaveBeenCalledWith(true);
   });
 
   it('is read-only for viewers: no add row, no editors, no draggable edges', async () => {

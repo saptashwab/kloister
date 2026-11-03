@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import type { BucketDto, ProjectDto, UserDto, WorkItemDetailDto } from '@kloister/shared';
 import { ITEMS, PROJECT_KEY, signIn, USERS } from './support';
@@ -450,4 +451,69 @@ test('child rows and Move under build the hierarchy without retyping (v1.3.1)', 
     })
     .toContain('Proofread');
   await snap(page, 'timeline-reordered');
+
+  // Dragging a selected row takes the selection along (v1.3.2): a card follows
+  // the pointer, the gap says where they go, and they land at once in order.
+  if (await bar.isVisible()) await bar.getByRole('button', { name: 'Clear' }).click();
+  await expect(bar).toBeHidden();
+  await page.getByRole('checkbox', { name: `Select ${wallet.key}` }).click();
+  await page
+    .getByRole('checkbox', { name: `Select ${saved.key}` })
+    .click({ modifiers: ['Control'] });
+  const contentRow = page.locator(`#row-${content.id}`);
+  const box = (await contentRow.boundingBox())!;
+  const grip = page.locator(`#row-${wallet.id} .grip`);
+  await page.locator(`#row-${wallet.id}`).hover();
+  const from = (await grip.boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  // Just below the Feature, at the same level: its first children.
+  await page.mouse.move(from.x + from.width / 2, box.y + box.height * 1.5, { steps: 12 });
+  await expect(page.locator('.drag-card')).toContainText('+1 item');
+  await expect(page.getByTestId('drop-label')).toHaveText(`Under ${k}-2`);
+  await snap(page, 'timeline-row-drag');
+  await page.mouse.up();
+  await expect(page.locator('.drag-card')).toHaveCount(0);
+  const nextTo = async (): Promise<string[]> => {
+    const list = await titles();
+    const at = list.findIndex((t) => t.includes('Content'));
+    return [list[at + 1] ?? '', list[at + 2] ?? ''];
+  };
+  await expect
+    .poll(nextTo)
+    .toEqual([expect.stringContaining('Card wallet'), expect.stringContaining('Saved cards')]);
+  await expect(page.getByText('Moved 2 items')).toBeVisible();
+  // Undo puts both back, on the server too.
+  const placed = await nextTo();
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByText('Change undone')).toBeVisible();
+  await expect.poll(nextTo).not.toEqual(placed);
+  const restored = await nextTo();
+  await page.reload();
+  await expect.poll(nextTo).toEqual(restored);
+  // Escape cancels a drag: nothing moves.
+  await page.locator(`#row-${wallet.id}`).hover();
+  const again = (await grip.boundingBox())!;
+  await page.mouse.move(again.x + again.width / 2, again.y + again.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(again.x + again.width / 2, box.y + box.height * 1.5, { steps: 8 });
+  await expect(page.locator('.drag-card')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.drag-card')).toHaveCount(0);
+  await page.mouse.up();
+  await expect.poll(nextTo).toEqual(restored);
+
+  // Export… offers the plan as a Microsoft Project file (v1.3.2).
+  await page.getByRole('button', { name: 'Export…' }).click();
+  const dialog = page.getByRole('dialog');
+  const [file] = await Promise.all([
+    page.waitForEvent('download'),
+    dialog.getByRole('button', { name: 'Download Microsoft Project file' }).click(),
+  ]);
+  expect(file.suggestedFilename()).toBe(`${k}-plan.xml`);
+  const xml = readFileSync(await file.path(), 'utf8');
+  expect(xml).toContain('<Project xmlns="http://schemas.microsoft.com/project">');
+  expect(xml).toContain(`<WBS>${wallet.key}</WBS>`);
+  await expect(dialog.getByRole('status')).toHaveText('Microsoft Project file downloaded.');
+  await snap(page, 'timeline-msproject-export');
 });

@@ -166,3 +166,21 @@ Project Excel snapshots include a Timeline sheet (`apps/api/src/items/snapshot-t
 readable items in hierarchy order with Excel outline levels, summary spans for parents, a plan row,
 a sprint row and a holidays row, then one column per week (at most 156) filled for each item's
 dates. Durations skip the project's holidays. Only items the caller can read are included.
+
+## Microsoft Project file
+
+`GET /api/v1/projects/{id}/timeline/msproject` (`TimelineService.msProject()`, built by the pure
+`msProjectXml()` in `apps/api/src/timeline/msproject.ts`) writes the readable plan as Microsoft
+Project XML (Project 2007 schema; elements in schema order). Rows follow the outline order with the
+key in WBS; rows with children are summary tasks. Half days map to 08:00–12:00 and 13:00–17:00 in an
+8-hour, Monday–Friday calendar whose exceptions are the project's holidays (overlaps merged).
+Dated tasks get a Start No Earlier Than constraint at their start, so Project keeps Kloister's
+dates and still moves tasks that their finish-to-start links push. Assignees become resources with
+their shares as assignment units; undated tasks get an estimated day.
+
+## Row order and dragging
+
+Rows keep their siblings' outline order (`WorkItem.outlinePosition`, see `compareOutline`).
+Dragging rows (`pages/timeline/row-drag.ts`) computes the drop in `dropTarget()` against the rows
+left once the dragged ones are taken out, shows it at once with `applyOutlineMoves()` (the server's
+placement rule) and saves the placements one after another through `POST items/:item/outline`.

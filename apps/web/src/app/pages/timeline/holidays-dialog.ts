@@ -72,12 +72,22 @@ export interface HolidaysDialogResult {
     .name {
       flex: 1;
     }
+    // One line for a new holiday: name, first and last day, Add; wraps on narrow screens.
     form {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: var(--k-space-2);
       margin-top: var(--k-space-4);
+    }
+    form > mat-form-field {
+      flex: 1 1 var(--k-size-200px);
+      min-width: var(--k-size-170px);
+    }
+    form > app-date-field,
+    form > span,
+    form > button {
+      flex: none;
     }
   `,
   template: `

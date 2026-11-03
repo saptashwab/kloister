@@ -51,11 +51,24 @@ import { apiUrl, errorMessage } from '../../core/api';
         unarchived-project rules. Hidden ancestors remain titles only.
       </p>
       <p>Snapshots support offline reading. Recovery still requires database and file backups.</p>
+      @if (data.msProject) {
+        <section class="msp" aria-labelledby="msp-title">
+          <h3 id="msp-title">Microsoft Project</h3>
+          <p>
+            The plan as a Microsoft Project file (.xml): every timeline row you can see, with dates,
+            half days, links, assignees with their shares, progress and holidays. Open it in Project
+            with File › Open. Filters do not apply.
+          </p>
+          <button mat-stroked-button type="button" [disabled]="busy()" (click)="downloadProject()">
+            Download Microsoft Project file
+          </button>
+        </section>
+      }
       @if (error()) {
         <p class="k-alert" role="alert">{{ error() }}</p>
       }
       @if (saved()) {
-        <p role="status">Snapshot downloaded. Scope was checked again when creating it.</p>
+        <p role="status">{{ saved() }}</p>
       }</mat-dialog-content
     ><mat-dialog-actions align="end"
       ><button mat-button mat-dialog-close [disabled]="busy()">Close</button
@@ -66,9 +79,11 @@ import { apiUrl, errorMessage } from '../../core/api';
 })
 export class SnapshotDialog {
   /** Original screen scope and filters. */
-  protected readonly data = inject<{ source: string; filters: Record<string, string | boolean> }>(
-    MAT_DIALOG_DATA,
-  );
+  protected readonly data = inject<{
+    source: string;
+    filters: Record<string, string | boolean>;
+    msProject?: boolean;
+  }>(MAT_DIALOG_DATA);
   private readonly http = inject(HttpClient);
   private readonly path =
     this.data.source === 'me' ? 'me/snapshots' : `projects/${this.data.source}/snapshots`;
@@ -80,8 +95,8 @@ export class SnapshotDialog {
   protected readonly preview = signal<SnapshotPreviewDto | null>(null);
   /** Request in progress. */
   protected readonly busy = signal(false);
-  /** Honest download result. */
-  protected readonly saved = signal(false);
+  /** Honest download result, or empty. */
+  protected readonly saved = signal('');
   /** Error requiring correction/retry. */
   protected readonly error = signal('');
   private run = 0;
@@ -99,7 +114,7 @@ export class SnapshotDialog {
     this.scope.set(scope);
     this.preview.set(null);
     this.error.set('');
-    this.saved.set(false);
+    this.saved.set('');
     try {
       const preview = await firstValueFrom(
         this.http.get<SnapshotPreviewDto>(apiUrl(`${this.path}/preview`), {
@@ -132,17 +147,52 @@ export class SnapshotDialog {
       const blob = await firstValueFrom(
         this.http.get(apiUrl(this.path), { params: this.params(), responseType: 'blob' }),
       );
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `snapshot.${offline ? 'zip' : 'xlsx'}`;
-      anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-      this.saved.set(true);
+      save(blob, `snapshot.${offline ? 'zip' : 'xlsx'}`);
+      this.saved.set('Snapshot downloaded. Scope was checked again when creating it.');
     } catch (error) {
       this.error.set(errorMessage(error));
     } finally {
       this.busy.set(false);
     }
   }
+
+  /**
+   * Downloads the plan as a Microsoft Project file (v1.3.2), built by the
+   * server from what the caller can see.
+   * @returns Resolves when saved or the failure is displayed.
+   */
+  protected async downloadProject(): Promise<void> {
+    this.busy.set(true);
+    this.error.set('');
+    this.saved.set('');
+    try {
+      const res = await firstValueFrom(
+        this.http.get(apiUrl(`projects/${this.data.source}/timeline/msproject`), {
+          responseType: 'blob',
+          observe: 'response',
+        }),
+      );
+      const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1];
+      save(res.body!, name ?? 'plan.xml');
+      this.saved.set('Microsoft Project file downloaded.');
+    } catch (error) {
+      this.error.set(errorMessage(error));
+    } finally {
+      this.busy.set(false);
+    }
+  }
+}
+
+/**
+ * Saves downloaded bytes as a file.
+ * @param blob The bytes.
+ * @param name File name.
+ */
+function save(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

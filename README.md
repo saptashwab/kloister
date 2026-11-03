@@ -23,7 +23,8 @@ outbound email or external services at runtime.
   Stories, and item references such as `KLO-12` with previews.
 - My work across projects, private personal spaces, project roles and optional teams.
 - Rich descriptions, checklists, notes, mentions, attachments and pasted images.
-- Item duplication, independent copies per person, Excel snapshots and offline archives.
+- Item duplication, independent copies per person, Excel snapshots and offline archives, and the
+  timeline as a **Microsoft Project** file.
 - **Live updates**: boards, timelines, item details and the bell follow other people's changes
   without a reload, and you see who else has an item open.
 - In-app notifications, themes, branding, bundled fonts and keyboard navigation.

@@ -1,6 +1,8 @@
 import {
   endSlot,
+  compareOutline,
   fitTypeUnder,
+  type ItemRefDto,
   isAllowedParent,
   ItemType,
   type OutlineMoveRequest,
@@ -512,46 +514,64 @@ export function outdentTarget(
   return placed(item, grandparent?.id ?? null, grandparent?.type ?? null, childTypes);
 }
 
-/** Where a dragged row would land, and why not when it cannot. */
+/** A row being dragged: its item and the types of its children. */
+export interface DraggedRow {
+  /** The item. */
+  item: WorkItemDto;
+  /** Types of its children, which must still fit under its new type. */
+  childTypes: readonly ItemType[];
+}
+
+/** One placement to send for a drop. */
+export interface DropMove {
+  /** The item placed. */
+  item: WorkItemDto;
+  /** Its new parent, type and the sibling it follows. */
+  move: OutlineMoveRequest;
+}
+
+/** Where dragged rows would land, and why not when they cannot. */
 export interface DropTarget {
-  /** The move to send, or null when the drop is not possible. */
-  move: OutlineMoveRequest | null;
-  /** The level the row would take. */
+  /** The placements to send in order, or null when the drop is not possible. */
+  moves: DropMove[] | null;
+  /** The parent the rows go under, or null for the top level. */
+  parent: WorkItemDto | null;
+  /** The level the rows would take. */
   depth: number;
   /** Why the drop is not possible, or empty. */
   reason: string;
 }
 
 /**
- * Where dropping a dragged row lands (v1.3.1): in a gap between rows, at a
- * level between the next row's and one below the previous row's, chosen
- * from the wanted level. One level below the previous row makes it that
- * row's first child; otherwise it follows the row at that level just above
- * the gap. The type is fitted to the new parent as when indenting.
+ * Where dropping dragged rows lands (v1.3.1; several rows in v1.3.2): in a
+ * gap between the rows left once the dragged ones (with their own rows) are
+ * taken out, at a level between the next row's and one below the previous
+ * row's, chosen from the wanted level. One level below the previous row makes
+ * them that row's first children; otherwise they follow the row at that level
+ * just above the gap. They keep their order, each after the one before, and
+ * each type is fitted to the new parent as when indenting.
  *
- * @param rows Rows in display order.
- * @param index The dragged row.
- * @param end The last row of the dragged row's subtree.
- * @param gap Insert before this row index (rows.length for the end).
+ * @param rest Rows in display order without the dragged rows.
+ * @param gap Insert before this index of `rest` (rest.length for the end).
  * @param wanted The level the pointer asks for.
- * @param childTypes Types of the dragged item's children.
- * @returns The move, the level and any reason it cannot happen.
+ * @param dragged The dragged rows in display order (none inside another).
+ * @returns The placements, the parent, the level and any reason they cannot happen.
  */
 export function dropTarget(
-  rows: readonly TimelineRow[],
-  index: number,
-  end: number,
+  rest: readonly TimelineRow[],
   gap: number,
   wanted: number,
-  childTypes: readonly ItemType[],
+  dragged: readonly DraggedRow[],
 ): DropTarget {
-  const item = rows[index]?.node.item;
-  const none = (depth: number, reason: string): DropTarget => ({ move: null, depth, reason });
-  if (!item) return none(0, 'This row cannot move');
-  if (gap >= index && gap <= end + 1)
-    return none(rows[index].depth, 'Drop it outside its own rows');
-  const above = rows[gap - 1];
-  const below = rows[gap];
+  const none = (depth: number, reason: string, parent: WorkItemDto | null = null): DropTarget => ({
+    moves: null,
+    parent,
+    depth,
+    reason,
+  });
+  if (dragged.length === 0) return none(0, 'This row cannot move');
+  const above = rest[gap - 1];
+  const below = rest[gap];
   const depth = Math.max(
     below?.depth ?? 0,
     Math.min(above === undefined ? 0 : above.depth + 1, wanted),
@@ -564,35 +584,132 @@ export function dropTarget(
     afterId = null;
   } else {
     let i = gap - 1;
-    while (i >= 0 && rows[i].depth > depth) i--;
-    const anchor = rows[i];
+    while (i >= 0 && rest[i].depth > depth) i--;
+    const anchor = rest[i];
     if (anchor === undefined) {
       parent = null;
       afterId = null;
     } else {
-      if (i >= index && i <= end) return none(depth, 'Drop it outside its own rows');
       if (!anchor.node.item) return none(depth, 'A title-only row cannot be a neighbour');
       afterId = anchor.node.id;
       const ref = anchor.node.item.ancestors[anchor.node.item.ancestors.length - 1];
       parent =
-        ref === undefined ? null : (rows.find((row) => row.node.id === ref.id)?.node.item ?? null);
+        ref === undefined ? null : (rest.find((row) => row.node.id === ref.id)?.node.item ?? null);
       if (ref !== undefined && parent === null)
         return none(depth, 'A title-only row cannot take rows');
     }
   }
-  if (item.adHoc && parent !== null) return none(depth, 'An ad-hoc item has no parent');
-  const fit = fitTypeUnder(item.type, parent?.type ?? null, childTypes);
-  if ('error' in fit) return none(depth, fit.error);
-  const parentId = parent?.id ?? null;
-  return {
-    move: {
-      afterId,
-      ...(parentId === item.parentId ? {} : { parentId }),
-      ...(fit.type === item.type ? {} : { type: fit.type }),
-    },
-    depth,
-    reason: '',
+  const moves: DropMove[] = [];
+  // Several rows: name the one that cannot go there.
+  const who = (item: WorkItemDto) => (dragged.length > 1 ? `${item.key}: ` : '');
+  for (const { item, childTypes } of dragged) {
+    if (item.adHoc && parent !== null)
+      return none(depth, `${who(item)}An ad-hoc item has no parent`, parent);
+    const fit = fitTypeUnder(item.type, parent?.type ?? null, childTypes);
+    if ('error' in fit) return none(depth, who(item) + fit.error, parent);
+    const parentId = parent?.id ?? null;
+    moves.push({
+      item,
+      move: {
+        afterId,
+        ...(parentId === item.parentId ? {} : { parentId }),
+        ...(fit.type === item.type ? {} : { type: fit.type }),
+      },
+    });
+    afterId = item.id;
+  }
+  return { moves, parent, depth, reason: '' };
+}
+
+/** Gap between outline positions when siblings are numbered, as on the server. */
+const OUTLINE_STEP = 1024;
+/** Smallest gap between neighbours before siblings are numbered again, as on the server. */
+const OUTLINE_MIN_GAP = 1e-6;
+
+/**
+ * The item a placement follows now: the sibling just before it in outline
+ * order, or null when it comes first. Undo puts it back after that one.
+ *
+ * @param items All items.
+ * @param item The item.
+ * @returns The sibling's id, or null.
+ */
+export function previousSibling(items: readonly WorkItemDto[], item: WorkItemDto): string | null {
+  const siblings = items.filter((i) => i.parentId === item.parentId).sort(compareOutline);
+  return siblings[siblings.findIndex((i) => i.id === item.id) - 1]?.id ?? null;
+}
+
+/**
+ * Applies placements to a copy of the items as the server will (v1.3.2), so
+ * a drop shows at once: the new parent and type, new ancestors for the item
+ * and its own rows, and a position after the given sibling, numbering the
+ * siblings first when some have none. The reload that follows brings the
+ * server's copies.
+ *
+ * @param items All items.
+ * @param moves Placements in the order they are sent.
+ * @returns The items that changed, in their new state.
+ */
+export function applyOutlineMoves(
+  items: readonly WorkItemDto[],
+  moves: readonly { id: string; move: OutlineMoveRequest }[],
+): WorkItemDto[] {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const changed = new Set<string>();
+  const put = (item: WorkItemDto) => {
+    byId.set(item.id, item);
+    changed.add(item.id);
   };
+  const refOf = (i: WorkItemDto): ItemRefDto => ({
+    id: i.id,
+    number: i.number,
+    key: i.key,
+    type: i.type,
+    title: i.title,
+  });
+  for (const { id, move } of moves) {
+    const item = byId.get(id);
+    if (item === undefined) continue;
+    const parentId = move.parentId === undefined ? item.parentId : move.parentId;
+    let moved: WorkItemDto = { ...item, parentId, type: move.type ?? item.type };
+    if (parentId !== item.parentId || moved.type !== item.type) {
+      const parent = parentId === null ? undefined : byId.get(parentId);
+      const ancestors = parent === undefined ? [] : [...parent.ancestors, refOf(parent)];
+      moved = { ...moved, ancestors };
+      // Its own rows follow it: their ancestors now start with its new ones.
+      const self = refOf(moved);
+      for (const other of byId.values()) {
+        const at = other.ancestors.findIndex((a) => a.id === id);
+        if (at >= 0)
+          put({ ...other, ancestors: [...ancestors, self, ...other.ancestors.slice(at + 1)] });
+      }
+    }
+    const siblings = [...byId.values()]
+      .filter((i) => i.parentId === parentId && i.id !== id)
+      .sort(compareOutline);
+    const at = move.afterId ? siblings.findIndex((s) => s.id === move.afterId) + 1 : 0;
+    const left = siblings[at - 1]?.outlinePosition ?? null;
+    const right = siblings[at]?.outlinePosition ?? null;
+    if (
+      siblings.some((s) => s.outlinePosition === null) ||
+      (left !== null && right !== null && right - left < OUTLINE_MIN_GAP)
+    ) {
+      siblings.forEach((sibling, index) => {
+        siblings[index] = { ...sibling, outlinePosition: (index + 1) * OUTLINE_STEP };
+        put(siblings[index]);
+      });
+    }
+    const before = siblings[at - 1]?.outlinePosition ?? null;
+    const next = siblings[at]?.outlinePosition ?? null;
+    const position =
+      before === null
+        ? (next ?? OUTLINE_STEP * 2) - OUTLINE_STEP
+        : next === null
+          ? before + OUTLINE_STEP
+          : (before + next) / 2;
+    put({ ...moved, outlinePosition: position });
+  }
+  return [...changed].map((id) => byId.get(id)!);
 }
 
 /**

@@ -3,6 +3,7 @@ import { buildTree } from './board-logic';
 import { workCalendar } from '@kloister/shared';
 import {
   allowedTypes,
+  applyOutlineMoves,
   keepDurations,
   percentComplete,
   barBox,
@@ -18,6 +19,7 @@ import {
   parsePasted,
   parsePredecessors,
   planSpan,
+  previousSibling,
   rebaseDescendants,
   scaleTicks,
   shortDay,
@@ -78,26 +80,96 @@ describe('timeline rows and totals (M9)', () => {
     dueFirstHalf: true,
   });
 
-  it('finds where a dragged row lands, fitting its type (v1.3.1)', () => {
+  it('finds where dragged rows land, fitting their types (v1.3.1, v1.3.2)', () => {
     const rows = timelineRows(buildTree([epic, a, b]), new Set());
+    const without = (...ids: string[]) => rows.filter((r) => !ids.includes(r.node.id));
     // b dropped between the Epic and a: the Epic's first child.
-    expect(dropTarget(rows, 2, 2, 1, 0, []).move).toEqual({ afterId: null });
-    // Its own rows are no place to drop it.
-    expect(dropTarget(rows, 2, 2, 2, 1, []).reason).toBe('Drop it outside its own rows');
+    expect(dropTarget(without('i3'), 1, 0, [{ item: b, childTypes: [] }]).moves).toEqual([
+      { item: b, move: { afterId: null } },
+    ]);
     // a dropped after b one level deeper: under b, as a Story.
-    expect(dropTarget(rows, 1, 1, 3, 2, []).move).toEqual({
-      afterId: null,
-      parentId: 'i3',
-      type: 'STORY',
-    });
+    const underB = dropTarget(without('i2'), 2, 2, [{ item: a, childTypes: [] }]);
+    expect(underB.moves?.[0]?.move).toEqual({ afterId: null, parentId: 'i3', type: 'STORY' });
+    expect(underB.parent?.id).toBe('i3');
     // ...but not when its own Stories could not stay under a Story.
-    expect(dropTarget(rows, 1, 1, 3, 2, ['STORY']).move).toBeNull();
+    expect(dropTarget(without('i2'), 2, 2, [{ item: a, childTypes: ['STORY'] }]).moves).toBeNull();
     // a dropped after b at the top level: after the Epic, keeping its type.
-    expect(dropTarget(rows, 1, 1, 3, 0, [])).toEqual({
-      move: { afterId: 'i1', parentId: null },
+    expect(dropTarget(without('i2'), 2, 0, [{ item: a, childTypes: [] }])).toEqual({
+      moves: [{ item: a, move: { afterId: 'i1', parentId: null } }],
+      parent: null,
       depth: 0,
       reason: '',
     });
+    // Both Features at the top level: in their order, each after the one before.
+    const both = [
+      { item: a, childTypes: [] },
+      { item: b, childTypes: [] },
+    ];
+    expect(dropTarget(without('i2', 'i3'), 1, 0, both).moves?.map((m) => m.move)).toEqual([
+      { afterId: 'i1', parentId: null },
+      { afterId: 'i2', parentId: null },
+    ]);
+    // A row that cannot go there is named.
+    const story = item(4, { type: 'STORY', adHoc: true });
+    expect(
+      dropTarget(without('i2', 'i3'), 1, 1, [...both, { item: story, childTypes: [] }]).reason,
+    ).toBe('KLO-4: An ad-hoc item has no parent');
+  });
+
+  it('shows placements at once, as the server will store them (v1.3.2)', () => {
+    const c = item(4, {
+      parentId: 'i2',
+      ancestors: [
+        ...a.ancestors,
+        { id: 'i2', number: 2, key: 'KLO-2', type: 'FEATURE', title: 'Item 2' },
+      ],
+      type: 'TASK',
+    });
+    // b before a under the Epic: the unplaced siblings are numbered first.
+    const first = applyOutlineMoves([epic, a, b, c], [{ id: 'i3', move: { afterId: null } }]);
+    expect(first.map((i) => [i.id, i.outlinePosition])).toEqual([
+      ['i2', 1024],
+      ['i3', 0],
+    ]);
+    expect(previousSibling([epic, a, b, c], b)).toBe('i2');
+    // A batch: each placement sees the ones before it.
+    const both = applyOutlineMoves(
+      [epic, a, b, c],
+      [
+        { id: 'i3', move: { afterId: null } },
+        { id: 'i2', move: { afterId: 'i3' } },
+      ],
+    );
+    const at = new Map(both.map((i) => [i.id, i.outlinePosition ?? NaN]));
+    expect(at.get('i3')! < at.get('i2')!).toBe(true);
+    // Neighbours too close together are numbered again first.
+    const close = [
+      { ...a, outlinePosition: 1 },
+      { ...b, outlinePosition: 1 + 1e-7 },
+    ];
+    const roomy = applyOutlineMoves(
+      [epic, ...close, c],
+      [{ id: 'i4', move: { afterId: 'i2', parentId: 'i1' } }],
+    );
+    expect(roomy.map((i) => [i.id, i.outlinePosition])).toEqual(
+      expect.arrayContaining([
+        ['i2', 1024],
+        ['i3', 2048],
+        ['i4', 1536],
+      ]),
+    );
+    // a under b as a Story: its own Task follows it under b.
+    const moved = applyOutlineMoves(
+      [epic, a, b, c],
+      [{ id: 'i2', move: { afterId: null, parentId: 'i3', type: 'STORY' } }],
+    );
+    const byId = new Map(moved.map((i) => [i.id, i]));
+    expect(byId.get('i2')).toMatchObject({ parentId: 'i3', type: 'STORY' });
+    expect(byId.get('i4')?.ancestors.map((r) => [r.id, r.type])).toEqual([
+      ['i1', 'EPIC'],
+      ['i3', 'FEATURE'],
+      ['i2', 'STORY'],
+    ]);
   });
 
   it('gives parents the span of their dated descendants', () => {

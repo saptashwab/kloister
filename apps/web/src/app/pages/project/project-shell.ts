@@ -91,7 +91,11 @@ import { LiveStatusChip, LiveStyles, PresenceAvatars } from '../../ui/live-ui';
           <app-icon name="search" />Search or jump <kbd>/</kbd>
         </button>
         @if (pageActions.export(); as exportAction) {
-          <app-snapshot-action [source]="exportAction.source" [filters]="exportAction.filters" />
+          <app-snapshot-action
+            [source]="exportAction.source"
+            [filters]="exportAction.filters"
+            [msProject]="exportAction.msProject === true"
+          />
         }
         @if (canCreate()) {
           <button mat-flat-button type="button" (click)="newItem()">

@@ -1,0 +1,110 @@
+// Timeline row grip, row dragging and the typing row (SPEC §6.4, v1.3.2),
+// loaded with the timeline route only. Dragging feels like the board's cards:
+// a card follows the pointer and the rows slide apart to open the gap.
+app-timeline {
+  // Shown on hover or focus of the row; always on touch screens.
+  .grip {
+    display: inline-flex;
+    align-items: center;
+    margin-right: var(--k-space-1);
+    color: var(--k-muted);
+    cursor: grab;
+    touch-action: none;
+    opacity: 0;
+  }
+  .row:hover .grip,
+  .row:focus-within .grip {
+    opacity: 1;
+  }
+  @media (hover: none) {
+    .grip {
+      opacity: 1;
+    }
+  }
+  .dragging {
+    cursor: grabbing;
+  }
+  .dragging > .row {
+    transition: translate var(--k-motion) ease;
+  }
+  .row.dragged {
+    visibility: hidden;
+  }
+  .links {
+    transition: opacity var(--k-motion) ease;
+  }
+  .links.faded {
+    opacity: 0;
+  }
+  // The gap where the rows land, indented to their level, with where they go.
+  .drop-gap {
+    position: absolute;
+    left: 0;
+    z-index: 2;
+    background: var(--k-primary-soft);
+    pointer-events: none;
+  }
+  .drop-slot {
+    position: absolute;
+    top: var(--k-size-3px);
+    bottom: var(--k-size-3px);
+    border: var(--k-focus-width) dashed var(--k-primary-line);
+    border-radius: var(--k-radius-sm);
+  }
+  // Beside the card, over the bars: where the rows go, or why they cannot.
+  .drop-label {
+    position: absolute;
+    top: 50%;
+    translate: 0 -50%;
+    padding: var(--k-size-3px) var(--k-space-2);
+    border-radius: var(--k-radius-sm);
+    background: var(--k-surface);
+    box-shadow: var(--k-lift);
+    color: var(--k-primary-ink);
+    font-size: var(--k-small);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .drop-gap.bad {
+    background: var(--k-danger-soft);
+  }
+  .drop-gap.bad .drop-slot {
+    border-color: var(--k-danger);
+  }
+  .drop-gap.bad .drop-label {
+    color: var(--k-danger-ink);
+  }
+  // The card that follows the pointer, lifted and tilted as on the board.
+  .drag-card {
+    position: fixed;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: var(--k-space-2);
+    padding: 0 var(--k-space-3);
+    border: var(--k-line) solid var(--k-primary-line);
+    border-radius: var(--k-radius-md);
+    background: var(--k-surface);
+    box-shadow: var(--k-lift);
+    rotate: var(--k-drag-tilt);
+    pointer-events: none;
+  }
+  .drag-card .t {
+    flex: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .drag-card .more {
+    flex: none;
+    padding: 0 var(--k-space-2);
+    border-radius: var(--k-radius-full);
+    background: var(--k-primary-soft);
+    color: var(--k-primary-ink);
+    font-size: var(--k-small);
+  }
+  // The typing row shown where the new row will go.
+  .row.add.inline .cell {
+    background: var(--k-primary-soft);
+  }
+}

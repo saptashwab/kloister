@@ -823,7 +823,8 @@ export function projectNotFound(): ApiException {
 }
 
 /** Downloads that are recorded every time, although they are reads (SPEC §6.2). */
-const EXPORT_ROUTE = /\/snapshots(?:\?|$)|\/ado\/batches\/[^/]+\/download(?:\?|$)/;
+const EXPORT_ROUTE =
+  /\/snapshots(?:\?|$)|\/ado\/batches\/[^/]+\/download(?:\?|$)|\/timeline\/msproject(?:\?|$)/;
 
 /**
  * Whether a request is a read that belongs to an admin's cross-project visit

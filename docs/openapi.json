@@ -4223,6 +4223,26 @@
         "security": [{ "session": [] }]
       }
     },
+    "/api/v1/projects/{id}/timeline/msproject": {
+      "get": {
+        "operationId": "TimelineController_msProject",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": { "application/xml": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        },
+        "summary": "Downloads the plan as a Microsoft Project XML file (v1.3.2), built from what the caller can see: items on the timeline, links between them, assignees and holidays. Project opens it with File > Open. Permissions: any member and admin, within scope; archived projects too.",
+        "tags": ["Timeline"],
+        "x-permission": "Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "description": "**Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.",
+        "security": [{ "session": [] }]
+      }
+    },
     "/api/v1/projects/{id}/timeline/reschedule": {
       "post": {
         "operationId": "TimelineController_reschedule",
@@ -6080,7 +6100,7 @@
   "info": {
     "title": "Kloister API",
     "description": "REST API of Kloister under `/api/v1`, JSON unless a route says otherwise. Sign in with `POST /api/v1/auth/login`; the session travels in the `sid` cookie. Every request that is not GET, HEAD or OPTIONS needs the header `x-requested-with: kloister`. Authorization is enforced by the API; items the caller may not see answer 404. Errors share the `ApiError` shape. The readable reference is docs/technical/API.md.",
-    "version": "1.3.1",
+    "version": "1.3.2",
     "contact": {}
   },
   "tags": [

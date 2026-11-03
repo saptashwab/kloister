@@ -383,6 +383,19 @@ Theming uses CSS custom properties only. Default palette is neutral (slate/indig
   readable predecessors, pins and sprint, with summary rows and a plan row giving spans and working days, then one column per week filled for each row's dates, with status also
   shown as text. The week range is capped at 156 weeks; a longer plan states the cap and omitted range on the
   Summary sheet and the Timeline sheet. My work and personal-space workbooks have no Timeline sheet.
+- Microsoft Project file (v1.3.2): Export… on the timeline also downloads the plan as Microsoft Project XML
+  (`GET /projects/:id/timeline/msproject`, the Project 2007 XML schema that later versions open with File > Open).
+  It holds the timeline rows the caller can see (no ad-hoc items; hidden ancestors as titles only), in outline
+  order with the key in WBS: Epics, Features and Stories with rows under them are summary tasks; the others are
+  tasks with their dates (half days as 08:00–12:00 and 13:00–17:00), working-day durations, percent complete and
+  a Start No Earlier Than constraint at their start, so Project keeps the dates while it schedules. Links whose
+  both ends are readable become finish-to-start links; assignees become resources (name and email) with their
+  shares as units; the project's holidays become exceptions in the project calendar (overlaps merged). Undated
+  tasks get an estimated day on the plan's first working day. A link between an item and its own ancestor or
+  descendant is named in the notes instead (Project cannot link a summary task with its own rows). Notes carry
+  type, status, pins and the description. Same access as the timeline (VIEW_ITEMS; personal spaces have none);
+  filters do not apply. Like other export downloads, an administrator's download in a project they are not a
+  member of is always audited (3.1).
 - Use filters, frozen headers, wrapped text, suitable column widths and clear date formatting. Preserve all
   selected readable content without silent truncation, loss of assignees or unreported omissions. Rich-text
   content is readable in Excel; its original formatting/content is retained in the offline archive. User text
@@ -499,6 +512,11 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   timeline, backlog and Excel Timeline sheet. Reordering follows the plan setting, is not audited (like card
   order) and is announced live. Add row below opens the typing row right under the chosen row and places the new
   row there; Add child row opens it under the row's last child.
+- Row dragging (v1.3.2) works like the board's cards: a card follows the pointer and the other rows slide apart
+  to open a gap, indented to the level and labelled with the new parent and fitted type (or the reason the rows
+  cannot go there). Dragging a selected row moves every selected row the caller may plan, in display order, each
+  with its own rows. Rows land at once and save in the background; a refused save puts them back. A drop offers
+  Undo. Near the top or bottom edge the page and then the plan scroll; Escape cancels.
 - Splitter (M9.2): a separator between the plan table and the bars shares the width between them, by pointer or
   arrow keys, and is remembered per browser. A narrowed table gets its own horizontal scrollbar while the bars
   keep theirs; vertical scrolling stays shared so rows line up, and moving the cell focus scrolls the table to

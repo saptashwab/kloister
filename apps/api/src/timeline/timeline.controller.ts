@@ -1,9 +1,10 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
 import {
   ProjectPermission as P,
   type RescheduleResultDto,
   type TimelineDto,
 } from '@kloister/shared';
+import type { FastifyReply } from 'fastify';
 import type { AuthContext } from '../auth/auth-context.js';
 import { CurrentAuth } from '../auth/decorators.js';
 import {
@@ -43,6 +44,28 @@ export class TimelineController {
   @RequireProjectPermission(P.VIEW_ITEMS)
   get(@CurrentProject() access: ProjectAccess): Promise<TimelineDto> {
     return this.timeline.timeline(access);
+  }
+
+  /**
+   * Downloads the plan as a Microsoft Project XML file (v1.3.2), built from
+   * what the caller can see: items on the timeline, links between them,
+   * assignees and holidays. Project opens it with File > Open.
+   * Permissions: any member and admin, within scope; archived projects too.
+   *
+   * @param access The caller's access.
+   * @param reply The download response.
+   * @returns The file.
+   */
+  @Get('msproject')
+  @RequireProjectPermission(P.VIEW_ITEMS)
+  async msProject(@CurrentProject() access: ProjectAccess, @Res() reply: FastifyReply) {
+    const { fileName, xml } = await this.timeline.msProject(access);
+    return reply
+      .header('Content-Type', 'application/xml; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="${fileName}"`)
+      .header('Cache-Control', 'no-store')
+      .header('X-Content-Type-Options', 'nosniff')
+      .send(xml);
   }
 
   /**

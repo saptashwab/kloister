@@ -20,6 +20,8 @@ export class SnapshotAction {
   readonly source = input.required<string>();
   /** Current screen filters; all-eligible mode removes narrowing on the server. */
   readonly filters = input<Record<string, string | boolean>>({});
+  /** Also offer the plan as a Microsoft Project file (the timeline, v1.3.2). */
+  readonly msProject = input(false);
   private readonly dialog = inject(MatDialog);
   /**
    * Loads the scope preview and download dialog on demand.
@@ -32,7 +34,7 @@ export class SnapshotAction {
       exitAnimationDuration: dialogMotion(),
       width: 'var(--k-size-640px)',
       maxWidth: 'calc(100vw - var(--k-space-4))',
-      data: { source: this.source(), filters: this.filters() },
+      data: { source: this.source(), filters: this.filters(), msProject: this.msProject() },
     });
   }
 }

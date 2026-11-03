@@ -31,7 +31,6 @@ import {
   ItemStatus,
   ItemType,
   naturalChildType,
-  type OutlineMoveRequest,
   type PlanEdge,
   PresenceAction,
   type PresenceField,
@@ -73,7 +72,10 @@ import {
   dueText,
   durationText,
   halfX,
-  dropTarget,
+  applyOutlineMoves,
+  type DropMove,
+  type DropTarget,
+  previousSibling,
   indentTarget,
   outdentTarget,
   parseDuration,
@@ -105,7 +107,13 @@ import { ToastService } from '../../ui/toast.service';
 import { dialogMotion } from '../../ui/motion';
 import { HolidaysApiService } from '../../core/holidays-api.service';
 import type { HolidaysDialogData, HolidaysDialogResult } from './holidays-dialog';
-import { TimelineBarStyles, TimelineGridStyles, TimelineToolStyles } from './timeline-styles';
+import { HEADER_PX, RowDrag } from './row-drag';
+import {
+  TimelineBarStyles,
+  TimelineDragStyles,
+  TimelineGridStyles,
+  TimelineToolStyles,
+} from './timeline-styles';
 
 /** Grid columns (docs/M9-PLAN.md §3.1). */
 type ColumnId =
@@ -268,9 +276,10 @@ interface BarDraft {
     TimelineGridStyles,
     TimelineBarStyles,
     TimelineToolStyles,
+    TimelineDragStyles,
   ],
   template: `
-    <app-timeline-grid-styles /><app-timeline-bar-styles /><app-timeline-tool-styles />
+    <app-timeline-grid-styles /><app-timeline-bar-styles /><app-timeline-tool-styles /><app-timeline-drag-styles />
     <div class="tools" role="toolbar" aria-label="Timeline">
       @if (canCreate()) {
         <button mat-stroked-button type="button" (click)="focusAdd(null)">
@@ -712,6 +721,7 @@ interface BarDraft {
             role="grid"
             tabindex="-1"
             aria-label="Plan"
+            [class.dragging]="rowDrag.view() !== null"
             [attr.aria-rowcount]="rows().length"
             (keydown)="gridKey($event)"
             (paste)="pasteRows($event)"
@@ -724,6 +734,8 @@ interface BarDraft {
                 [class.summary]="r.summary !== null"
                 [class.selected]="selected().has(r.node.id)"
                 [class.flash]="flash() === r.node.id"
+                [class.dragged]="rowDrag.view()?.hidden?.has(i)"
+                [style.translate]="rowShift(i)"
                 [class.k-live-flash]="ctx.flashing().has(r.node.id)"
                 [attr.title]="changedBy(r.node.id)"
                 [attr.aria-selected]="r.node.item ? selected().has(r.node.id) : null"
@@ -919,15 +931,43 @@ interface BarDraft {
               </div>
             </div>
           </ng-template>
-          @if (dropMark(); as d) {
+          @if (rowDrag.view(); as d) {
             <div
-              class="drop-mark"
+              class="drop-gap"
               [class.bad]="!d.valid"
-              [style.top.px]="48 + d.gap * rowHeight()"
-              [style.left.px]="d.left + check + 8 + d.depth * 16"
-              [style.width.px]="gridPane() - check - 8 - d.depth * 16"
-              [attr.title]="d.reason"
-            ></div>
+              [style.top.px]="header + d.gap * rowHeight()"
+              [style.height.px]="rowHeight()"
+              [style.width.px]="gridPane() + barsWidth()"
+            >
+              <span
+                class="drop-slot"
+                [style.left.px]="d.left + check + 8 + d.depth * 16"
+                [style.width.px]="gridPane() - check - 12 - d.depth * 16"
+              ></span>
+              @if (d.label) {
+                <span
+                  class="drop-label"
+                  data-testid="drop-label"
+                  [style.left.px]="d.left + gridPane() + 8"
+                  >{{ d.label }}</span
+                >
+              }
+            </div>
+            <div
+              class="drag-card"
+              aria-hidden="true"
+              [style.left.px]="d.x"
+              [style.top.px]="d.y"
+              [style.width.px]="d.width"
+              [style.height.px]="rowHeight()"
+            >
+              <app-type-icon [type]="d.card.type" />
+              <span class="k-key">{{ d.card.key }}</span>
+              <span class="t">{{ d.card.title }}</span>
+              @if (d.card.more) {
+                <span class="more">{{ d.card.more }}</span>
+              }
+            </div>
           }
 
           <div class="layer" [style.left.px]="gridPane()" [style.width.px]="barsWidth()">
@@ -937,6 +977,7 @@ interface BarDraft {
             <div class="today" [style.left.px]="todayX()"></div>
             <svg
               class="links"
+              [class.faded]="rowDrag.view() !== null"
               [attr.width]="barsWidth()"
               [attr.height]="(rows().length + (inlineAt() === null ? 0 : 1)) * rowHeight()"
               aria-hidden="true"
@@ -970,7 +1011,7 @@ interface BarDraft {
                 class="grip"
                 aria-hidden="true"
                 title="Drag to move the row; Alt+Shift+Up or Down moves it with the keyboard"
-                (pointerdown)="rowDragStart($event, rows().indexOf(r))"
+                (pointerdown)="rowDrag.start($event, rows().indexOf(r))"
                 ><app-icon name="grip" [size]="12"
               /></span>
             }
@@ -1236,16 +1277,21 @@ export class TimelinePage implements OnInit {
   private readonly holdsEnd = inject(DestroyRef).onDestroy(() => {
     void this.editHold?.release();
     void this.barHold?.release();
+    this.rowDrag.cancel();
   });
   /** Reloads the links and holidays when someone else changed them (M10). */
   private readonly linksWatch = effect(() => {
     if (this.ctx.linksVersion() === 0) return;
     untracked(() => void this.loadEdges().catch(() => undefined));
   });
-  /** Shows this view's Export… in the project header (the workbook has a Timeline sheet). */
+  /**
+   * Shows this view's Export… in the project header (the workbook has a
+   * Timeline sheet), with the Microsoft Project file too (v1.3.2).
+   */
   private readonly pageActions = inject(PageActions).register(() => ({
     source: this.ctx.project()?.id ?? '',
     filters: { today: this.today, boardOnly: false, ...(this.text() ? { q: this.text() } : {}) },
+    msProject: true,
   }));
 
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
@@ -1336,15 +1382,33 @@ export class TimelinePage implements OnInit {
   protected readonly report = signal<{ summary: string; problems: string[] } | null>(null);
   /** The parent new rows go under, set by "Add row below"; null for the focused row's level. */
   protected readonly addParent = signal<WorkItemDto | null>(null);
-  /** Where a dragged row would land, while dragging (v1.3.1). */
-  protected readonly dropMark = signal<{
-    gap: number;
-    depth: number;
-    /** Sideways scroll of the view, where the pinned table starts. */
-    left: number;
-    valid: boolean;
-    reason: string;
-  } | null>(null);
+  /** Height of the plan's sticky header row, where the rows start. */
+  protected readonly header = HEADER_PX;
+  /** Dragging rows by their grip (v1.3.2): card, sliding rows and gap. */
+  protected readonly rowDrag = new RowDrag({
+    rows: () => this.rows(),
+    rowHeight: () => this.rowHeight(),
+    draggedFrom: (index) => this.draggedFrom(index),
+    childTypes: (id) =>
+      this.ctx
+        .items()
+        .filter((i) => i.parentId === id)
+        .map((i) => i.type),
+    label: (target) => this.dropLabel(target),
+    scroller: () => this.scroller()?.nativeElement,
+    begin: (dragged) => {
+      this.addParent.set(null);
+      this.addChildId.set(null);
+      // Others see the rows being moved; their changes wait for the drop.
+      const holds = dragged.map((d) => this.ctx.hold(d.item.id, PresenceAction.MOVING));
+      return (apply) => holds.forEach((hold) => void hold.release(apply));
+    },
+    drop: (target, release) => this.placeRows(target.moves ?? [], true, release),
+  });
+  /** Saves of placed rows, one after another so quick key presses keep their order. */
+  private placing: Promise<void> = Promise.resolve();
+  /** Placements queued or saving; the project reloads once they are all done. */
+  private placements = 0;
   /** Id of the item new rows go under as its children, set by "Add child row" (v1.3.1). */
   protected readonly addChildId = signal<string | null>(null);
   /**
@@ -1652,7 +1716,8 @@ export class TimelinePage implements OnInit {
         canSwitch: this.ctx.writable() && this.ctx.has(ProjectPermission.MANAGE_PROJECT),
         today: this.today,
       },
-      width: 'var(--k-size-640px)',
+      // Wide enough for a holiday's name, both days and the button on one line.
+      width: 'var(--k-size-880px)',
       maxWidth: 'calc(100vw - var(--k-space-8))',
       enterAnimationDuration: dialogMotion(),
       exitAnimationDuration: dialogMotion(),
@@ -3275,89 +3340,204 @@ export class TimelinePage implements OnInit {
     const to = at + direction;
     if (at < 0 || to < 0 || to >= siblings.length) return;
     const afterId = direction === -1 ? (siblings[to - 1] ?? null) : siblings[to];
-    await this.placeRow(item, { afterId });
-    // The focus follows the row, so the next press moves it again.
+    // The row moves at once; the focus follows it, so the next press moves it again.
+    const saving = this.placeRows([{ item, move: { afterId } }], false);
     const now = this.rows().findIndex((row) => row.node.id === item.id);
     if (now >= 0) this.focusCell(now, this.focus().col);
+    await saving;
   }
 
   /**
-   * Starts dragging a row by its grip (v1.3.1). Moving shows where it would
-   * land: between rows, at the level the pointer's sideways offset picks
-   * (16 px per level); releasing places it there with a fitted type.
+   * Shifts a row while rows are dragged, to open the gap (v1.3.2).
    *
-   * @param event The pointer event.
    * @param index Row index.
+   * @returns A CSS translate, or null when it stays.
    */
-  protected rowDragStart(event: PointerEvent, index: number): void {
-    const rows = this.rows();
-    const item = rows[index]?.node.item;
-    if (event.button !== 0 || !item || !this.ctx.canPlan(item)) return;
-    event.preventDefault();
-    this.addParent.set(null);
-    this.addChildId.set(null);
-    const handle = event.target as HTMLElement;
-    const grid = handle.closest('[role="grid"]') as HTMLElement;
-    const scrolled = this.scroller()?.nativeElement.scrollLeft ?? 0;
-    let end = index;
-    while (end + 1 < rows.length && rows[end + 1].depth > rows[index].depth) end++;
-    const children = this.ctx
-      .items()
-      .filter((i) => i.parentId === item.id)
-      .map((i) => i.type);
-    let target: OutlineMoveRequest | null = null;
-    const move = (e: PointerEvent) => {
-      const top = grid.getBoundingClientRect().top;
-      const gap = Math.max(
-        0,
-        Math.min(rows.length, Math.round((e.clientY - top) / this.rowHeight())),
-      );
-      const wanted = rows[index].depth + Math.round((e.clientX - event.clientX) / 16);
-      const drop = dropTarget(rows, index, end, gap, wanted, children);
-      target = drop.move;
-      this.dropMark.set({
-        gap,
-        depth: drop.depth,
-        left: scrolled,
-        valid: drop.move !== null,
-        reason: drop.reason,
-      });
-    };
-    // On the window, so a re-render that removes the grip cannot strand the drag.
-    const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', cancel);
-      this.dropMark.set(null);
-      if (target !== null) void this.placeRow(item, target);
-    };
-    const cancel = () => {
-      target = null;
-      up();
-    };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', cancel);
+  protected rowShift(index: number): string | null {
+    const shift = this.rowDrag.view()?.shift[index] ?? 0;
+    return shift === 0 ? null : `0 ${shift * this.rowHeight()}px`;
   }
 
   /**
-   * Sends an outline move and reloads the project, so renumbered siblings
-   * and moved subtrees show in their new order.
+   * The rows a drag from this row moves (v1.3.2): every selected row the
+   * caller may plan when this row is selected, otherwise this row alone.
+   * Rows inside another dragged row travel with it.
    *
-   * @param item The item.
-   * @param request Parent, type and the sibling to follow.
-   * @returns Resolves once placed.
+   * @param index Row index.
+   * @returns Row indexes in display order.
    */
-  private async placeRow(item: WorkItemDto, request: OutlineMoveRequest): Promise<void> {
+  private draggedFrom(index: number): number[] {
+    const rows = this.rows();
+    const id = rows[index]?.node.id;
+    if (id === undefined) return [];
+    const selected = this.selected();
+    const picked = selected.has(id)
+      ? rows.flatMap((row, i) =>
+          selected.has(row.node.id) && row.node.item !== null && this.ctx.canPlan(row.node.item)
+            ? [i]
+            : [],
+        )
+      : [index];
+    const ids = new Set(picked.map((i) => rows[i].node.id));
+    // The API refuses others too; this keeps the drag honest.
+    if (!picked.every((i) => rows[i].node.item !== null && this.ctx.canPlan(rows[i].node.item)))
+      return [];
+    return picked.filter((i) => !(rows[i].node.item?.ancestors.some((a) => ids.has(a.id)) ?? true));
+  }
+
+  /**
+   * What the drop gap says: the parent the rows go under and a type they
+   * take, or why they cannot go there.
+   *
+   * @param target The possible drop.
+   * @returns E.g. "Under KLO-3 · becomes User Story".
+   */
+  private dropLabel(target: DropTarget): string {
+    if (target.moves === null) return target.reason;
+    const parts: string[] = [];
+    if (target.parent !== null) parts.push(`Under ${target.parent.key}`);
+    else if (target.moves.some((m) => m.move.parentId !== undefined)) parts.push('Top level');
+    const types = new Set(target.moves.flatMap((m) => m.move.type ?? []));
+    if (types.size === 1) parts.push(`becomes ${typeName([...types][0])}`);
+    else if (types.size > 1) parts.push('types fitted');
+    return parts.join(' · ');
+  }
+
+  /**
+   * Places rows at once and then saves them in order (v1.3.2): the plan shows
+   * the new order straight away, the server's copies follow, and a failure
+   * puts the rows back. A drop confirms with Undo, which returns each row to
+   * the place it had.
+   *
+   * @param moves Placements in display order.
+   * @param announce Whether to confirm with Undo (drops, not key presses).
+   * @param release Ends a drag's holds: before the reload when rows move
+   *   (it brings others' changes), replaying them when nothing moved.
+   * @returns Resolves once saved and reloaded.
+   */
+  private async placeRows(
+    moves: readonly DropMove[],
+    announce: boolean,
+    release: (apply: boolean) => void = () => undefined,
+  ): Promise<void> {
     const project = this.ctx.project();
-    if (project === null) return;
-    try {
-      await this.outlineApi.outline(project.id, item.id, request);
-      // Siblings may have been numbered and subtrees moved: reload the order.
-      await this.ctx.refresh();
-    } catch (error) {
-      this.toast.error(error);
+    if (project === null || moves.length === 0) {
+      release(true);
+      return;
     }
+    const before = this.ctx.items();
+    const back: DropMove[] = moves.map(({ item, move }) => ({
+      item,
+      move: {
+        afterId: previousSibling(before, item),
+        ...(move.parentId === undefined ? {} : { parentId: item.parentId }),
+        ...(move.type === undefined ? {} : { type: item.type }),
+      },
+    }));
+    // Dropped where they already were: nothing to save.
+    const same = moves.every(
+      ({ move }, k) =>
+        move.parentId === undefined &&
+        move.type === undefined &&
+        move.afterId === back[k].move.afterId,
+    );
+    if (same) {
+      release(true);
+      return;
+    }
+    const changed = applyOutlineMoves(
+      before,
+      moves.map(({ item, move }) => ({ id: item.id, move })),
+    );
+    for (const item of changed) this.ctx.upsert(item);
+    release(false);
+    if (announce) {
+      this.flash.set(moves[0].item.id);
+      setTimeout(() => this.flash.set(null), 2600);
+    }
+    let saved = 0;
+    const ok = await this.queuePlacement(async () => {
+      try {
+        for (const { item, move } of moves) {
+          await this.outlineApi.outline(project.id, item.id, move);
+          saved++;
+        }
+        return true;
+      } catch (error) {
+        // Put the rows back here and on the server for those already saved;
+        // the reload then shows the server's state.
+        const original = new Map(before.map((i) => [i.id, i]));
+        for (const item of changed) {
+          const was = original.get(item.id);
+          if (was !== undefined) this.ctx.upsert(was);
+        }
+        try {
+          for (const step of back.slice(0, saved))
+            await this.outlineApi.outline(project.id, step.item.id, step.move);
+        } catch {
+          // The reload shows what is left.
+        }
+        this.toast.error(error);
+        return false;
+      }
+    });
+    if (ok && announce) {
+      this.toast.show(this.movedText(moves), async () => {
+        await this.queuePlacement(async () => {
+          for (const { item, move } of back)
+            await this.outlineApi.outline(project.id, item.id, move);
+          return true;
+        });
+      });
+    }
+  }
+
+  /**
+   * Runs a save of placed rows after the ones before it, then reloads the
+   * project once no other placement waits, so quick key presses do not see
+   * rows jump back between saves. A failure still reloads, then rethrows.
+   *
+   * @param save The save; resolves to whether it succeeded.
+   * @returns What the save resolved to.
+   */
+  private async queuePlacement(save: () => Promise<boolean>): Promise<boolean> {
+    this.placements++;
+    const run = this.placing.then(save);
+    this.placing = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    try {
+      return await run;
+    } finally {
+      // Siblings may have been numbered on the server too: reload the order.
+      if (--this.placements === 0) await this.ctx.refresh();
+    }
+  }
+
+  /**
+   * Confirms a drop.
+   *
+   * @param moves The placements.
+   * @returns E.g. "Moved KLO-12 under KLO-3 (now a User Story)".
+   */
+  private movedText(moves: readonly DropMove[]): string {
+    const what = moves.length === 1 ? moves[0].item.key : `${moves.length} items`;
+    const parentId = moves.find((m) => m.move.parentId !== undefined)?.move.parentId;
+    const where =
+      parentId === undefined
+        ? ''
+        : parentId === null
+          ? ' to the top level'
+          : ` under ${this.ctx.itemsById().get(parentId)?.key ?? 'its new parent'}`;
+    const types = moves.flatMap((m) => m.move.type ?? []);
+    let type = '';
+    if (types.length > 0 && moves.length > 1) type = ' (types fitted)';
+    else if (types.length > 0) {
+      const name = typeName(types[0]);
+      type = ` (now ${/^[AEIOU]/.test(name) ? 'an' : 'a'} ${name})`;
+    }
+    return `Moved ${what}${where}${type}`;
   }
 
   /**

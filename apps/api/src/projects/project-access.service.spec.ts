@@ -734,6 +734,8 @@ describe('isVisitRead (SPEC §3.1, M8.5)', () => {
     expect(isVisitRead('GET /api/v1/projects/:id/snapshots/preview')).toBe(true);
     expect(isVisitRead('GET /api/v1/projects/:id/snapshots')).toBe(false);
     expect(isVisitRead('GET /api/v1/projects/:id/ado/batches/:batchId/download')).toBe(false);
+    expect(isVisitRead('GET /api/v1/projects/:id/timeline/msproject')).toBe(false);
+    expect(isVisitRead('GET /api/v1/projects/:id/timeline')).toBe(true);
     expect(isVisitRead('PATCH /api/v1/projects/:id')).toBe(false);
     expect(isVisitRead('POST /api/v1/projects/:id/members')).toBe(false);
   });

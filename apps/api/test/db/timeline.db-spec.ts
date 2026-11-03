@@ -1,5 +1,6 @@
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import {
+  AuditAction,
   type AuditEntryDto,
   type Page,
   type ProjectDto,
@@ -184,6 +185,102 @@ describe('timeline (db)', () => {
       const personal = (await as('pm', 'POST', '/api/v1/me/personal')).json() as ProjectDto;
       const res = await as('pm', 'GET', `/api/v1/projects/${personal.id}/timeline`);
       expect(res.statusCode).toBe(404);
+    });
+  });
+
+  describe('GET /timeline/msproject (v1.3.2)', () => {
+    /**
+     * Downloads the Microsoft Project file as a user.
+     *
+     * @param name Seeded user.
+     * @returns Status, type and the XML.
+     */
+    async function download(name: Name): Promise<{ status: number; type: unknown; xml: string }> {
+      const res = await as(name, 'GET', url('/msproject'));
+      return {
+        status: res.statusCode,
+        type: res.headers['content-type'],
+        xml: res.rawPayload.toString('utf8'),
+      };
+    }
+    /**
+     * The display key of a seeded item.
+     *
+     * @param id Item id.
+     * @returns E.g. `WEB-3`.
+     */
+    const keyOf = async (id: string) =>
+      `WEB-${(await prisma.workItem.findUniqueOrThrow({ where: { id } })).number}`;
+
+    it('gives every reader the plan they can see, with dates, links and holidays', async () => {
+      await prisma.holiday.create({
+        data: {
+          projectId,
+          name: 'Team day',
+          startDate: new Date('2026-11-06T00:00:00Z'),
+          endDate: new Date('2026-11-06T00:00:00Z'),
+          createdById: ids.pm,
+        },
+      });
+      const pm = await download('pm');
+      expect(pm.status).toBe(200);
+      expect(pm.type).toBe('application/xml; charset=utf-8');
+      expect(pm.xml).toContain('<Project xmlns="http://schemas.microsoft.com/project">');
+      for (const id of Object.values(items))
+        expect(pm.xml).toContain(`<WBS>${await keyOf(id)}</WBS>`);
+      expect(pm.xml.match(/<PredecessorLink>/g)).toHaveLength(3);
+      // B starts in the 2nd half of 5 Nov and finishes after the 1st half of 11 Nov.
+      expect(pm.xml).toContain(
+        '<Start>2026-11-05T13:00:00</Start><Finish>2026-11-11T12:00:00</Finish>',
+      );
+      expect(pm.xml).toContain('<Name>Team day</Name>');
+      for (const name of ['viewer', 'admin'] as const)
+        expect((await download(name)).status).toBe(200);
+    });
+
+    it('leaves out hidden items and their links, and is 404 where the timeline is', async () => {
+      const own = await download('own');
+      expect(own.status).toBe(200);
+      expect(own.xml).toContain(`<WBS>${await keyOf(items.m)}</WBS>`);
+      expect(own.xml).not.toContain(`<WBS>${await keyOf(items.p)}</WBS>`);
+      expect(own.xml).not.toContain('<PredecessorLink>');
+      expect((await download('outsider')).status).toBe(404);
+      const personal = (await as('pm', 'POST', '/api/v1/me/personal')).json() as ProjectDto;
+      const res = await as('pm', 'GET', `/api/v1/projects/${personal.id}/timeline/msproject`);
+      expect(res.statusCode).toBe(404);
+    });
+
+    it('leaves ad-hoc items out and shows a hidden parent as a title only', async () => {
+      await prisma.workItem.update({ where: { id: items.c }, data: { adHoc: true } });
+      const pm = await download('pm');
+      expect(pm.xml).not.toContain(`<WBS>${await keyOf(items.c)}</WBS>`);
+      // A to C was the third link; it goes with C.
+      expect(pm.xml.match(/<PredecessorLink>/g)).toHaveLength(2);
+      const parent = await seedItem(prisma, projectId, {
+        createdById: ids.pm,
+        type: 'STORY',
+        title: 'Private story',
+      });
+      await prisma.workItem.update({
+        where: { id: parent.id },
+        data: { description: '<p>Secret details</p>' },
+      });
+      await prisma.workItem.update({ where: { id: items.m }, data: { parentId: parent.id } });
+      const own = await download('own');
+      expect(own.xml).toContain('<Name>Private story</Name>');
+      expect(own.xml).toContain('not visible to you in Kloister (title only)');
+      expect(own.xml).not.toContain('Secret details');
+    });
+
+    it('records every admin download in projects they are not a member of', async () => {
+      for (let i = 0; i < 2; i++) expect((await download('admin')).status).toBe(200);
+      const audits = await prisma.auditLog.findMany({
+        where: { action: AuditAction.ADMIN_CROSS_PROJECT_ACCESS, actorId: ids.admin },
+      });
+      expect(audits.map((a) => (a.meta as { via: string }).via)).toEqual([
+        'GET /api/v1/projects/:id/timeline/msproject',
+        'GET /api/v1/projects/:id/timeline/msproject',
+      ]);
     });
   });
 

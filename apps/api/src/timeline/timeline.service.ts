@@ -21,8 +21,10 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { itemFacts, type ItemRow, toItemRef } from '../items/item.mapper.js';
 import { HolidaysService } from '../holidays/holidays.service.js';
 import { ItemsService, PLAN_LEADS_ONLY } from '../items/items.service.js';
+import { readableText } from '../items/snapshot-format.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { type ProjectAccess, ProjectAccessService } from '../projects/project-access.service.js';
+import { msProjectXml } from './msproject.js';
 import type { RescheduleChangeDto, RescheduleDto } from './timeline.dto.js';
 
 /**
@@ -67,6 +69,66 @@ export class TimelineService {
   async timeline(access: ProjectAccess): Promise<TimelineDto> {
     const edges = await this.visibleEdges(this.prisma, access);
     return { edges };
+  }
+
+  /**
+   * Builds a Microsoft Project XML file of the plan (v1.3.2): the items on the
+   * timeline the caller can see (no ad-hoc items), the links whose both ends
+   * they can see, assignees with their shares and the project's holidays.
+   * Hidden ancestors appear as titles only, as on the timeline.
+   *
+   * @param access The caller's access.
+   * @returns The file name and the XML.
+   */
+  async msProject(access: ProjectAccess): Promise<{ fileName: string; xml: string }> {
+    const items: WorkItemDto[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await this.items.list(access, { cursor, limit: 100 });
+      items.push(...page.items.filter((item) => !item.adHoc));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor !== undefined);
+    const userIds = [...new Set(items.flatMap((item) => item.assigneeIds))];
+    const people = new Map(
+      (
+        await this.prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, displayName: true, email: true },
+        })
+      ).map((user) => [user.id, user]),
+    );
+    const { edges } = await this.timeline(access);
+    const xml = msProjectXml({
+      projectName: access.project.name,
+      items: items.map((item) => ({
+        id: item.id,
+        number: item.number,
+        outlinePosition: item.outlinePosition,
+        key: item.key,
+        title: item.title,
+        type: item.type,
+        status: item.status,
+        ancestors: item.ancestors,
+        description: readableText(item.description),
+        checklist: item.checklist,
+        pin: item.startNoEarlierThan,
+        startDate: item.startDate,
+        startSecondHalf: item.startSecondHalf,
+        dueDate: item.dueDate,
+        dueFirstHalf: item.dueFirstHalf,
+        assignees: item.assigneeShares.flatMap(({ userId, share }) => {
+          const person = people.get(userId);
+          return person === undefined
+            ? []
+            : [{ userId, name: person.displayName, email: person.email, share }];
+        }),
+      })),
+      edges,
+      holidays: (await this.holidays.forProject(access)).holidays,
+      today: new Date().toISOString().slice(0, 10),
+      now: new Date(),
+    });
+    return { fileName: `${access.project.key}-plan.xml`, xml };
   }
 
   /**

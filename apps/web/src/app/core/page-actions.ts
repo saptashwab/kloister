@@ -6,6 +6,8 @@ export interface PageExport {
   source: string;
   /** Current view filters, kept by the "filtered" option. */
   filters: Record<string, string | boolean>;
+  /** Also offer the plan as a Microsoft Project file (the timeline, v1.3.2). */
+  msProject?: boolean;
 }
 
 /**

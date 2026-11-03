@@ -71,6 +71,10 @@ const RAW_RESPONSES: Record<string, { status: string; content: Record<string, Sc
       'application/zip': { schema: { type: 'string', format: 'binary' } },
     },
   },
+  TimelineController_msProject: {
+    status: '200',
+    content: { 'application/xml': { schema: { type: 'string', format: 'binary' } } },
+  },
   AdoController_download: {
     status: '200',
     content: { 'application/zip': { schema: { type: 'string', format: 'binary' } } },

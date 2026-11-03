@@ -1,5 +1,38 @@
 # Decisions
 
+## v1.3.2 row dragging like the board (2026-11-03)
+
+- Owner feedback on v1.3.1: dragging a row felt unresponsive (only a thin line moved, and the row moved after
+  the server answered and the project reloaded). Rows now drag like board cards: a card follows the pointer
+  and the rows slide apart to open the gap. The gap stays one row high for a whole subtree, so the bars do not
+  jump; the links fade while dragging. Custom pointer handling rather than the CDK sortable list, because the
+  sideways level choice and subtrees travelling with their row do not fit a flat list.
+- Owner request: grabbing a selected row drags all selected rows (those the caller may plan), in display order,
+  each after the one before; rows inside another selected row travel with it. Grabbing an unselected row moves
+  that row only. A row that cannot go there is named in the gap.
+- Drops apply at once with the same placement rule as the server (`applyOutlineMoves`), then save one after
+  another and reload once the queue is empty; a refused save restores the rows and sends back those of the same
+  drop that were already saved. The drag's holds end at the drop without replaying waiting changes (the reload
+  brings them), so the mover's rows are not flagged as someone else's change. Undo runs in the same queue and
+  sends each row back after its former previous sibling. Keyboard moves use the same path without the Undo message. No API or schema change.
+- Owner requests in the same release: the project Holidays dialog keeps a new holiday's name, days and Add on
+  one line (wider dialog); and a Microsoft Project export of the timeline. The export is Microsoft Project XML
+  (the Project 2007 schema, `mspdi_pj12.xsd`, which current Project opens), not `.mpp`, whose binary format
+  cannot be written reliably without third-party tooling. It is built on the server like the snapshot, on the
+  timeline route (same access; personal spaces 404), from readable items only. Dated tasks are auto-scheduled
+  with a Start No Earlier Than constraint at their Kloister start so Project shows the same dates and still
+  reschedules from links; Kloister pins are named in the notes. Half days map to 08:00–12:00/13:00–17:00 in an
+  8-hour calendar; assignments are on leaf tasks only (summary assignees in notes). Overlapping holidays are
+  merged because Project refuses overlapping exceptions. Verified by reading generated files back with the
+  reader ProjectLibre uses (MPXJ): outline, half days, durations with holidays, units/work, links, constraints,
+  estimated undated tasks and title-only ancestors round-trip. Not verified in Microsoft Project itself.
+  Review follow-ups: the download is an export route for the admin audit (every download recorded); links
+  between an item and its own ancestor/descendant (allowed in Kloister) go to the notes; progress weighting
+  matches the timeline; undated tasks start on a working day. Accepted: "today" for undated tasks is the
+  server's UTC date.
+- Found while doing this: the v1.3.1 grip and inline typing-row styles were nested under the Who menu selector
+  and never applied; they now live in `_timeline-drag.scss`, with the grip always visible on touch screens.
+
 ## v1.3.1 timeline rows and bulk hierarchy edits (2026-11-03)
 
 - Owner request in the same release: drag rows to reorder and show the typing row where the new row goes. The

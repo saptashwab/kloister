@@ -38,3 +38,16 @@ export class TimelineBarStyles {}
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TimelineToolStyles {}
+
+/**
+ * The timeline row grip, row dragging and typing row styles, loaded with the
+ * timeline route (SPEC §6.4, v1.3.2).
+ */
+@Component({
+  selector: 'app-timeline-drag-styles',
+  template: '',
+  styleUrl: '../../../styles/_timeline-drag.scss',
+  encapsulation: ViewEncapsulation.None,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class TimelineDragStyles {}
