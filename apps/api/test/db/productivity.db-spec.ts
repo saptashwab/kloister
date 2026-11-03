@@ -338,6 +338,56 @@ describe('same-space copies and readable snapshots (db)', () => {
     ).toMatchObject({ count: 0 });
   });
 
+  it('applies the backlog Show filter to the current filtered view (v1.4.0)', async () => {
+    const recent = await seedItem(prisma, projectId, {
+      createdById: pm,
+      bucketId,
+      title: 'Done now',
+    });
+    const old = await seedItem(prisma, projectId, {
+      createdById: pm,
+      bucketId,
+      title: 'Done long ago',
+    });
+    const adHoc = await seedItem(prisma, projectId, {
+      createdById: pm,
+      bucketId,
+      title: 'Quick call',
+    });
+    await prisma.workItem.update({
+      where: { id: recent.id },
+      data: { status: 'DONE', completedAt: new Date() },
+    });
+    await prisma.workItem.update({
+      where: { id: old.id },
+      data: { status: 'DONE', completedAt: new Date(Date.now() - 30 * 86_400_000) },
+    });
+    await prisma.workItem.update({ where: { id: adHoc.id }, data: { adHoc: true } });
+    const since = new Date(Date.now() - 14 * 86_400_000);
+    const preview = async (query: string) =>
+      call(app, 'GET', `/api/v1/projects/${projectId}/snapshots/preview?${query}`, {
+        sid: sids['pm'],
+      });
+    const done = await preview('show=done-recent');
+    expect(done.statusCode).toBe(200);
+    expect(done.json()).toMatchObject({
+      count: await prisma.workItem.count({
+        where: { projectId, deletedAt: null, status: 'DONE', completedAt: { gte: since } },
+      }),
+    });
+    expect((done.json() as { filters: string }).filters).toContain('Done in the last 14 days');
+    const open = await preview('show=ad-hoc');
+    expect(open.json()).toMatchObject({
+      count: await prisma.workItem.count({
+        where: { projectId, deletedAt: null, adHoc: true, status: { not: 'DONE' } },
+      }),
+    });
+    // The all-items option ignores it; unknown values are refused.
+    const all = (await preview('show=ad-hoc&scope=all')).json() as { count: number };
+    expect(all.count).toBeGreaterThan((open.json() as { count: number }).count);
+    expect((await preview('show=everything')).statusCode).toBe(400);
+  });
+
   it('exports every page without expanding My work to unassigned visible project items', async () => {
     for (let index = 0; index < 105; index++)
       await seedItem(prisma, projectId, {

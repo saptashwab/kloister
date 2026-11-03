@@ -8,6 +8,8 @@ import { ItemsApiService } from '../../core/items-api.service';
 import { ToastService } from '../../ui/toast.service';
 import { WorkApiService } from '../../core/work-api.service';
 import { WorkPage } from './work';
+import { Layout } from '../../core/layout';
+import { workFilterCount } from '../../core/work-logic';
 
 describe('WorkPage', () => {
   const page: UserWorkDto = {
@@ -225,5 +227,42 @@ describe('WorkPage', () => {
     expect(
       (root.querySelector('.card') as HTMLElement).style.getPropertyValue('--k-work-cover'),
     ).toBe('#123456');
+  });
+
+  describe('folding (v1.4.0)', () => {
+    afterEach(() => localStorage.removeItem('k-fold'));
+
+    it('counts only narrowing filters for the chip', () => {
+      const none = { source: 'ALL' as const, projectId: '', type: '', labelId: '', due: '' };
+      expect(workFilterCount(none)).toBe(0);
+      expect(workFilterCount({ ...none, source: 'PERSONAL', type: 'TASK', due: 'Today' })).toBe(3);
+    });
+
+    it('folds the header and filters into one slim row and keeps the fold button focused', async () => {
+      const { fixture, root } = await render('u1');
+      const button = (name: string) =>
+        root.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
+      expect(root.querySelector('.k-page-tools')).not.toBeNull();
+      const fold = button('Fold the header and filters')!;
+      fold.focus();
+      fold.click();
+      await settle(fixture);
+      expect(TestBed.inject(Layout).folded()).toBe(true);
+      expect(root.classList).toContain('k-folded');
+      expect(root.querySelector('.slim-name')?.textContent).toContain('My work');
+      expect(button('Keep the header and filters open')).toBe(fold);
+      expect(document.activeElement).toBe(fold);
+      // Export stays as an icon, the toolbar can be shown over the list.
+      expect(button('Export…')).not.toBeNull();
+      button('Show the toolbar')!.click();
+      await settle(fixture);
+      expect(root.classList).toContain('k-peek');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle(fixture);
+      expect(root.classList).not.toContain('k-peek');
+      fold.click();
+      await settle(fixture);
+      expect(root.querySelector('.slim-name')).toBeNull();
+    });
   });
 });

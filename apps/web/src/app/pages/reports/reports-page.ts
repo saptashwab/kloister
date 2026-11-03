@@ -138,11 +138,15 @@ export class ReportStyles {}
                 <b>{{ o.dueThisWeek }}</b
                 ><span>Due this week</span>
               </a>
-              <a class="r-tile" [routerLink]="backlogLink()">
+              <a
+                class="r-tile"
+                [routerLink]="backlogLink()"
+                [queryParams]="{ show: 'done-recent' }"
+              >
                 <b>{{ o.doneRecently }}</b
                 ><span>Done in the last 14 days</span>
               </a>
-              <a class="r-tile" [routerLink]="backlogLink()">
+              <a class="r-tile" [routerLink]="backlogLink()" [queryParams]="{ show: 'ad-hoc' }">
                 <b>{{ o.adHocOpen }}</b
                 ><span>Open ad-hoc items</span>
               </a>

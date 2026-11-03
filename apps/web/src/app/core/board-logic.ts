@@ -8,6 +8,7 @@ import {
   type ItemType,
   type MoveItemRequest,
   type ProjectMemberDto,
+  RECENT_DONE_DAYS,
   type SprintDto,
   SprintState,
   type UpdateItemRequest,
@@ -52,12 +53,60 @@ export const EMPTY_FILTER: BoardFilter = {
 };
 
 /**
+ * The backlog's "Show" filter (v1.4.0), matching two report tiles: items Done
+ * in the last {@link RECENT_DONE_DAYS} days, or open ad-hoc items. Empty
+ * shows everything. Also set from `?show=` in the backlog's address.
+ */
+export type BacklogShow = '' | 'done-recent' | 'ad-hoc';
+
+/** The backlog's filters: the board's plus "Show". */
+export interface BacklogFilter extends BoardFilter {
+  /** What the "Show" filter keeps. */
+  show: BacklogShow;
+}
+
+/** A backlog filter that shows everything. */
+export const EMPTY_BACKLOG_FILTER: BacklogFilter = { ...EMPTY_FILTER, show: '' };
+
+/**
+ * Reads `?show=` into a "Show" filter value.
+ *
+ * @param value The query parameter.
+ * @returns The value, or empty when it is not one.
+ */
+export function backlogShow(value: string | undefined): BacklogShow {
+  return value === 'done-recent' || value === 'ad-hoc' ? value : '';
+}
+
+/**
+ * Whether an item passes the backlog's "Show" filter, counted as the report
+ * tiles count it (the API's Overview report): Done with a completion within
+ * the last {@link RECENT_DONE_DAYS} days, or ad hoc and not Done.
+ *
+ * @param item The item.
+ * @param show The filter.
+ * @param now The current time in milliseconds.
+ * @returns True when it passes.
+ */
+export function matchesShow(item: WorkItemDto, show: BacklogShow, now: number): boolean {
+  if (show === 'done-recent') {
+    return (
+      item.status === ItemStatus.DONE &&
+      item.completedAt !== null &&
+      Date.parse(item.completedAt) >= now - RECENT_DONE_DAYS * 86_400_000
+    );
+  }
+  if (show === 'ad-hoc') return item.adHoc && item.status !== ItemStatus.DONE;
+  return true;
+}
+
+/**
  * How many board filters are set, for the folded header's chip (v1.4.0).
  *
  * @param filter The filters.
  * @returns The number of fields with a value.
  */
-export function activeFilterCount(filter: BoardFilter): number {
+export function activeFilterCount(filter: BoardFilter | BacklogFilter): number {
   return Object.values(filter).filter((v) => v !== '').length;
 }
 
@@ -120,9 +169,15 @@ export function isDueThisWeek(item: Pick<WorkItemDto, 'dueDate'>, today: string)
  * @param item The item.
  * @param filter The filters.
  * @param today `YYYY-MM-DD`, for the due filters.
+ * @param minutes Minutes after midnight now, for due times; the current time by default.
  * @returns True if the item passes every filter.
  */
-export function matchesFilter(item: WorkItemDto, filter: BoardFilter, today: string): boolean {
+export function matchesFilter(
+  item: WorkItemDto,
+  filter: BoardFilter,
+  today: string,
+  minutes: number = dueNow(new Date()).minutes,
+): boolean {
   if (filter.assigneeId === NONE && item.assigneeIds.length > 0) return false;
   if (
     filter.assigneeId &&
@@ -137,7 +192,7 @@ export function matchesFilter(item: WorkItemDto, filter: BoardFilter, today: str
     return false;
   }
   if (filter.type && item.type !== filter.type) return false;
-  if (filter.due === 'overdue' && !isOverdue(item, today)) return false;
+  if (filter.due === 'overdue' && !isOverdue(item, today, minutes)) return false;
   if (filter.due === 'week' && !isDueThisWeek(item, today)) return false;
   const text = filter.text.trim().toLowerCase();
   if (text && !item.title.toLowerCase().includes(text) && !item.key.toLowerCase().includes(text)) {

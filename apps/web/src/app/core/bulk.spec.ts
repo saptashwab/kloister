@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom, throwError } from 'rxjs';
 import { makeItem } from '../../testing/fixtures';
 import { NONE } from './board-logic';
-import { planBulk, runBulk } from './bulk';
+import { assertUndone, planBulk, runBulk, undoBulk } from './bulk';
 
 describe('bulk edits', () => {
   const rights = (assignOthers: boolean) => ({
@@ -148,5 +148,83 @@ describe('bulk edits', () => {
       [3, 's1'],
     ]);
     expect(result.failed).toEqual([{ item: items[1], message: 'Not your item' }]);
+  });
+
+  describe('undo (v1.4.0)', () => {
+    it('puts back exactly the fields the edit changed, per item', async () => {
+      const before = [
+        makeItem(1, { sprintId: 'old', priority: 3 }),
+        makeItem(2, { sprintId: null, priority: 1 }),
+      ];
+      const after = before.map((i) => ({ ...i, sprintId: 's1' }));
+      const calls: unknown[] = [];
+      const result = await undoBulk(new Map(before.map((i) => [i.id, i])), after, {
+        move: () => Promise.reject(new Error('no move expected')),
+        update: (item, request) => {
+          calls.push([item.number, request]);
+          return Promise.resolve({ ...item, ...request } as typeof item);
+        },
+      });
+      expect(calls).toEqual([
+        [1, { sprintId: 'old' }],
+        [2, { sprintId: null }],
+      ]);
+      expect(result.updated.map((i) => i.sprintId)).toEqual(['old', null]);
+      expect(() => assertUndone(result)).not.toThrow();
+    });
+
+    it('moves a card back to its bucket first, then restores a status an entry rule changed', async () => {
+      const was = makeItem(1, { bucketId: 'b1', status: 'NOT_STARTED' });
+      const after = { ...was, bucketId: 'b2', status: 'IN_PROGRESS' as const };
+      const calls: string[] = [];
+      await undoBulk(new Map([[was.id, was]]), [after], {
+        move: (item, request) => {
+          calls.push(`move ${request.bucketId}`);
+          // The old bucket's rule leaves the status as it is.
+          return Promise.resolve({ ...item, bucketId: request.bucketId ?? null });
+        },
+        update: (item, request) => {
+          calls.push(`status ${request.status}`);
+          return Promise.resolve({ ...item, ...request } as typeof item);
+        },
+      });
+      expect(calls).toEqual(['move b1', 'status NOT_STARTED']);
+    });
+
+    it('puts a type back before taking an item off the board again', async () => {
+      const was = makeItem(1, { type: 'FEATURE', bucketId: null });
+      const after = { ...was, type: 'TASK' as const, bucketId: 'b1' };
+      const calls: string[] = [];
+      await undoBulk(new Map([[was.id, was]]), [after], {
+        move: (item, request) => {
+          calls.push(`move ${request.bucketId}`);
+          return Promise.resolve({ ...item, bucketId: request.bucketId ?? null });
+        },
+        update: (item, request) => {
+          calls.push(`type ${request.type}`);
+          return Promise.resolve({ ...item, ...request } as typeof item);
+        },
+      });
+      expect(calls).toEqual(['type FEATURE', 'move null']);
+    });
+
+    it('reports items the API refused to put back', async () => {
+      const was = makeItem(1, { priority: 3 });
+      const result = await undoBulk(new Map([[was.id, was]]), [{ ...was, priority: 1 }], {
+        move: () => Promise.reject(new Error('unused')),
+        update: () =>
+          firstValueFrom(
+            throwError(
+              () =>
+                new HttpErrorResponse({
+                  status: 403,
+                  error: { code: 'FORBIDDEN', message: 'Not your item' },
+                }),
+            ),
+          ),
+      });
+      expect(result.failed.map((f) => f.message)).toEqual(['Not your item']);
+      expect(() => assertUndone(result)).toThrow(/KLO-1 \(Not your item\)/);
+    });
   });
 });

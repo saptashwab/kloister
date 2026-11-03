@@ -259,7 +259,9 @@ keys always use the bundled JetBrains Mono.
   are one button whose name, icon and `aria-expanded` change, so focus stays on it; a peeking toolbar folds again
   on Escape (unless a list, menu or dialog is open), a press elsewhere or focus moving past it. Below 1024 px the slim row wraps the
   tabs onto their own line. Selection bars are separate from the toolbar and stay visible. Ctrl+\ folds or
-  unfolds the sidebar and header together; both choices are remembered per browser.
+  unfolds the sidebar and header together; both choices are remembered per browser. My work folds the same way
+  (its title, Export… and the same controls in one row; its filter rows peek over the list). The behaviour
+  lives in `ui/fold.ts` (`FoldHost` on the page, `app-fold-controls` at the end of its header row).
 - **Board toolbar**: sprint chip (current sprint, primary soft), filter chips (dashed when empty: Assignee, Label,
   Type, Due), the quick person filter (overlapping avatars of project members), then "Group by" as a segmented
   control (Bucket, Status, Assignee, Sprint).
@@ -303,7 +305,9 @@ columns show a dashed note ("No cards for Mia Member here").
 - A 640 px drawer from the right (full width on phones) over `--k-scrim`, deep-linkable (SPEC §6). The board stays
   visible and loaded behind it.
 - **Top bar**: ancestor breadcrumb (type icon, key, title; links when visible, plain titles otherwise, as decided
-  in M4), then Copy link, More actions (delete and others) and Close (Esc).
+  in M4), then Copy link (the item's own address with the app prefix, whatever view it is open in; toast "Link
+  copied"), More actions (delete and others) and Close (Esc). Board cards carry the same link button beside
+  Duplicate (v1.4.0).
 - **Heading**: type tile with key and type, the title as a 24 px heading that becomes a text field on click, then
   two large pills: status (with its icon and colour) and bucket.
 - **Fields**: a two-column list (116 px labels) of Assignees, Labels, Sprint (with dates and state), Priority,
@@ -330,7 +334,9 @@ columns show a dashed note ("No cards for Mia Member here").
 - **Toasts** (bottom left, `--k-toast`, `role="status"`): a short sentence of what happened ("KLO-14 moved to In
   Progress · status set to In progress") with an **Undo** action for reversible changes. They stay 6 s, longer
   while hovered or focused; Undo sends the inverse change. Errors use the same toast with the API's reason and no
-  Undo; one toast at a time, the newest replacing the last.
+  Undo; one toast at a time, the newest replacing the last. Bulk edits (backlog bulk bar, timeline selection) say
+  "N items updated" with an Undo that puts every changed item back; items it cannot put back are named in an
+  error toast (v1.4.0).
 - **Confirm dialogs** replace every browser `confirm()` / `alert()`: a titled dialog naming the thing and the
   consequence ("Delete KLO-4 and its 3 children?"), a destructive button in danger colours on the right and
   Cancel, which has initial focus. Focus is trapped and returns to the trigger.
@@ -575,7 +581,10 @@ The approved mockups (layout A, spreadsheet first) set the look; docs/M9-PLAN.md
   parent has its own dates, a dashed outline behind it. One-date items show a diamond marker.
 - **Scale.** Week zoom draws days (22 px) with weekends shaded; month zoom draws weeks; quarter zoom
   months. Sprint bands sit at the top of the header; they become buttons that assign the selected
-  rows while a selection exists. The today line is the primary colour at 55 % opacity.
+  rows while a selection exists. The today line (v1.4.0) is a solid `--k-primary` line of `--k-focus-width`
+  through the bars and the scale header, with a small "Today" tag in `--k-primary` / `--k-on-primary` at the
+  bottom of the header. The timeline opens with today in view, or at the plan start when the plan lies wholly
+  before or after today.
 - **Selection bar.** The backlog's bulk bar look: sprint, assign and status selects, outline and link
   buttons, and More… for the rest. Results show as a status line with per-row reasons.
 - **Phone.** Below 600 px the timeline is a list of cards with dates and durations and no bars.

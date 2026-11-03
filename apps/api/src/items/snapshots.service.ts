@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import type { ReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import { Injectable } from '@nestjs/common';
-import { inlineImagePath, withShare, type WorkItemDto } from '@kloister/shared';
+import { inlineImagePath, RECENT_DONE_DAYS, withShare, type WorkItemDto } from '@kloister/shared';
 import type { AuthContext } from '../auth/auth-context.js';
 import { invalidField } from '../common/api-exception.js';
 import { rewriteImages } from './snapshot-images.js';
@@ -58,6 +58,7 @@ export class SnapshotsService {
   async preview(auth: AuthContext, query: SnapshotQueryDto, project?: ProjectAccess) {
     const entries: { access: ProjectAccess; item: WorkItemDto }[] = [];
     const filters = query.scope === 'all' ? {} : query;
+    const now = Date.now();
     let cursor: string | undefined;
     if (project !== undefined) {
       do {
@@ -93,7 +94,8 @@ export class SnapshotsService {
             ({ item }) =>
               (query.boardOnly !== true || item.bucketId !== null) &&
               (query.unassigned !== true || item.assigneeIds.length === 0) &&
-              (query.dueGroup === undefined || inDueGroup(item, query.dueGroup, query.today)),
+              (query.dueGroup === undefined || inDueGroup(item, query.dueGroup, query.today)) &&
+              matchesShow(item, query.show, now),
           );
     return {
       entries: selected,
@@ -148,6 +150,8 @@ export class SnapshotsService {
     if (query.dueTo) names.push(`Due through: ${query.dueTo}`);
     if (query.boardOnly) names.push('On-board items only');
     if (query.unassigned) names.push('Unassigned only');
+    if (query.show === 'done-recent') names.push(`Done in the last ${RECENT_DONE_DAYS} days`);
+    if (query.show === 'ad-hoc') names.push('Open ad-hoc items');
     const lookup = (id: string) =>
       ({ where: { id, projectId: { in: projectIds } }, select: { name: true } }) as const;
     for (const [field, title, find] of [
@@ -505,6 +509,29 @@ export class SnapshotsService {
  */
 function offlineDocument(body: string): string {
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>Work snapshot</title><body>${body}</body></html>`;
+}
+
+/**
+ * Matches the backlog's "Show" filter (v1.4.0) as the Overview report counts:
+ * Done within the last {@link RECENT_DONE_DAYS} days, or open and ad hoc.
+ * @param item Readable item.
+ * @param show The filter, or undefined for everything.
+ * @param now The current time in milliseconds.
+ * @returns Whether the item passes.
+ */
+function matchesShow(
+  item: WorkItemDto,
+  show: 'done-recent' | 'ad-hoc' | undefined,
+  now: number,
+): boolean {
+  if (show === 'done-recent')
+    return (
+      item.status === 'DONE' &&
+      item.completedAt !== null &&
+      Date.parse(item.completedAt) >= now - RECENT_DONE_DAYS * 86_400_000
+    );
+  if (show === 'ad-hoc') return item.adHoc && item.status !== 'DONE';
+  return true;
 }
 
 /**

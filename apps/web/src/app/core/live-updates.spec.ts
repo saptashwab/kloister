@@ -395,6 +395,36 @@ describe('LiveService', () => {
     live.stop();
   });
 
+  it('follows another person’s work and again after reconnecting (v1.4.0)', async () => {
+    vi.useFakeTimers();
+    const { live, http } = setup();
+    live.followWork('u2');
+    live.start();
+    http.expectOne('api/v1/events/status').flush({ enabled: true });
+    await vi.advanceTimersByTimeAsync(0);
+    FakeSource.last!.emit(LiveEvent.HELLO, { streamId: 's1' });
+    await vi.advanceTimersByTimeAsync(0);
+    http.expectOne('api/v1/events/s1/project').flush(null);
+    await vi.advanceTimersByTimeAsync(0);
+    const first = http.expectOne('api/v1/events/s1/work');
+    expect(first.request.method).toBe('PUT');
+    expect(first.request.body).toEqual({ userId: 'u2' });
+    first.flush(null);
+    // A new stream follows the same person again.
+    FakeSource.last!.emit(LiveEvent.HELLO, { streamId: 's2' });
+    await vi.advanceTimersByTimeAsync(0);
+    http.expectOne('api/v1/events/s2/project').flush(null);
+    await vi.advanceTimersByTimeAsync(0);
+    const again = http.expectOne('api/v1/events/s2/work');
+    expect(again.request.body).toEqual({ userId: 'u2' });
+    again.flush(null);
+    // Leaving the page stops it.
+    live.followWork(null);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(http.expectOne('api/v1/events/s2/work').request.body).toEqual({ userId: null });
+    live.stop();
+  });
+
   it('shows reconnecting when the browser goes offline and reconnects when it is back', async () => {
     vi.useFakeTimers();
     const { live, http } = setup();

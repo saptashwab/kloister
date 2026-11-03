@@ -53,6 +53,10 @@ day toward the span and adds nothing to the work total. Typing a duration sets t
   - `keep` leaves the pin; `set` pins the new start; `remove` clears it and moves the item to its
     earliest start;
   - an exact `pinTo` (used by Undo) replaces whatever the rule decided.
+- Orphaned pins (v1.4.0): under `auto`, a requested change whose item has no start or no visible
+  predecessor drops its pin. The API also drops it when an item update leaves the item without a start
+  (`ItemsService.update`) and when the last predecessor link the caller can see is removed
+  (`DependenciesService.remove`); each is audited as a `startNoEarlierThan` change.
 
 ## The planner
 

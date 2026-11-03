@@ -27,6 +27,19 @@ export class TimelineGridStyles {}
 export class TimelineBarStyles {}
 
 /**
+ * The timeline's day marks: the today line across the scale and bars
+ * (v1.4.0) and holiday shading (M9.1), loaded with the timeline route.
+ */
+@Component({
+  selector: 'app-timeline-mark-styles',
+  template: '',
+  styleUrl: '../../../styles/_timeline-marks.scss',
+  encapsulation: ViewEncapsulation.None,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class TimelineMarkStyles {}
+
+/**
  * The timeline toolbar, selection bar and plan strip styles, loaded with the
  * timeline route (SPEC §6.4).
  */

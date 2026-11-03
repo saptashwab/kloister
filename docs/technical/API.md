@@ -353,33 +353,34 @@ Previews only the caller's eligible work.
 
 **Permission:** Any signed-in user.
 
-| Parameter        | In    | Type                                                          | Required | Description                                                                                                             |
-| ---------------- | ----- | ------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `cursor`         | query | string (uuid)                                                 | no       | Id of the last item already received.                                                                                   |
-| `limit`          | query | number                                                        | no       | Page size, 1 to {@link MAX_PAGE_LIMIT}.                                                                                 |
-| `type`           | query | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`           | no       | Only this type.                                                                                                         |
-| `status`         | query | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`       | no       | Only this status.                                                                                                       |
-| `bucketId`       | query | string                                                        | no       | Only this bucket, or `none`.                                                                                            |
-| `sprintId`       | query | string                                                        | no       | Only this sprint, or `none` (backlog).                                                                                  |
-| `teamId`         | query | string                                                        | no       | Only this team, or `none`.                                                                                              |
-| `parentId`       | query | string                                                        | no       | Only children of this item, or `none` for top-level items.                                                              |
-| `assigneeId`     | query | string (uuid)                                                 | no       | Only items assigned to this user.                                                                                       |
-| `labelId`        | query | string (uuid)                                                 | no       | Only items with this label.                                                                                             |
-| `dueFrom`        | query | string                                                        | no       | Due on or after this date.                                                                                              |
-| `dueTo`          | query | string                                                        | no       | Due on or before this date.                                                                                             |
-| `ids`            | query | string (uuid)[]                                               | no       | Only these items: comma-separated uuids, at most {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10). |
-| `q`              | query | string                                                        | no       | Case-insensitive title search; a number also matches the item number.                                                   |
-| `sort`           | query | `"number"`, `"position"`                                      | no       | `number` (default) or `position` (board order).                                                                         |
-| `boardOnly`      | query | boolean                                                       | no       | Filtered board shows only items on a board; all-eligible includes off-board items.                                      |
-| `unassigned`     | query | boolean                                                       | no       | Filtered board's unassigned chip.                                                                                       |
-| `scope`          | query | `"filtered"`, `"all"`                                         | no       | Filtered screen or every eligible item from the same source.                                                            |
-| `offline`        | query | boolean                                                       | no       | Include permitted files and original rich text for offline reading.                                                     |
-| `source`         | query | `"ALL"`, `"PROJECTS"`, `"PERSONAL"`                           | no       | My work source retained in both scope modes.                                                                            |
-| `includeCreated` | query | boolean                                                       | no       | My work's created-item option, retained in both scope modes.                                                            |
-| `includeDone`    | query | boolean                                                       | no       | My work's Done option, retained in both scope modes.                                                                    |
-| `projectId`      | query | string (uuid)                                                 | no       | Narrow My work to a project.                                                                                            |
-| `dueGroup`       | query | `"Overdue"`, `"Today"`, `"This week"`, `"Later"`, `"No date"` | no       | Named due group from the work screen.                                                                                   |
-| `today`          | query | string                                                        | no       | Viewer's calendar day used for work due grouping.                                                                       |
+| Parameter        | In    | Type                                                          | Required | Description                                                                                                                     |
+| ---------------- | ----- | ------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `cursor`         | query | string (uuid)                                                 | no       | Id of the last item already received.                                                                                           |
+| `limit`          | query | number                                                        | no       | Page size, 1 to {@link MAX_PAGE_LIMIT}.                                                                                         |
+| `type`           | query | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`           | no       | Only this type.                                                                                                                 |
+| `status`         | query | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`       | no       | Only this status.                                                                                                               |
+| `bucketId`       | query | string                                                        | no       | Only this bucket, or `none`.                                                                                                    |
+| `sprintId`       | query | string                                                        | no       | Only this sprint, or `none` (backlog).                                                                                          |
+| `teamId`         | query | string                                                        | no       | Only this team, or `none`.                                                                                                      |
+| `parentId`       | query | string                                                        | no       | Only children of this item, or `none` for top-level items.                                                                      |
+| `assigneeId`     | query | string (uuid)                                                 | no       | Only items assigned to this user.                                                                                               |
+| `labelId`        | query | string (uuid)                                                 | no       | Only items with this label.                                                                                                     |
+| `dueFrom`        | query | string                                                        | no       | Due on or after this date.                                                                                                      |
+| `dueTo`          | query | string                                                        | no       | Due on or before this date.                                                                                                     |
+| `ids`            | query | string (uuid)[]                                               | no       | Only these items: comma-separated uuids, at most {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).         |
+| `q`              | query | string                                                        | no       | Case-insensitive title search; a number also matches the item number.                                                           |
+| `sort`           | query | `"number"`, `"position"`                                      | no       | `number` (default) or `position` (board order).                                                                                 |
+| `boardOnly`      | query | boolean                                                       | no       | Filtered board shows only items on a board; all-eligible includes off-board items.                                              |
+| `unassigned`     | query | boolean                                                       | no       | Filtered board's unassigned chip.                                                                                               |
+| `scope`          | query | `"filtered"`, `"all"`                                         | no       | Filtered screen or every eligible item from the same source.                                                                    |
+| `offline`        | query | boolean                                                       | no       | Include permitted files and original rich text for offline reading.                                                             |
+| `source`         | query | `"ALL"`, `"PROJECTS"`, `"PERSONAL"`                           | no       | My work source retained in both scope modes.                                                                                    |
+| `includeCreated` | query | boolean                                                       | no       | My work's created-item option, retained in both scope modes.                                                                    |
+| `includeDone`    | query | boolean                                                       | no       | My work's Done option, retained in both scope modes.                                                                            |
+| `projectId`      | query | string (uuid)                                                 | no       | Narrow My work to a project.                                                                                                    |
+| `dueGroup`       | query | `"Overdue"`, `"Today"`, `"This week"`, `"Later"`, `"No date"` | no       | Named due group from the work screen.                                                                                           |
+| `today`          | query | string                                                        | no       | Viewer's calendar day used for work due grouping.                                                                               |
+| `show`           | query | `"done-recent"`, `"ad-hoc"`                                   | no       | The backlog's "Show" filter (v1.4.0): items Done in the last 14 days, or open ad-hoc items, as the Overview report counts them. |
 
 **Responses**
 
@@ -403,33 +404,34 @@ Downloads only work currently eligible for the caller.
 
 **Permission:** Any signed-in user.
 
-| Parameter        | In    | Type                                                          | Required | Description                                                                                                             |
-| ---------------- | ----- | ------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `cursor`         | query | string (uuid)                                                 | no       | Id of the last item already received.                                                                                   |
-| `limit`          | query | number                                                        | no       | Page size, 1 to {@link MAX_PAGE_LIMIT}.                                                                                 |
-| `type`           | query | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`           | no       | Only this type.                                                                                                         |
-| `status`         | query | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`       | no       | Only this status.                                                                                                       |
-| `bucketId`       | query | string                                                        | no       | Only this bucket, or `none`.                                                                                            |
-| `sprintId`       | query | string                                                        | no       | Only this sprint, or `none` (backlog).                                                                                  |
-| `teamId`         | query | string                                                        | no       | Only this team, or `none`.                                                                                              |
-| `parentId`       | query | string                                                        | no       | Only children of this item, or `none` for top-level items.                                                              |
-| `assigneeId`     | query | string (uuid)                                                 | no       | Only items assigned to this user.                                                                                       |
-| `labelId`        | query | string (uuid)                                                 | no       | Only items with this label.                                                                                             |
-| `dueFrom`        | query | string                                                        | no       | Due on or after this date.                                                                                              |
-| `dueTo`          | query | string                                                        | no       | Due on or before this date.                                                                                             |
-| `ids`            | query | string (uuid)[]                                               | no       | Only these items: comma-separated uuids, at most {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10). |
-| `q`              | query | string                                                        | no       | Case-insensitive title search; a number also matches the item number.                                                   |
-| `sort`           | query | `"number"`, `"position"`                                      | no       | `number` (default) or `position` (board order).                                                                         |
-| `boardOnly`      | query | boolean                                                       | no       | Filtered board shows only items on a board; all-eligible includes off-board items.                                      |
-| `unassigned`     | query | boolean                                                       | no       | Filtered board's unassigned chip.                                                                                       |
-| `scope`          | query | `"filtered"`, `"all"`                                         | no       | Filtered screen or every eligible item from the same source.                                                            |
-| `offline`        | query | boolean                                                       | no       | Include permitted files and original rich text for offline reading.                                                     |
-| `source`         | query | `"ALL"`, `"PROJECTS"`, `"PERSONAL"`                           | no       | My work source retained in both scope modes.                                                                            |
-| `includeCreated` | query | boolean                                                       | no       | My work's created-item option, retained in both scope modes.                                                            |
-| `includeDone`    | query | boolean                                                       | no       | My work's Done option, retained in both scope modes.                                                                    |
-| `projectId`      | query | string (uuid)                                                 | no       | Narrow My work to a project.                                                                                            |
-| `dueGroup`       | query | `"Overdue"`, `"Today"`, `"This week"`, `"Later"`, `"No date"` | no       | Named due group from the work screen.                                                                                   |
-| `today`          | query | string                                                        | no       | Viewer's calendar day used for work due grouping.                                                                       |
+| Parameter        | In    | Type                                                          | Required | Description                                                                                                                     |
+| ---------------- | ----- | ------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `cursor`         | query | string (uuid)                                                 | no       | Id of the last item already received.                                                                                           |
+| `limit`          | query | number                                                        | no       | Page size, 1 to {@link MAX_PAGE_LIMIT}.                                                                                         |
+| `type`           | query | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`           | no       | Only this type.                                                                                                                 |
+| `status`         | query | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`       | no       | Only this status.                                                                                                               |
+| `bucketId`       | query | string                                                        | no       | Only this bucket, or `none`.                                                                                                    |
+| `sprintId`       | query | string                                                        | no       | Only this sprint, or `none` (backlog).                                                                                          |
+| `teamId`         | query | string                                                        | no       | Only this team, or `none`.                                                                                                      |
+| `parentId`       | query | string                                                        | no       | Only children of this item, or `none` for top-level items.                                                                      |
+| `assigneeId`     | query | string (uuid)                                                 | no       | Only items assigned to this user.                                                                                               |
+| `labelId`        | query | string (uuid)                                                 | no       | Only items with this label.                                                                                                     |
+| `dueFrom`        | query | string                                                        | no       | Due on or after this date.                                                                                                      |
+| `dueTo`          | query | string                                                        | no       | Due on or before this date.                                                                                                     |
+| `ids`            | query | string (uuid)[]                                               | no       | Only these items: comma-separated uuids, at most {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).         |
+| `q`              | query | string                                                        | no       | Case-insensitive title search; a number also matches the item number.                                                           |
+| `sort`           | query | `"number"`, `"position"`                                      | no       | `number` (default) or `position` (board order).                                                                                 |
+| `boardOnly`      | query | boolean                                                       | no       | Filtered board shows only items on a board; all-eligible includes off-board items.                                              |
+| `unassigned`     | query | boolean                                                       | no       | Filtered board's unassigned chip.                                                                                               |
+| `scope`          | query | `"filtered"`, `"all"`                                         | no       | Filtered screen or every eligible item from the same source.                                                                    |
+| `offline`        | query | boolean                                                       | no       | Include permitted files and original rich text for offline reading.                                                             |
+| `source`         | query | `"ALL"`, `"PROJECTS"`, `"PERSONAL"`                           | no       | My work source retained in both scope modes.                                                                                    |
+| `includeCreated` | query | boolean                                                       | no       | My work's created-item option, retained in both scope modes.                                                                    |
+| `includeDone`    | query | boolean                                                       | no       | My work's Done option, retained in both scope modes.                                                                            |
+| `projectId`      | query | string (uuid)                                                 | no       | Narrow My work to a project.                                                                                                    |
+| `dueGroup`       | query | `"Overdue"`, `"Today"`, `"This week"`, `"Later"`, `"No date"` | no       | Named due group from the work screen.                                                                                           |
+| `today`          | query | string                                                        | no       | Viewer's calendar day used for work due grouping.                                                                               |
+| `show`           | query | `"done-recent"`, `"ad-hoc"`                                   | no       | The backlog's "Show" filter (v1.4.0): items Done in the last 14 days, or open ad-hoc items, as the Overview report counts them. |
 
 **Responses**
 
@@ -2110,33 +2112,34 @@ Previews every eligible page without exporting unreadable content.
 
 **Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.
 
-| Parameter        | In    | Type                                                          | Required | Description                                                                                                             |
-| ---------------- | ----- | ------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `cursor`         | query | string (uuid)                                                 | no       | Id of the last item already received.                                                                                   |
-| `limit`          | query | number                                                        | no       | Page size, 1 to {@link MAX_PAGE_LIMIT}.                                                                                 |
-| `type`           | query | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`           | no       | Only this type.                                                                                                         |
-| `status`         | query | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`       | no       | Only this status.                                                                                                       |
-| `bucketId`       | query | string                                                        | no       | Only this bucket, or `none`.                                                                                            |
-| `sprintId`       | query | string                                                        | no       | Only this sprint, or `none` (backlog).                                                                                  |
-| `teamId`         | query | string                                                        | no       | Only this team, or `none`.                                                                                              |
-| `parentId`       | query | string                                                        | no       | Only children of this item, or `none` for top-level items.                                                              |
-| `assigneeId`     | query | string (uuid)                                                 | no       | Only items assigned to this user.                                                                                       |
-| `labelId`        | query | string (uuid)                                                 | no       | Only items with this label.                                                                                             |
-| `dueFrom`        | query | string                                                        | no       | Due on or after this date.                                                                                              |
-| `dueTo`          | query | string                                                        | no       | Due on or before this date.                                                                                             |
-| `ids`            | query | string (uuid)[]                                               | no       | Only these items: comma-separated uuids, at most {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10). |
-| `q`              | query | string                                                        | no       | Case-insensitive title search; a number also matches the item number.                                                   |
-| `sort`           | query | `"number"`, `"position"`                                      | no       | `number` (default) or `position` (board order).                                                                         |
-| `boardOnly`      | query | boolean                                                       | no       | Filtered board shows only items on a board; all-eligible includes off-board items.                                      |
-| `unassigned`     | query | boolean                                                       | no       | Filtered board's unassigned chip.                                                                                       |
-| `scope`          | query | `"filtered"`, `"all"`                                         | no       | Filtered screen or every eligible item from the same source.                                                            |
-| `offline`        | query | boolean                                                       | no       | Include permitted files and original rich text for offline reading.                                                     |
-| `source`         | query | `"ALL"`, `"PROJECTS"`, `"PERSONAL"`                           | no       | My work source retained in both scope modes.                                                                            |
-| `includeCreated` | query | boolean                                                       | no       | My work's created-item option, retained in both scope modes.                                                            |
-| `includeDone`    | query | boolean                                                       | no       | My work's Done option, retained in both scope modes.                                                                    |
-| `projectId`      | query | string (uuid)                                                 | no       | Narrow My work to a project.                                                                                            |
-| `dueGroup`       | query | `"Overdue"`, `"Today"`, `"This week"`, `"Later"`, `"No date"` | no       | Named due group from the work screen.                                                                                   |
-| `today`          | query | string                                                        | no       | Viewer's calendar day used for work due grouping.                                                                       |
+| Parameter        | In    | Type                                                          | Required | Description                                                                                                                     |
+| ---------------- | ----- | ------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `cursor`         | query | string (uuid)                                                 | no       | Id of the last item already received.                                                                                           |
+| `limit`          | query | number                                                        | no       | Page size, 1 to {@link MAX_PAGE_LIMIT}.                                                                                         |
+| `type`           | query | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`           | no       | Only this type.                                                                                                                 |
+| `status`         | query | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`       | no       | Only this status.                                                                                                               |
+| `bucketId`       | query | string                                                        | no       | Only this bucket, or `none`.                                                                                                    |
+| `sprintId`       | query | string                                                        | no       | Only this sprint, or `none` (backlog).                                                                                          |
+| `teamId`         | query | string                                                        | no       | Only this team, or `none`.                                                                                                      |
+| `parentId`       | query | string                                                        | no       | Only children of this item, or `none` for top-level items.                                                                      |
+| `assigneeId`     | query | string (uuid)                                                 | no       | Only items assigned to this user.                                                                                               |
+| `labelId`        | query | string (uuid)                                                 | no       | Only items with this label.                                                                                                     |
+| `dueFrom`        | query | string                                                        | no       | Due on or after this date.                                                                                                      |
+| `dueTo`          | query | string                                                        | no       | Due on or before this date.                                                                                                     |
+| `ids`            | query | string (uuid)[]                                               | no       | Only these items: comma-separated uuids, at most {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).         |
+| `q`              | query | string                                                        | no       | Case-insensitive title search; a number also matches the item number.                                                           |
+| `sort`           | query | `"number"`, `"position"`                                      | no       | `number` (default) or `position` (board order).                                                                                 |
+| `boardOnly`      | query | boolean                                                       | no       | Filtered board shows only items on a board; all-eligible includes off-board items.                                              |
+| `unassigned`     | query | boolean                                                       | no       | Filtered board's unassigned chip.                                                                                               |
+| `scope`          | query | `"filtered"`, `"all"`                                         | no       | Filtered screen or every eligible item from the same source.                                                                    |
+| `offline`        | query | boolean                                                       | no       | Include permitted files and original rich text for offline reading.                                                             |
+| `source`         | query | `"ALL"`, `"PROJECTS"`, `"PERSONAL"`                           | no       | My work source retained in both scope modes.                                                                                    |
+| `includeCreated` | query | boolean                                                       | no       | My work's created-item option, retained in both scope modes.                                                                    |
+| `includeDone`    | query | boolean                                                       | no       | My work's Done option, retained in both scope modes.                                                                            |
+| `projectId`      | query | string (uuid)                                                 | no       | Narrow My work to a project.                                                                                                    |
+| `dueGroup`       | query | `"Overdue"`, `"Today"`, `"This week"`, `"Later"`, `"No date"` | no       | Named due group from the work screen.                                                                                           |
+| `today`          | query | string                                                        | no       | Viewer's calendar day used for work due grouping.                                                                               |
+| `show`           | query | `"done-recent"`, `"ad-hoc"`                                   | no       | The backlog's "Show" filter (v1.4.0): items Done in the last 14 days, or open ad-hoc items, as the Overview report counts them. |
 
 **Responses**
 
@@ -2160,33 +2163,34 @@ Downloads a readable snapshot; the API rechecks the scope on every request.
 
 **Permission:** Project member with `VIEW_ITEMS` (PM, LEAD, MEMBER, VIEWER; system administrators in every ordinary project). Non-members get 404.
 
-| Parameter        | In    | Type                                                          | Required | Description                                                                                                             |
-| ---------------- | ----- | ------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `cursor`         | query | string (uuid)                                                 | no       | Id of the last item already received.                                                                                   |
-| `limit`          | query | number                                                        | no       | Page size, 1 to {@link MAX_PAGE_LIMIT}.                                                                                 |
-| `type`           | query | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`           | no       | Only this type.                                                                                                         |
-| `status`         | query | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`       | no       | Only this status.                                                                                                       |
-| `bucketId`       | query | string                                                        | no       | Only this bucket, or `none`.                                                                                            |
-| `sprintId`       | query | string                                                        | no       | Only this sprint, or `none` (backlog).                                                                                  |
-| `teamId`         | query | string                                                        | no       | Only this team, or `none`.                                                                                              |
-| `parentId`       | query | string                                                        | no       | Only children of this item, or `none` for top-level items.                                                              |
-| `assigneeId`     | query | string (uuid)                                                 | no       | Only items assigned to this user.                                                                                       |
-| `labelId`        | query | string (uuid)                                                 | no       | Only items with this label.                                                                                             |
-| `dueFrom`        | query | string                                                        | no       | Due on or after this date.                                                                                              |
-| `dueTo`          | query | string                                                        | no       | Due on or before this date.                                                                                             |
-| `ids`            | query | string (uuid)[]                                               | no       | Only these items: comma-separated uuids, at most {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10). |
-| `q`              | query | string                                                        | no       | Case-insensitive title search; a number also matches the item number.                                                   |
-| `sort`           | query | `"number"`, `"position"`                                      | no       | `number` (default) or `position` (board order).                                                                         |
-| `boardOnly`      | query | boolean                                                       | no       | Filtered board shows only items on a board; all-eligible includes off-board items.                                      |
-| `unassigned`     | query | boolean                                                       | no       | Filtered board's unassigned chip.                                                                                       |
-| `scope`          | query | `"filtered"`, `"all"`                                         | no       | Filtered screen or every eligible item from the same source.                                                            |
-| `offline`        | query | boolean                                                       | no       | Include permitted files and original rich text for offline reading.                                                     |
-| `source`         | query | `"ALL"`, `"PROJECTS"`, `"PERSONAL"`                           | no       | My work source retained in both scope modes.                                                                            |
-| `includeCreated` | query | boolean                                                       | no       | My work's created-item option, retained in both scope modes.                                                            |
-| `includeDone`    | query | boolean                                                       | no       | My work's Done option, retained in both scope modes.                                                                    |
-| `projectId`      | query | string (uuid)                                                 | no       | Narrow My work to a project.                                                                                            |
-| `dueGroup`       | query | `"Overdue"`, `"Today"`, `"This week"`, `"Later"`, `"No date"` | no       | Named due group from the work screen.                                                                                   |
-| `today`          | query | string                                                        | no       | Viewer's calendar day used for work due grouping.                                                                       |
+| Parameter        | In    | Type                                                          | Required | Description                                                                                                                     |
+| ---------------- | ----- | ------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `cursor`         | query | string (uuid)                                                 | no       | Id of the last item already received.                                                                                           |
+| `limit`          | query | number                                                        | no       | Page size, 1 to {@link MAX_PAGE_LIMIT}.                                                                                         |
+| `type`           | query | `"EPIC"`, `"FEATURE"`, `"STORY"`, `"TASK"`, `"BUG"`           | no       | Only this type.                                                                                                                 |
+| `status`         | query | `"NOT_STARTED"`, `"IN_PROGRESS"`, `"BLOCKED"`, `"DONE"`       | no       | Only this status.                                                                                                               |
+| `bucketId`       | query | string                                                        | no       | Only this bucket, or `none`.                                                                                                    |
+| `sprintId`       | query | string                                                        | no       | Only this sprint, or `none` (backlog).                                                                                          |
+| `teamId`         | query | string                                                        | no       | Only this team, or `none`.                                                                                                      |
+| `parentId`       | query | string                                                        | no       | Only children of this item, or `none` for top-level items.                                                                      |
+| `assigneeId`     | query | string (uuid)                                                 | no       | Only items assigned to this user.                                                                                               |
+| `labelId`        | query | string (uuid)                                                 | no       | Only items with this label.                                                                                                     |
+| `dueFrom`        | query | string                                                        | no       | Due on or after this date.                                                                                                      |
+| `dueTo`          | query | string                                                        | no       | Due on or before this date.                                                                                                     |
+| `ids`            | query | string (uuid)[]                                               | no       | Only these items: comma-separated uuids, at most {@link ITEM_IDS_FILTER_MAX} (live updates refetch changed items, M10).         |
+| `q`              | query | string                                                        | no       | Case-insensitive title search; a number also matches the item number.                                                           |
+| `sort`           | query | `"number"`, `"position"`                                      | no       | `number` (default) or `position` (board order).                                                                                 |
+| `boardOnly`      | query | boolean                                                       | no       | Filtered board shows only items on a board; all-eligible includes off-board items.                                              |
+| `unassigned`     | query | boolean                                                       | no       | Filtered board's unassigned chip.                                                                                               |
+| `scope`          | query | `"filtered"`, `"all"`                                         | no       | Filtered screen or every eligible item from the same source.                                                                    |
+| `offline`        | query | boolean                                                       | no       | Include permitted files and original rich text for offline reading.                                                             |
+| `source`         | query | `"ALL"`, `"PROJECTS"`, `"PERSONAL"`                           | no       | My work source retained in both scope modes.                                                                                    |
+| `includeCreated` | query | boolean                                                       | no       | My work's created-item option, retained in both scope modes.                                                                    |
+| `includeDone`    | query | boolean                                                       | no       | My work's Done option, retained in both scope modes.                                                                            |
+| `projectId`      | query | string (uuid)                                                 | no       | Narrow My work to a project.                                                                                                    |
+| `dueGroup`       | query | `"Overdue"`, `"Today"`, `"This week"`, `"Later"`, `"No date"` | no       | Named due group from the work screen.                                                                                           |
+| `today`          | query | string                                                        | no       | Viewer's calendar day used for work due grouping.                                                                               |
+| `show`           | query | `"done-recent"`, `"ad-hoc"`                                   | no       | The backlog's "Show" filter (v1.4.0): items Done in the last 14 days, or open ad-hoc items, as the Overview report counts them. |
 
 **Responses**
 
@@ -2573,6 +2577,25 @@ Follows a project with the stream, or none.
 **Request body** (`application/json`)
 
 Type: [LiveSubscribeDto](#livesubscribedto)
+
+**Responses**
+
+- **204** Done; no body.
+- Errors: 400, 401, 403, 404, 409 ([ApiError](#apierror))
+
+### PUT /api/v1/events/{streamId}/work
+
+Follows a person's work with the stream (v1.4.0), so "all their work" refreshes when their items change, or none (null: the caller's own work). Events still pass the caller's own visibility in each project they are a member of; personal spaces of others never match.
+
+**Permission:** Any signed-in user.
+
+| Parameter  | In   | Type   | Required | Description |
+| ---------- | ---- | ------ | -------- | ----------- |
+| `streamId` | path | string | yes      | The stream. |
+
+**Request body** (`application/json`)
+
+Type: [LiveWorkDto](#liveworkdto)
 
 **Responses**
 
@@ -3844,6 +3867,12 @@ Data of each event on `GET /api/v1/events`; see [LIVE-UPDATES.md](LIVE-UPDATES.m
 | Field       | Type           | Required | Description                                |
 | ----------- | -------------- | -------- | ------------------------------------------ |
 | `projectId` | string or null | yes      | Project id or key, or null to follow none. |
+
+### LiveWorkDto
+
+| Field    | Type                  | Required | Description                                                        |
+| -------- | --------------------- | -------- | ------------------------------------------------------------------ |
+| `userId` | string (uuid) or null | yes      | The person whose work the tab lists, or null for the caller's own. |
 
 ### LivePresenceDto
 

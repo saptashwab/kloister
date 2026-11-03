@@ -10,6 +10,7 @@ import {
   type PresenceEntryDto,
   PRESENCE_DELAY_MS,
   PRESENCE_THROTTLE_MS,
+  SystemRole,
 } from '@kloister/shared';
 import type { AuthContext } from '../auth/auth-context.js';
 import { SessionService } from '../auth/session.service.js';
@@ -68,6 +69,8 @@ interface LiveStream {
   subscribeRun: number;
   /** The owner's access to other projects, for My work events; null for none. */
   workAccess: Map<string, ProjectAccess | null>;
+  /** Another person whose work the tab lists ("all their work"), or null. */
+  workUserId: string | null;
 }
 
 /** One person's presence through one stream, as known to this process. */
@@ -191,6 +194,7 @@ export class LiveHub implements OnModuleDestroy {
       lastPresence: null,
       presenceAt: 0,
       workAccess: new Map(),
+      workUserId: null,
       subscribeRun: 0,
     };
     this.streams.set(stream.id, stream);
@@ -273,6 +277,43 @@ export class LiveHub implements OnModuleDestroy {
       this.publishPresence(stream, { itemId: null, action: null, field: null });
       this.schedulePresence(access.project.id);
     }
+  }
+
+  /**
+   * Follows another person's work with a stream (v1.4.0): changes to items
+   * they created or are assigned to reach it as for the owner's own work,
+   * still filtered by the owner's member access and visibility, so nothing
+   * arrives that the owner could not read. Null (or the owner) stops it.
+   *
+   * Permissions: the stream must be the caller's own; the person must be
+   * one the caller may look up for "all their work": administrators anyone,
+   * other users only people sharing an unarchived project with them (404
+   * otherwise, as for an unknown person).
+   *
+   * @param auth The caller.
+   * @param streamId The stream.
+   * @param userId The person, or null.
+   * @returns Resolves once followed.
+   */
+  async followWork(auth: AuthContext, streamId: string, userId: string | null): Promise<void> {
+    const stream = this.ownStream(auth, streamId);
+    // A refused request leaves the stream following nobody else.
+    stream.workUserId = null;
+    if (userId === null || userId === auth.user.id) return;
+    const person = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (person === null) throw notFound('User');
+    if (auth.user.systemRole !== SystemRole.ADMIN) {
+      const projects = (await this.access.memberAccesses(auth)).map((a) => a.project.id);
+      const shared = await this.prisma.projectMember.count({
+        where: { userId, projectId: { in: projects } },
+      });
+      if (shared === 0) throw notFound('User');
+    }
+    // The stream may have closed while the person was looked up.
+    if (this.streams.has(stream.id)) stream.workUserId = person.id;
   }
 
   /**
@@ -589,8 +630,9 @@ export class LiveHub implements OnModuleDestroy {
 
   /**
    * Tells streams that follow another project (My work, all their work)
-   * about changes to items their owner created or is assigned to, with the
-   * same visibility check as for followers (M10 plan section 3).
+   * about changes to items their owner, or the person whose work they follow
+   * (v1.4.0), created or is assigned to, with the same visibility check as
+   * for followers, using the owner's access (M10 plan section 3).
    *
    * @param projectId The project.
    * @param changes Its changes.
@@ -604,7 +646,13 @@ export class LiveHub implements OnModuleDestroy {
       );
     for (const stream of this.streams.values()) {
       if (stream.projectId === projectId) continue;
-      const own = new Map([...changes.items].filter(([, list]) => involves(list, stream.userId)));
+      const person = stream.workUserId;
+      const own = new Map(
+        [...changes.items].filter(
+          ([, list]) =>
+            involves(list, stream.userId) || (person !== null && involves(list, person)),
+        ),
+      );
       if (own.size === 0) continue;
       if (!stream.workAccess.has(projectId))
         stream.workAccess.set(projectId, await this.accessOf(stream.userId, projectId));

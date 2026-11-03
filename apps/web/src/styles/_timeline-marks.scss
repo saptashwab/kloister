@@ -1,0 +1,51 @@
+// Day marks on the timeline (SPEC §6.4): the today line and holiday shading, loaded with the
+// timeline route only.
+app-timeline {
+  // Today (v1.4.0): a solid line through the bars, continued through the scale
+  // header with a "Today" tag, so it reads at a glance.
+  .today {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: var(--k-focus-width);
+    margin-left: calc(var(--k-focus-width) / -2);
+    background: var(--k-primary);
+    z-index: 1;
+  }
+  .today-mark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: var(--k-focus-width);
+    margin-left: calc(var(--k-focus-width) / -2);
+    background: var(--k-primary);
+    z-index: 2;
+    pointer-events: none;
+  }
+  .today-mark span {
+    position: absolute;
+    bottom: var(--k-space-1);
+    left: 0;
+    transform: translateX(-50%);
+    padding: 0 var(--k-space-1);
+    border-radius: var(--k-radius-full);
+    background: var(--k-primary);
+    color: var(--k-on-primary);
+    font: 700 var(--k-size-0_6875rem) / var(--k-size-14px) var(--k-font);
+    white-space: nowrap;
+  }
+  // Holidays (M9.1): translucent shading over the bar area and a solid marker in the header.
+  .holiday {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: var(--k-warn-soft);
+    opacity: 0.6;
+  }
+  .hol {
+    position: absolute;
+    bottom: 0;
+    height: var(--k-space-1);
+    background: var(--k-warn-ink);
+  }
+}

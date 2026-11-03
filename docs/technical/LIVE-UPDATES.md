@@ -104,6 +104,10 @@ client id travels as the `client` query parameter, since `EventSource` cannot se
   - `PUT /api/v1/events/{streamId}/project` follows a project (by id or key) or none. Only members
     of the project (for a personal space, its owner) may follow it; anyone else, administrators on
     a cross-project visit included, gets 404.
+  - `PUT /api/v1/events/{streamId}/work` follows another person's work (v1.4.0), so "all their work"
+    refreshes live, or none (`null`). Only people the caller may look up for "all their work" (administrators
+    anyone, others people who share an unarchived project with them); 404 otherwise. Their item changes reach
+    the stream like the owner's own My work changes, still checked with the owner's access and visibility.
   - `PUT /api/v1/events/{streamId}/presence` reports what the tab is doing.
 - `GET /api/v1/events/status` tells the web app whether to open a stream. With live updates
   switched off, `GET /events` answers 204, which browsers do not retry.

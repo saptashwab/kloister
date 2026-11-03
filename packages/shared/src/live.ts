@@ -157,6 +157,15 @@ export interface LiveSubscribeRequest {
   projectId: string | null;
 }
 
+/**
+ * Body of `PUT /events/:streamId/work` (v1.4.0): whose work the tab lists, so
+ * "all their work" of another person refreshes live like My work.
+ */
+export interface LiveWorkRequest {
+  /** The person, or null for the caller's own work only. */
+  userId: string | null;
+}
+
 /** Body of `PUT /events/:streamId/presence`. */
 export interface LivePresenceRequest {
   /** Item the tab has open, or null. */

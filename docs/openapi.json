@@ -3065,6 +3065,13 @@
             "in": "query",
             "description": "Viewer's calendar day used for work due grouping.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "show",
+            "required": false,
+            "in": "query",
+            "description": "The backlog's \"Show\" filter (v1.4.0): items Done in the last 14 days, or\nopen ad-hoc items, as the Overview report counts them.",
+            "schema": { "type": "string", "enum": ["done-recent", "ad-hoc"] }
           }
         ],
         "responses": {
@@ -3282,6 +3289,13 @@
             "in": "query",
             "description": "Viewer's calendar day used for work due grouping.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "show",
+            "required": false,
+            "in": "query",
+            "description": "The backlog's \"Show\" filter (v1.4.0): items Done in the last 14 days, or\nopen ad-hoc items, as the Overview report counts them.",
+            "schema": { "type": "string", "enum": ["done-recent", "ad-hoc"] }
           }
         ],
         "responses": {
@@ -3490,6 +3504,13 @@
             "in": "query",
             "description": "Viewer's calendar day used for work due grouping.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "show",
+            "required": false,
+            "in": "query",
+            "description": "The backlog's \"Show\" filter (v1.4.0): items Done in the last 14 days, or\nopen ad-hoc items, as the Overview report counts them.",
+            "schema": { "type": "string", "enum": ["done-recent", "ad-hoc"] }
           }
         ],
         "responses": {
@@ -3706,6 +3727,13 @@
             "in": "query",
             "description": "Viewer's calendar day used for work due grouping.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "show",
+            "required": false,
+            "in": "query",
+            "description": "The backlog's \"Show\" filter (v1.4.0): items Done in the last 14 days, or\nopen ad-hoc items, as the Overview report counts them.",
+            "schema": { "type": "string", "enum": ["done-recent", "ad-hoc"] }
           }
         ],
         "responses": {
@@ -6063,6 +6091,39 @@
         "security": [{ "session": [], "csrf": [] }]
       }
     },
+    "/api/v1/events/{streamId}/work": {
+      "put": {
+        "operationId": "LiveController_work",
+        "parameters": [
+          {
+            "name": "streamId",
+            "required": true,
+            "in": "path",
+            "description": "The stream.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/LiveWorkDto" } }
+          }
+        },
+        "responses": {
+          "204": { "description": "Done; no body." },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthenticated" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        },
+        "summary": "Follows a person's work with the stream (v1.4.0), so \"all their work\" refreshes when their items change, or none (null: the caller's own work). Events still pass the caller's own visibility in each project they are a member of; personal spaces of others never match.",
+        "tags": ["Live updates"],
+        "x-permission": "Any signed-in user.",
+        "description": "**Permission:** Any signed-in user.",
+        "security": [{ "session": [], "csrf": [] }]
+      }
+    },
     "/api/v1/events/{streamId}/presence": {
       "put": {
         "operationId": "LiveController_presence",
@@ -7417,6 +7478,18 @@
           }
         },
         "required": ["projectId"]
+      },
+      "LiveWorkDto": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "nullable": true,
+            "description": "The person whose work the tab lists, or null for the caller's own.",
+            "format": "uuid"
+          }
+        },
+        "required": ["userId"]
       },
       "LivePresenceDto": {
         "type": "object",

@@ -15,6 +15,20 @@ export interface WorkFilter {
   due: string;
 }
 
+/**
+ * How many filters narrow My work, for the folded header's chip (v1.4.0):
+ * a source other than All and each set project, type, label or due filter.
+ * The Done and "items I created" switches widen the list and grouping only
+ * arranges it, so neither counts.
+ *
+ * @param filter The filters.
+ * @returns The number of narrowing filters.
+ */
+export function workFilterCount(filter: WorkFilter): number {
+  const { source, ...rest } = filter;
+  return (source === 'ALL' ? 0 : 1) + Object.values(rest).filter((v) => v !== '').length;
+}
+
 /** One list section or project board. */
 export interface WorkGroup {
   /** Stable section identity. */

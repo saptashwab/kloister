@@ -4,6 +4,7 @@ import { provideRouter } from '@angular/router';
 import { makeItem, makeMember, settle } from '../../../testing/fixtures';
 import { ProjectContext } from '../../core/project-context';
 import { ItemCard } from './item-card';
+import { Today } from '../../core/today';
 
 describe('ItemCard (v1.3.3)', () => {
   it('draws avatars without shares and gives a share below 100% to screen readers', async () => {
@@ -39,7 +40,6 @@ describe('ItemCard (v1.3.3)', () => {
         ],
       }),
     );
-    fixture.componentRef.setInput('today', '2026-11-03');
     await settle(fixture);
     const stack = (fixture.nativeElement as HTMLElement).querySelector('.k-avatars')!;
     expect(stack.querySelectorAll('button.k-avatar')).toHaveLength(2);
@@ -51,5 +51,40 @@ describe('ItemCard (v1.3.3)', () => {
       .map((n) => n.textContent ?? '')
       .join('');
     expect(visible).not.toContain('%');
+  });
+
+  it('keeps the due pill current on an open tab (v1.4.0)', async () => {
+    const now = signal({ date: '2026-11-03', minutes: 16 * 60 });
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter([]),
+        { provide: Today, useValue: { now } },
+        {
+          provide: ProjectContext,
+          useValue: {
+            project: signal(null),
+            labelsById: signal(new Map()),
+            membersById: signal(new Map()),
+            flashing: signal(new Set()),
+            recent: signal(0),
+            changedBy: () => null,
+            presenceByItem: signal(new Map()),
+            has: () => false,
+            writable: () => false,
+          },
+        },
+      ],
+    });
+    const fixture = TestBed.createComponent(ItemCard);
+    fixture.componentRef.setInput('item', makeItem(1, { dueDate: '2026-11-04', dueTime: '17:00' }));
+    await settle(fixture);
+    const text = () => (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text()).toContain('Due tomorrow 17:00');
+    now.set({ date: '2026-11-04', minutes: 16 * 60 });
+    await settle(fixture);
+    expect(text()).toContain('Due today 17:00');
+    now.set({ date: '2026-11-04', minutes: 17 * 60 + 1 });
+    await settle(fixture);
+    expect(text()).toContain('Overdue since 17:00');
   });
 });

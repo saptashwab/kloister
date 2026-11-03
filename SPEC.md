@@ -276,8 +276,12 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   rail; phones keep the slide-in menu). In a project, the header and the view's toolbar (board, backlog, timeline and
   calendar filters) can fold into one slim row with the project name, the tabs and icon-only actions; while folded,
   the toolbar can be shown over the page and folds again after a press elsewhere or Escape, a chip shows how many
-  filters are active, and selection bars stay visible. Ctrl+\ (⌘\ on a Mac) folds both or unfolds both.
+  filters are active, and selection bars stay visible. My work (and "all their work") folds its header and
+  filters the same way. Ctrl+\ (⌘\ on a Mac) folds both or unfolds both.
   Both choices are remembered per browser, not as settings.
+- **Today stays current** (v1.4.0): pages read today and the current minute from one clock that ticks every
+  minute, so due texts ("Due tomorrow", overdue red, "Overdue since 17:00"), due filters, calendars and the
+  timeline's today line follow midnight and due times on a tab left open.
 - **Projects list**: the user's projects. Admins also get the All/My toggle. Personal spaces are never listed here.
   From M8.5 each row shows open items, overdue items and last activity counted within the caller's visibility; rows an
   admin sees only through All projects show no counts and are not read.
@@ -291,7 +295,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   - Filters: source (All, Projects, Personal), project, type, label and due; an "Also items I created" switch; Done
     items on request; group by project as an option. Clicking a card opens it in its own project or personal space.
   - "View all their work" for another person (below) uses the same list and board views, never includes personal
-    items, and is limited by the viewer's access in each project.
+    items, and is limited by the viewer's access in each project. It refreshes on live changes to that person's
+    items the viewer can see (v1.4.0), as My work does for the viewer's own.
 - **Personal space** (3.6): its own entry at the top of the sidebar's project list, with the board, backlog, sprints
   and settings of a project (buckets, labels, label style), without members, teams, assignees or ADO export.
 - **Board** (main view):
@@ -309,6 +314,8 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
     `ADMIN_CROSS_PROJECT_ACCESS` entries); admins open such projects directly, audited per visit as in 3.1. Non-admins can look up
     only people who share a project with them (404 otherwise)
   - quick-add card at the top of each column
+  - "Copy link" on each card and in the item drawer copies the item's address (`/<app>/p/:key/items/:number`), which
+    opens only for people who can see the item (v1.4.0)
 - **Item detail** (side drawer, deep-linkable `/<app>/p/:key/items/:number`):
   title, type, parent picker, status, bucket, sprint, assignees, labels, priority, start and due dates, optional due time,
   description editor (images can be pasted or dropped in; notes too), checklist (add, reorder, tick), notes thread with `@mention`, attachments,
@@ -320,7 +327,9 @@ All tables have `id` (uuid), `createdAt`, `updatedAt` unless noted.
   notifications, but left out of the timeline, its plan totals and the Excel Timeline sheet, and out of ADO export
   unless included.
 - **Backlog / hierarchy view**: tree of Epic → Feature → Story → Task with expand/collapse,
-  multi-select (also used to choose what to export), bulk set sprint/bucket/assignee
+  multi-select (also used to choose what to export), bulk set sprint/bucket/assignee with Undo (v1.4.0); a "Show"
+  filter keeps items Done in the last 14 days or open ad-hoc items (also from `?show=done-recent|ad-hoc`, used by
+  the Overview report's tiles; v1.4.0)
 - **Sprints**: create and edit, set active, sprint board (the board filtered to one sprint), close sprint with an option to move unfinished items
   (an unfinished Story moves with its unfinished children of that sprint, M12)
 - **Timeline** (projects only, M9): plan grid and bars over the same items (6.4)
@@ -472,7 +481,8 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   Leads) and assign the rows, or to assign them by clicking a sprint band; existing endpoints and permissions apply,
   and rows the caller may not edit are skipped and reported. The same selection can be assigned, given a status,
   shifted by working days (dependent items follow), indented or outdented, linked in order or unlinked, given a
-  priority, labels or a bucket, or deleted after a confirmation, each under the existing rules.
+  priority, labels or a bucket, or deleted after a confirmation, each under the existing rules. Field changes of
+  the selection offer Undo, which puts each changed row's previous values back (v1.4.0).
 - Status is a default grid column; % complete is optional (Done items 100, otherwise the share of the checklist
   ticked; parents weight their items by working days). The Type cell changes an item's type within SPEC 4.1.
   Columns can be resized by dragging or with the keyboard, and rows can be compact or wrap titles onto two or
@@ -484,7 +494,10 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   predecessors allow records a pin (`startNoEarlierThan`, "start no earlier than"); an earlier start snaps to
   the earliest allowed start. In progress, Blocked and Done items, undated items, title-only ancestors and items
   the caller cannot see or edit never move, and the chain stops at them; a parent's dates never move its
-  children; items without predecessors keep their dates.
+  children; items without predecessors keep their dates. A pin holds nothing without a start or a predecessor, so
+  it is removed (audited like other pin changes) when the item's start is cleared, by any path, or when its last
+  predecessor link the caller can see is removed; only visible links count, so the outcome hints at no hidden link
+  (v1.4.0).
 - The planner runs after date or duration edits on the timeline and in the project item drawer, predecessor
   changes and pin removal. Item PATCH, bulk edits, duplication, status changes, My work and ADO imports change
   only the item they name. ADO transfers stay date-only.
@@ -501,6 +514,8 @@ Detail and file plan: [docs/M9-PLAN.md](docs/M9-PLAN.md).
   and Members with TEAMS scope get their team; personal spaces have no timeline (404).
 - Phone width shows the grid only, as stacked cards. The timeline is a lazy route and uses no third-party
   Gantt library.
+- Today (v1.4.0): the timeline opens with today in view when the plan spans today (or there is no plan yet),
+  otherwise at the plan's start; the today line runs through the bars and the scale header with a "Today" tag.
 - Holidays (M9.1, docs/M9-PLAN.md §14): whole-day holidays per project (PMs and Leads) and instance-wide
   (admins; projects may switch them off) are not working days for durations, moves, totals and exports.
   Changing a project holiday keeps affected Not started items' working days through the reschedule flow.
@@ -548,7 +563,8 @@ Detail and file plan: [docs/M13-PLAN.md](docs/M13-PLAN.md).
   Stories and Tasks without dates in the active sprint, pins holding items later than needed). All numbers
   come from the caller's visible items, computed in the API; charts are SVG with their numbers in tables;
   an open report refreshes on live changes at most every 2 seconds; project Excel snapshots add a Reports
-  sheet. Personal spaces have Overview and Workload only.
+  sheet. Personal spaces have Overview and Workload only. Each Overview tile opens the list it counts: overdue
+  and due this week on the board, done in the last 14 days and open ad-hoc items on the backlog (v1.4.0).
 - Calendars: a project Calendar tab and a My work Calendar view, by month or week. Items show from start to
   due (half days as half cells), Done dimmed, ad-hoc tagged, undated items listed beside it; holidays are
   shaded and named and sprints shown as bands. Dragging an item to another day, or moving it with the arrow

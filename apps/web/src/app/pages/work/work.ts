@@ -26,7 +26,7 @@ import {
 } from '@kloister/shared';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { errorMessage } from '../../core/api';
-import { isoDate } from '../../core/board-logic';
+import { Today } from '../../core/today';
 import { dueState, dueText } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
 import { LiveService } from '../../core/live.service';
@@ -34,7 +34,8 @@ import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
 import { Shortcuts } from '../../core/shortcuts';
 import { SessionStore } from '../../core/session.store';
 import { WorkApiService } from '../../core/work-api.service';
-import { filterWork, groupWork, type WorkFilter } from '../../core/work-logic';
+import { filterWork, groupWork, type WorkFilter, workFilterCount } from '../../core/work-logic';
+import { FoldControls, FoldHost } from '../../ui/fold';
 import { EmptyState, Skeleton } from '../../ui/feedback';
 import { LabelPill } from '../../ui/label-pill';
 import { StatusPill, TypeIcon } from '../../ui/signals';
@@ -42,10 +43,15 @@ import { ToastService } from '../../ui/toast.service';
 import { MatMenuModule } from '@angular/material/menu';
 import { WorkCalendar } from '../calendar/work-calendar';
 
-/** My work and all their work share readable list/status-board views (SPEC §6). */
+/**
+ * My work and all their work share readable list/status-board views (SPEC §6).
+ * Like a project, the header and filters fold into one slim row (v1.4.0).
+ */
 @Component({
   selector: 'app-work',
+  hostDirectives: [FoldHost],
   imports: [
+    FoldControls,
     SnapshotAction,
     RouterLink,
     MatButtonModule,
@@ -81,227 +87,252 @@ import { WorkCalendar } from '../calendar/work-calendar';
       </ng-template>
     </mat-menu>
     <div class="k-page">
-      <div class="k-page-head">
-        <div>
-          <h1>{{ isMe() ? 'My work' : (person()?.displayName ?? 'Work') }}</h1>
-          <p class="muted">
-            {{
-              isMe()
-                ? 'Your project work and private personal tasks'
-                : (person()?.email ?? '') + ' · their items you can see'
-            }}
-          </p>
-        </div>
-      </div>
-      @if (isMe()) {
-        <app-snapshot-action source="me" [filters]="snapshotFilters()" />
-      }
-      <div class="row controls" aria-label="Work views and filters">
-        <mat-button-toggle-group
-          aria-label="Work view"
-          hideSingleSelectionIndicator
-          [value]="view()"
-          (change)="view.set($event.value)"
-        >
-          <mat-button-toggle value="list">List</mat-button-toggle
-          ><mat-button-toggle value="board">Board</mat-button-toggle>
-          @if (isMe()) {
-            <mat-button-toggle value="calendar">Calendar</mat-button-toggle>
-          }
-        </mat-button-toggle-group>
-        @if (isMe()) {
-          <mat-form-field
-            ><mat-label>Source</mat-label
-            ><mat-select [value]="filter().source" (valueChange)="setFilter({ source: $event })"
-              ><mat-option value="ALL">All</mat-option
-              ><mat-option value="PROJECTS">Projects</mat-option
-              ><mat-option value="PERSONAL">Personal</mat-option></mat-select
-            ></mat-form-field
-          >
+      <!-- One header row in both states, so the fold button keeps focus. -->
+      <div class="k-page-head work-head" [class.slim]="layout.folded()">
+        @if (layout.folded()) {
+          <h1 class="slim-name" [title]="title()">{{ title() }}</h1>
+        } @else {
+          <div>
+            <h1>{{ title() }}</h1>
+            <p class="muted">
+              {{
+                isMe()
+                  ? 'Your project work and private personal tasks'
+                  : (person()?.email ?? '') + ' · their items you can see'
+              }}
+            </p>
+          </div>
         }
-        <mat-form-field
-          ><mat-label>Project</mat-label
-          ><mat-select [value]="filter().projectId" (valueChange)="setFilter({ projectId: $event })"
-            ><mat-option value="">All projects</mat-option>
-            @for (p of projects(); track p.id) {
-              <mat-option [value]="p.id">{{ p.name }}</mat-option>
-            }
-          </mat-select></mat-form-field
+        <span class="spacer"></span>
+        @if (isMe() && !layout.folded()) {
+          <app-snapshot-action source="me" [filters]="snapshotFilters()" />
+        }
+        <app-fold-controls
+          [filterCount]="filterCount()"
+          foldLabel="Fold the header and filters"
+          openLabel="Keep the header and filters open"
         >
-        <mat-form-field
-          ><mat-label>Type</mat-label
-          ><mat-select [value]="filter().type" (valueChange)="setFilter({ type: $event })"
-            ><mat-option value="">Any type</mat-option>
-            @for (t of types; track t) {
-              <mat-option [value]="t">{{ typeLabels[t] }}</mat-option>
-            }
-          </mat-select></mat-form-field
-        >
-        <mat-form-field
-          ><mat-label>Label</mat-label
-          ><mat-select [value]="filter().labelId" (valueChange)="setFilter({ labelId: $event })"
-            ><mat-option value="">Any label</mat-option>
-            @for (l of labels(); track l.id) {
-              <mat-option [value]="l.id">{{ l.project }} · {{ l.name }}</mat-option>
-            }
-          </mat-select></mat-form-field
-        >
-        <mat-form-field
-          ><mat-label>Due</mat-label
-          ><mat-select [value]="filter().due" (valueChange)="setFilter({ due: $event })"
-            ><mat-option value="">Any date</mat-option>
-            @for (d of dueGroups; track d) {
-              <mat-option [value]="d">{{ d }}</mat-option>
-            }
-          </mat-select></mat-form-field
-        >
-        <mat-slide-toggle
-          [checked]="includeCreated()"
-          (change)="includeCreated.set($event.checked)"
-          >{{ isMe() ? 'Also items I created' : 'Also items they created' }}</mat-slide-toggle
-        >
-        <mat-slide-toggle [checked]="includeDone()" (change)="includeDone.set($event.checked)"
-          >Show done</mat-slide-toggle
-        >
-        <mat-slide-toggle [checked]="byProject()" (change)="byProject.set($event.checked)"
-          >Group by project</mat-slide-toggle
-        >
-        <button mat-button type="button" (click)="clear()">Clear filters</button>
+          @if (isMe() && layout.folded()) {
+            <app-snapshot-action source="me" [filters]="snapshotFilters()" [compact]="true" />
+          }
+        </app-fold-controls>
       </div>
-      @if (view() === 'calendar' && isMe()) {
-        <app-work-calendar [filter]="filter()" [includeDone]="includeDone()" />
-      } @else if (error()) {
-        <p class="k-alert" role="alert">{{ error() }}</p>
-      } @else if (loading()) {
-        <app-skeleton label="Loading work" />
-      } @else if (filtered().length === 0 && view() === 'list') {
-        <app-empty-state
-          [title]="isMe() ? 'No matching work' : 'Nothing to show'"
-          text="Try clearing filters or turn on Show done to see finished items."
-        />
-      } @else {
-        @if (filtered().length === 0) {
+      <div class="work-body">
+        <div class="row controls k-page-tools" role="group" aria-label="Work views and filters">
+          <mat-button-toggle-group
+            aria-label="Work view"
+            hideSingleSelectionIndicator
+            [value]="view()"
+            (change)="view.set($event.value)"
+          >
+            <mat-button-toggle value="list">List</mat-button-toggle
+            ><mat-button-toggle value="board">Board</mat-button-toggle>
+            @if (isMe()) {
+              <mat-button-toggle value="calendar">Calendar</mat-button-toggle>
+            }
+          </mat-button-toggle-group>
+          @if (isMe()) {
+            <mat-form-field
+              ><mat-label>Source</mat-label
+              ><mat-select [value]="filter().source" (valueChange)="setFilter({ source: $event })"
+                ><mat-option value="ALL">All</mat-option
+                ><mat-option value="PROJECTS">Projects</mat-option
+                ><mat-option value="PERSONAL">Personal</mat-option></mat-select
+              ></mat-form-field
+            >
+          }
+          <mat-form-field
+            ><mat-label>Project</mat-label
+            ><mat-select
+              [value]="filter().projectId"
+              (valueChange)="setFilter({ projectId: $event })"
+              ><mat-option value="">All projects</mat-option>
+              @for (p of projects(); track p.id) {
+                <mat-option [value]="p.id">{{ p.name }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+          <mat-form-field
+            ><mat-label>Type</mat-label
+            ><mat-select [value]="filter().type" (valueChange)="setFilter({ type: $event })"
+              ><mat-option value="">Any type</mat-option>
+              @for (t of types; track t) {
+                <mat-option [value]="t">{{ typeLabels[t] }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+          <mat-form-field
+            ><mat-label>Label</mat-label
+            ><mat-select [value]="filter().labelId" (valueChange)="setFilter({ labelId: $event })"
+              ><mat-option value="">Any label</mat-option>
+              @for (l of labels(); track l.id) {
+                <mat-option [value]="l.id">{{ l.project }} · {{ l.name }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+          <mat-form-field
+            ><mat-label>Due</mat-label
+            ><mat-select [value]="filter().due" (valueChange)="setFilter({ due: $event })"
+              ><mat-option value="">Any date</mat-option>
+              @for (d of dueGroups; track d) {
+                <mat-option [value]="d">{{ d }}</mat-option>
+              }
+            </mat-select></mat-form-field
+          >
+          <mat-slide-toggle
+            [checked]="includeCreated()"
+            (change)="includeCreated.set($event.checked)"
+            >{{ isMe() ? 'Also items I created' : 'Also items they created' }}</mat-slide-toggle
+          >
+          <mat-slide-toggle [checked]="includeDone()" (change)="includeDone.set($event.checked)"
+            >Show done</mat-slide-toggle
+          >
+          <mat-slide-toggle [checked]="byProject()" (change)="byProject.set($event.checked)"
+            >Group by project</mat-slide-toggle
+          >
+          <button mat-button type="button" (click)="clear()">Clear filters</button>
+        </div>
+        @if (view() === 'calendar' && isMe()) {
+          <app-work-calendar [filter]="filter()" [includeDone]="includeDone()" />
+        } @else if (error()) {
+          <p class="k-alert" role="alert">{{ error() }}</p>
+        } @else if (loading()) {
+          <app-skeleton label="Loading work" />
+        } @else if (filtered().length === 0 && view() === 'list') {
           <app-empty-state
             [title]="isMe() ? 'No matching work' : 'Nothing to show'"
-            text="Try clearing filters or turn on Show done."
+            text="Try clearing filters or turn on Show done to see finished items."
           />
-        }
-        <p class="muted" role="status">{{ filtered().length }} items</p>
-        @for (section of sections(); track section.id) {
-          <section [attr.aria-label]="section.name">
-            @if (section.name) {
-              <h2>{{ section.name }}</h2>
-            }
-            @if (view() === 'list') {
-              <ul class="plain list" aria-label="Work items">
-                @for (i of section.items; track i.id) {
-                  <li
-                    class="card"
-                    [class.cover]="i.labelStyle === 'COVER' && i.labels.length > 0"
-                    [style.--k-work-cover]="i.labels[0]?.colour"
-                  >
-                    <a class="entry" [routerLink]="link(i)"
-                      ><app-type-icon [type]="i.type" /><span class="k-key">{{ i.key }}</span
-                      ><span class="title">{{ i.title }}</span
-                      ><app-status-pill [status]="i.status"
-                    /></a>
-                    <div class="meta">
-                      <span class="k-pill">{{ i.projectName }}</span>
-                      @if (i.bucket) {
-                        <span class="k-pill">{{ i.bucket.name }}</span>
-                      }
-                      @if (i.dueDate) {
-                        <span class="k-pill" [class.danger]="overdue(i)">{{ dateText(i) }}</span>
-                      }
-                      @for (l of i.labels; track l.id) {
-                        <app-label-pill
-                          [name]="l.name"
-                          [colour]="l.colour"
-                          [labelStyle]="i.labelStyle"
-                        />
-                      }
-                    </div>
-                  </li>
-                }
-              </ul>
-            } @else {
-              <div
-                class="columns"
-                cdkDropListGroup
-                tabindex="0"
-                role="region"
-                [attr.aria-label]="(section.name || 'Work') + ' status board'"
-              >
-                @for (status of statuses; track status) {
-                  <div class="column">
-                    <h3>
-                      {{ statusLabels[status] }}
-                      <span class="k-pill">{{ inStatus(section.items, status).length }}</span>
-                    </h3>
-                    <div
-                      class="list"
-                      cdkDropList
-                      [cdkDropListData]="status"
-                      [cdkDropListSortingDisabled]="true"
-                      (cdkDropListDropped)="drop($event)"
+        } @else {
+          @if (filtered().length === 0) {
+            <app-empty-state
+              [title]="isMe() ? 'No matching work' : 'Nothing to show'"
+              text="Try clearing filters or turn on Show done."
+            />
+          }
+          <p class="muted" role="status">{{ filtered().length }} items</p>
+          @for (section of sections(); track section.id) {
+            <section [attr.aria-label]="section.name">
+              @if (section.name) {
+                <h2>{{ section.name }}</h2>
+              }
+              @if (view() === 'list') {
+                <ul class="plain list" aria-label="Work items">
+                  @for (i of section.items; track i.id) {
+                    <li
+                      class="card"
+                      [class.cover]="i.labelStyle === 'COVER' && i.labels.length > 0"
+                      [style.--k-work-cover]="i.labels[0]?.colour"
                     >
-                      @for (i of inStatus(section.items, status); track i.id) {
-                        <article
-                          class="card"
-                          [class.cover]="i.labelStyle === 'COVER' && i.labels.length > 0"
-                          [style.--k-work-cover]="i.labels[0]?.colour"
-                          cdkDrag
-                          [cdkDragData]="i"
-                          [cdkDragDisabled]="!i.canEdit || busy().has(i.id)"
-                        >
-                          <a class="entry" [routerLink]="link(i)"
-                            ><app-type-icon [type]="i.type" /><span class="k-key">{{ i.key }}</span
-                            ><span class="title">{{ i.title }}</span></a
+                      <a class="entry" [routerLink]="link(i)"
+                        ><app-type-icon [type]="i.type" /><span class="k-key">{{ i.key }}</span
+                        ><span class="title">{{ i.title }}</span
+                        ><app-status-pill [status]="i.status"
+                      /></a>
+                      <div class="meta">
+                        <span class="k-pill">{{ i.projectName }}</span>
+                        @if (i.bucket) {
+                          <span class="k-pill">{{ i.bucket.name }}</span>
+                        }
+                        @if (i.dueDate) {
+                          <span class="k-pill" [class.danger]="overdue(i)">{{ dateText(i) }}</span>
+                        }
+                        @for (l of i.labels; track l.id) {
+                          <app-label-pill
+                            [name]="l.name"
+                            [colour]="l.colour"
+                            [labelStyle]="i.labelStyle"
+                          />
+                        }
+                      </div>
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <div
+                  class="columns"
+                  cdkDropListGroup
+                  tabindex="0"
+                  role="region"
+                  [attr.aria-label]="(section.name || 'Work') + ' status board'"
+                >
+                  @for (status of statuses; track status) {
+                    <div class="column">
+                      <h3>
+                        {{ statusLabels[status] }}
+                        <span class="k-pill">{{ inStatus(section.items, status).length }}</span>
+                      </h3>
+                      <div
+                        class="list"
+                        cdkDropList
+                        [cdkDropListData]="status"
+                        [cdkDropListSortingDisabled]="true"
+                        (cdkDropListDropped)="drop($event)"
+                      >
+                        @for (i of inStatus(section.items, status); track i.id) {
+                          <article
+                            class="card"
+                            [class.cover]="i.labelStyle === 'COVER' && i.labels.length > 0"
+                            [style.--k-work-cover]="i.labels[0]?.colour"
+                            cdkDrag
+                            [cdkDragData]="i"
+                            [cdkDragDisabled]="!i.canEdit || busy().has(i.id)"
                           >
-                          <div class="meta">
-                            <span class="k-pill">{{ i.projectName }}</span>
-                            @if (i.bucket) {
-                              <span class="k-pill">{{ i.bucket.name }}</span>
-                            }
-                            @if (i.dueDate) {
-                              <span class="k-pill" [class.danger]="overdue(i)">{{
-                                dateText(i)
-                              }}</span>
-                            }
-                            @for (l of i.labels; track l.id) {
-                              <app-label-pill
-                                [name]="l.name"
-                                [colour]="l.colour"
-                                [labelStyle]="i.labelStyle"
-                              />
-                            }
-                          </div>
-                          @if (i.canEdit) {
-                            <button
-                              type="button"
-                              class="status-menu"
-                              [attr.aria-label]="
-                                'Status for ' + i.title + ': ' + statusLabels[i.status] + '. Change'
-                              "
-                              [disabled]="busy().has(i.id)"
-                              [matMenuTriggerFor]="statusMenu"
-                              [matMenuTriggerData]="{ item: i }"
+                            <a class="entry" [routerLink]="link(i)"
+                              ><app-type-icon [type]="i.type" /><span class="k-key">{{
+                                i.key
+                              }}</span
+                              ><span class="title">{{ i.title }}</span></a
                             >
-                              <app-status-pill [status]="i.status" />
-                            </button>
-                          }
-                        </article>
-                      } @empty {
-                        <p class="muted">No matching cards</p>
-                      }
+                            <div class="meta">
+                              <span class="k-pill">{{ i.projectName }}</span>
+                              @if (i.bucket) {
+                                <span class="k-pill">{{ i.bucket.name }}</span>
+                              }
+                              @if (i.dueDate) {
+                                <span class="k-pill" [class.danger]="overdue(i)">{{
+                                  dateText(i)
+                                }}</span>
+                              }
+                              @for (l of i.labels; track l.id) {
+                                <app-label-pill
+                                  [name]="l.name"
+                                  [colour]="l.colour"
+                                  [labelStyle]="i.labelStyle"
+                                />
+                              }
+                            </div>
+                            @if (i.canEdit) {
+                              <button
+                                type="button"
+                                class="status-menu"
+                                [attr.aria-label]="
+                                  'Status for ' +
+                                  i.title +
+                                  ': ' +
+                                  statusLabels[i.status] +
+                                  '. Change'
+                                "
+                                [disabled]="busy().has(i.id)"
+                                [matMenuTriggerFor]="statusMenu"
+                                [matMenuTriggerData]="{ item: i }"
+                              >
+                                <app-status-pill [status]="i.status" />
+                              </button>
+                            }
+                          </article>
+                        } @empty {
+                          <p class="muted">No matching cards</p>
+                        }
+                      </div>
                     </div>
-                  </div>
-                }
-              </div>
-            }
-          </section>
+                  }
+                </div>
+              }
+            </section>
+          }
         }
-      }
+      </div>
     </div>
   `,
 })
@@ -313,7 +344,7 @@ export class WorkPage {
       source: filter.source,
       includeCreated: this.includeCreated(),
       includeDone: this.includeDone(),
-      today: this.today,
+      today: this.today(),
       ...Object.fromEntries(
         Object.entries({
           projectId: filter.projectId,
@@ -357,11 +388,23 @@ export class WorkPage {
   protected readonly loading = signal(false);
   /** Load error. */
   protected readonly error = signal('');
+  /** Folded header and filters (v1.4.0), shared with project pages. */
+  private readonly fold = inject(FoldHost);
+  /** The remembered fold choice. */
+  protected readonly layout = this.fold.layout;
+  /** Filters narrowing the list, for the folded row's chip. */
+  protected readonly filterCount = computed(() => workFilterCount(this.filter()));
+  /** The page title. */
+  protected readonly title = computed(() =>
+    this.isMe() ? 'My work' : (this.person()?.displayName ?? 'Work'),
+  );
   /** True only for the signed-in person's work. */
   protected readonly isMe = computed(
     () => !this.userId() || this.session.user()?.id === this.userId(),
   );
-  private readonly today = isoDate(new Date());
+  /** Today and the current minute, kept current on an open tab (v1.4.0). */
+  private readonly clock = inject(Today);
+  private readonly today = this.clock.date;
   private run = 0;
   /** Semantic statuses in SPEC order. */
   protected readonly statuses = Object.values(ItemStatus);
@@ -378,14 +421,14 @@ export class WorkPage {
     filterWork(
       this.items().filter((i) => this.includeDone() || i.status !== 'DONE'),
       this.filter(),
-      this.today,
+      this.today(),
     ),
   );
   /** Named list sections or project boards. */
   protected readonly sections = computed(() =>
     this.view() === 'board' && !this.byProject()
       ? [{ id: 'all', name: '', items: this.filtered() }]
-      : groupWork(this.filtered(), this.byProject(), this.today),
+      : groupWork(this.filtered(), this.byProject(), this.today()),
   );
   /** Readable projects present in eligible work. */
   protected readonly projects = computed(() => [
@@ -425,24 +468,35 @@ export class WorkPage {
       const created = this.includeCreated();
       if (id) untracked(() => void this.load(id, done, created));
     });
-    // Live updates (M10): the caller's own list refetches when their items change.
+    // Live updates (M10): the list refetches when the items it shows change.
+    // For another person (v1.4.0) the stream follows their work too; the API
+    // still sends only items the caller can see.
+    const live = inject(LiveService);
     let timer: ReturnType<typeof setTimeout> | undefined;
-    destroy.onDestroy(() => clearTimeout(timer));
-    inject(LiveService)
-      .events.pipe(takeUntilDestroyed(destroy))
-      .subscribe((event) => {
-        const own = this.userId() === '' || this.userId() === this.session.user()?.id;
-        const relevant =
-          event.name === LiveEvent.ITEM_CHANGED ||
-          event.name === LiveEvent.ITEM_REMOVED ||
-          event.name === LiveEvent.RESYNC;
-        if (!own || !relevant) return;
-        clearTimeout(timer);
-        timer = setTimeout(() => {
-          const id = this.session.user()?.id;
-          if (id) void this.load(id, this.includeDone(), this.includeCreated(), true);
-        }, 600);
+    destroy.onDestroy(() => {
+      clearTimeout(timer);
+      live.followWork(null);
+    });
+    effect(() => {
+      const other = this.isMe() ? null : this.userId();
+      untracked(() => {
+        live.followWork(other);
+        // Another person's page: a peeking filter row folds again.
+        this.fold.peek.set(false);
       });
+    });
+    live.events.pipe(takeUntilDestroyed(destroy)).subscribe((event) => {
+      const relevant =
+        event.name === LiveEvent.ITEM_CHANGED ||
+        event.name === LiveEvent.ITEM_REMOVED ||
+        event.name === LiveEvent.RESYNC;
+      if (!relevant) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const id = this.userId() || this.session.user()?.id;
+        if (id) void this.load(id, this.includeDone(), this.includeCreated(), true);
+      }, 600);
+    });
   }
 
   /**
@@ -479,7 +533,7 @@ export class WorkPage {
    * @returns Accessible due text.
    */
   protected dateText(item: WorkSummaryDto): string {
-    return dueText(item, this.today);
+    return dueText(item, this.today(), this.clock.minutes());
   }
   /**
    * Identifies overdue open work.
@@ -487,7 +541,7 @@ export class WorkPage {
    * @returns True when overdue.
    */
   protected overdue(item: WorkSummaryDto): boolean {
-    return dueState(item, this.today) === 'overdue';
+    return dueState(item, this.today(), this.clock.minutes()) === 'overdue';
   }
   /**
    * Applies the same status edit as the keyboard select.

@@ -1,6 +1,9 @@
 import { makeBucket, makeItem, makeMember, makeSprint } from '../../testing/fixtures';
 import {
   activeFilterCount,
+  backlogShow,
+  EMPTY_BACKLOG_FILTER,
+  matchesShow,
   buildColumns,
   buildTree,
   dropRequest,
@@ -246,5 +249,44 @@ describe('activeFilterCount (v1.4.0)', () => {
     expect(activeFilterCount({ ...EMPTY_FILTER, text: 'site', due: 'week', labelId: 'l1' })).toBe(
       3,
     );
+  });
+});
+
+describe('backlog "Show" filter (v1.4.0)', () => {
+  const now = Date.parse('2026-11-03T12:00:00Z');
+  const day = 86_400_000;
+
+  it('keeps items Done in the last 14 days, as the Overview report counts them', () => {
+    const done = (at: number) =>
+      makeItem(1, { status: 'DONE', completedAt: new Date(at).toISOString() });
+    expect(matchesShow(done(now - 13 * day), 'done-recent', now)).toBe(true);
+    expect(matchesShow(done(now - 14 * day), 'done-recent', now)).toBe(true);
+    expect(matchesShow(done(now - 15 * day), 'done-recent', now)).toBe(false);
+    expect(matchesShow(makeItem(1, { completedAt: null }), 'done-recent', now)).toBe(false);
+  });
+
+  it('keeps open ad-hoc items only', () => {
+    expect(matchesShow(makeItem(1, { adHoc: true }), 'ad-hoc', now)).toBe(true);
+    expect(matchesShow(makeItem(1, { adHoc: true, status: 'DONE' }), 'ad-hoc', now)).toBe(false);
+    expect(matchesShow(makeItem(1, { adHoc: false }), 'ad-hoc', now)).toBe(false);
+    expect(matchesShow(makeItem(1), '', now)).toBe(true);
+  });
+
+  it('reads only known values from the address and counts toward the folded chip', () => {
+    expect(backlogShow('ad-hoc')).toBe('ad-hoc');
+    expect(backlogShow('done-recent')).toBe('done-recent');
+    expect(backlogShow('everything')).toBe('');
+    expect(backlogShow(undefined)).toBe('');
+    expect(activeFilterCount(EMPTY_BACKLOG_FILTER)).toBe(0);
+    expect(activeFilterCount({ ...EMPTY_BACKLOG_FILTER, show: 'ad-hoc', text: 'x' })).toBe(2);
+  });
+});
+
+describe('Overdue filter with due times (v1.4.0)', () => {
+  it('follows the minute it is given', () => {
+    const item = makeItem(1, { dueDate: '2026-11-03', dueTime: '17:00' });
+    const filter = { ...EMPTY_FILTER, due: 'overdue' as const };
+    expect(matchesFilter(item, filter, '2026-11-03', 16 * 60 + 59)).toBe(false);
+    expect(matchesFilter(item, filter, '2026-11-03', 17 * 60 + 1)).toBe(true);
   });
 });

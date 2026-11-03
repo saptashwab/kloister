@@ -53,4 +53,11 @@ export class SnapshotQueryDto extends ListItemsQueryDto {
   @IsOptional()
   @IsCalendarDate()
   today?: string;
+  /**
+   * The backlog's "Show" filter (v1.4.0): items Done in the last 14 days, or
+   * open ad-hoc items, as the Overview report counts them.
+   */
+  @IsOptional()
+  @IsIn(['done-recent', 'ad-hoc'])
+  show?: 'done-recent' | 'ad-hoc';
 }

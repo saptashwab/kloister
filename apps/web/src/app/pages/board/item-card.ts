@@ -3,8 +3,10 @@ import { ChangeDetectionStrategy, Component, computed, inject, input } from '@an
 import { RouterLink } from '@angular/router';
 import { ItemStatus, LabelStyle, type WorkItemDto } from '@kloister/shared';
 import { dueState, dueText } from '../../core/item-changes';
+import { Today } from '../../core/today';
 import { ProjectContext } from '../../core/project-context';
 import { ItemCopyAction } from '../../ui/item-copy-action';
+import { ItemLinkAction } from '../../ui/item-link-action';
 import { PresenceAvatars } from '../../ui/live-ui';
 import { Avatar } from '../../ui/avatar';
 import { Icon } from '../../ui/icon';
@@ -25,6 +27,7 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
   selector: 'app-item-card',
   imports: [
     ItemCopyAction,
+    ItemLinkAction,
     PresenceAvatars,
     RouterLink,
     Avatar,
@@ -142,7 +145,10 @@ import { PriorityIcon, TypeIcon } from '../../ui/signals';
         @if (presence().length > 0) {
           <app-presence [people]="presence()" [members]="members()" what="this card" [size]="18" />
         }
-        <app-priority-icon [priority]="i.priority" /><app-item-copy-action [item]="i" />
+        <app-priority-icon [priority]="i.priority" /><app-item-link-action
+          [item]="i"
+          [size]="14"
+        /><app-item-copy-action [item]="i" />
       </div>
       <a class="title" [routerLink]="['items', i.number]" queryParamsHandling="preserve">{{
         i.title
@@ -200,8 +206,8 @@ export class ItemCard {
 
   /** The item shown. */
   readonly item = input.required<WorkItemDto>();
-  /** Today as `YYYY-MM-DD`, for due dates. */
-  readonly today = input.required<string>();
+  /** Today and the current minute, kept current on an open tab (v1.4.0). */
+  private readonly clock = inject(Today);
 
   /** Status that shows the "Blocked" pill. */
   protected readonly blocked = ItemStatus.BLOCKED;
@@ -240,8 +246,9 @@ export class ItemCard {
 
   /** The due pill's text and urgency, or null. */
   protected readonly due = computed(() => {
-    const state = dueState(this.item(), this.today());
-    return state === null ? null : { state, text: dueText(this.item(), this.today()) };
+    const { date, minutes } = this.clock.now();
+    const state = dueState(this.item(), date, minutes);
+    return state === null ? null : { state, text: dueText(this.item(), date, minutes) };
   });
 
   /** Checklist progress in percent. */

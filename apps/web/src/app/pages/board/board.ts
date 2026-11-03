@@ -41,7 +41,6 @@ import {
   EMPTY_FILTER,
   type GroupBy,
   endOfWeek,
-  isoDate,
   matchesFilter,
   NONE,
 } from '../../core/board-logic';
@@ -58,6 +57,7 @@ import { Icon } from '../../ui/icon';
 import { ToastService } from '../../ui/toast.service';
 import { ItemCard } from './item-card';
 import { PageActions } from '../../core/page-actions';
+import { Today } from '../../core/today';
 
 /** How many member avatars the quick person filter shows. */
 const QUICK_PEOPLE = 6;
@@ -580,7 +580,6 @@ const QUICK_PEOPLE = 6;
                   [cdkDragData]="item"
                   [cdkDragDisabled]="!canDrag(item)"
                   [item]="item"
-                  [today]="today"
                   (cdkDragStarted)="dragStarted(item)"
                   (cdkDragEnded)="dragEnded(item)"
                   (click)="open($event, item)"
@@ -685,8 +684,10 @@ export class BoardPage implements OnInit, PersonFilter {
   };
   /** Longest title accepted. */
   protected readonly titleMax = ITEM_TITLE_MAX;
-  /** Today as `YYYY-MM-DD`, for the due filters and due pills. */
-  protected readonly today = isoDate(new Date());
+  /** Today as `YYYY-MM-DD`, for the due filters; kept current on an open tab (v1.4.0). */
+  protected readonly today = inject(Today).date;
+  /** Minutes after midnight now, so the Overdue filter follows due times. */
+  private readonly minutes = inject(Today).minutes;
 
   /** What the columns are. */
   protected readonly groupBy = signal<GroupBy>('bucket');
@@ -694,7 +695,7 @@ export class BoardPage implements OnInit, PersonFilter {
   protected snapshotFilters(): Record<string, string | boolean> {
     const f = this.filter();
     return {
-      today: this.today,
+      today: this.today(),
       boardOnly: true,
       ...Object.fromEntries(
         Object.entries({
@@ -705,8 +706,8 @@ export class BoardPage implements OnInit, PersonFilter {
           assigneeId: f.assigneeId === 'none' ? '' : f.assigneeId,
           dueGroup: f.due === 'overdue' ? 'Overdue' : '',
           unassigned: f.assigneeId === 'none',
-          dueFrom: f.due === 'week' ? this.today : '',
-          dueTo: f.due === 'week' ? endOfWeek(this.today) : '',
+          dueFrom: f.due === 'week' ? this.today() : '',
+          dueTo: f.due === 'week' ? endOfWeek(this.today()) : '',
         }).filter(([, value]) => value !== ''),
       ),
     };
@@ -793,7 +794,9 @@ export class BoardPage implements OnInit, PersonFilter {
   /** Columns with their filtered cards. */
   protected readonly columns = computed(() => {
     const filter = this.filter();
-    const items = this.ctx.items().filter((i) => matchesFilter(i, filter, this.today));
+    const items = this.ctx
+      .items()
+      .filter((i) => matchesFilter(i, filter, this.today(), this.minutes()));
     return buildColumns(items, this.groupBy(), {
       buckets: this.ctx.buckets(),
       members: this.ctx.members(),

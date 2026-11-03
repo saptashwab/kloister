@@ -146,7 +146,19 @@ export class DependenciesService {
         blockingItemId,
         blockingNumber: dependency.blockingItem.number,
       });
-      return item;
+      // With its last predecessor the caller can see gone, a pin ("start no
+      // earlier than") holds nothing and is removed with its own audit entry.
+      // Only visible links count, so the outcome never hints at hidden ones.
+      if (item.startNoEarlierThan === null) return item;
+      const linked = await tx.workItemDependency.count({
+        where: {
+          blockedItemId: item.id,
+          blockingItem: this.items.scoped(access, { adHoc: false }),
+        },
+      });
+      if (linked > 0) return item;
+      await this.items.update(auth, access, item.id, {}, tx, { pin: null });
+      return this.items.findVisible(tx, access, item.id);
     });
     return this.items.detail(this.prisma, access, row);
   }

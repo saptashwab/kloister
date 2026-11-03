@@ -37,6 +37,8 @@ const TEAMS = '14111111-1111-4111-8111-111111111111';
 const LEAD = '15111111-1111-4111-8111-111111111111';
 const VIEWER = '16111111-1111-4111-8111-111111111111';
 const ADMIN = '17111111-1111-4111-8111-111111111111';
+/** A user who shares no project with anyone above. */
+const STRANGER = '18111111-1111-4111-8111-111111111111';
 
 const project = makeProject({ id: PROJECT });
 
@@ -119,6 +121,19 @@ function build(accesses: Map<string, ProjectAccess>) {
     workItem: {
       findFirst: ({ where }: { where: { id: string } }) => Promise.resolve(row(where.id)),
     },
+    user: {
+      findUnique: ({ where }: { where: { id: string } }) =>
+        Promise.resolve(
+          accesses.has(where.id) || where.id === ADMIN || where.id === STRANGER
+            ? { id: where.id }
+            : null,
+        ),
+    },
+    // Members of PROJECT share it; the stranger shares nothing.
+    projectMember: {
+      count: ({ where }: { where: { userId: string; projectId: { in: string[] } } }) =>
+        Promise.resolve(accesses.has(where.userId) && where.projectId.in.includes(PROJECT) ? 1 : 0),
+    },
     // Loops published messages back, as the listener would.
     $executeRaw: (_sql: TemplateStringsArray, _channel: string, payload: string) => {
       const message = JSON.parse(payload) as LiveMessage;
@@ -138,6 +153,11 @@ function build(accesses: Map<string, ProjectAccess>) {
             ? new Map([[PM, access.personalAccess(makeProject({ id: PERSONAL, ownerId: PM }), PM)]])
             : new Map<string, ProjectAccess>(),
       ),
+    );
+  jest
+    .spyOn(access, 'memberAccesses')
+    .mockImplementation((auth) =>
+      Promise.resolve(accesses.has(auth.user.id) ? [accesses.get(auth.user.id)!] : []),
     );
   const sessions = {
     liveSessionIds: (ids: string[]) =>
@@ -388,6 +408,61 @@ describe('LiveHub fan-out', () => {
     ]);
     // Assigned, but bucket B is outside the BUCKETS scope.
     expect(changes(buckets.received)).toEqual([]);
+  });
+
+  it("follows another person's work, filtered by the viewer's own visibility (v1.4.0)", async () => {
+    const { hub, open } = build(everyone);
+    const viewer = open(BUCKETS);
+    await hub.followWork(viewer.auth, viewer.id, TEAMS);
+    hub.receive({
+      k: 'item',
+      p: PROJECT,
+      u: PM,
+      c: null,
+      i: [
+        // Theirs and in bucket A, which the viewer can see.
+        { id: ITEM, f: facts({ a: [TEAMS] }) },
+        // Theirs, but in bucket B, outside the viewer's scope.
+        { id: ITEM_2, f: facts({ a: [TEAMS], b: BUCKET_B }) },
+      ],
+    });
+    await hub.settle();
+    expect(changes(viewer.received)).toEqual([
+      { event: 'item-changed', data: { projectId: PROJECT, items: [{ id: ITEM, actorId: PM }] } },
+    ]);
+    // Following their own work again stops it.
+    await hub.followWork(viewer.auth, viewer.id, null);
+    hub.receive({
+      k: 'item',
+      p: PROJECT,
+      u: PM,
+      c: null,
+      i: [{ id: ITEM, f: facts({ a: [TEAMS] }) }],
+    });
+    await hub.settle();
+    expect(changes(viewer.received)).toHaveLength(1);
+  });
+
+  it('follows only people the caller may look up, and never their personal space (v1.4.0)', async () => {
+    const { hub, open } = build(everyone);
+    const own = open(OWN);
+    const admin = open(ADMIN);
+    await expect(hub.followWork(own.auth, own.id, STRANGER)).rejects.toMatchObject({ status: 404 });
+    await expect(
+      hub.followWork(own.auth, own.id, '19111111-1111-4111-8111-111111111111'),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(hub.followWork(admin.auth, own.id, PM)).rejects.toMatchObject({ status: 404 });
+    // Administrators may look anyone up, but get only their own projects' events.
+    const adminAuth = { ...admin.auth, user: makeUser({ id: ADMIN, systemRole: 'ADMIN' }) };
+    await expect(hub.followWork(adminAuth, admin.id, STRANGER)).resolves.toBeUndefined();
+    await hub.followWork(adminAuth, admin.id, PM);
+    await hub.followWork(own.auth, own.id, PM);
+    hub.receive({ k: 'item', p: PERSONAL, u: PM, c: null, i: [{ id: ITEM, f: facts() }] });
+    hub.receive({ k: 'item', p: PROJECT, u: PM, c: null, i: [{ id: ITEM, f: facts() }] });
+    await hub.settle();
+    // OWN sees only their own items; the PM's item and personal task stay out.
+    expect(changes(own.received)).toEqual([]);
+    expect(changes(admin.received)).toEqual([]);
   });
 
   it('sends notifications only to the recipient', async () => {

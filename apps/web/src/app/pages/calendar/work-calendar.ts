@@ -11,7 +11,7 @@ import {
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
 import type { CalendarEntry } from '../../core/calendar-logic';
-import { dayOf } from '../../core/format';
+import { Today } from '../../core/today';
 import { ItemsApiService } from '../../core/items-api.service';
 import { LiveService } from '../../core/live.service';
 import { ReportsApiService } from '../../core/reports-api.service';
@@ -44,7 +44,7 @@ const LIVE_RELOAD_MS = 600;
       [entries]="entries()"
       [undated]="undated()"
       [holidays]="holidays()"
-      [today]="today"
+      [today]="today()"
       [phone]="phone()"
       (rangeChange)="load($event.from, $event.to)"
       (move)="move($event)"
@@ -62,7 +62,7 @@ export class WorkCalendar {
   private readonly flow = inject(RescheduleFlow);
   private readonly toast = inject(ToastService);
 
-  protected readonly today = dayOf(new Date());
+  protected readonly today = inject(Today).date;
   protected readonly phone = phoneLayout();
   protected readonly error = signal('');
   private readonly data = signal<MyCalendarDto | null>(null);

@@ -55,7 +55,7 @@ describe('timeline (db)', () => {
    */
   async function as(
     name: Name,
-    method: 'GET' | 'POST' | 'PATCH',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     url: string,
     body?: object,
   ): Promise<Res> {
@@ -367,6 +367,63 @@ describe('timeline (db)', () => {
       expect(row.startNoEarlierThan).toBeNull();
       expect(row.startSecondHalf).toBe(true);
       expect(await stored(items.b)).toEqual({ start: '2026-11-05', due: '2026-11-11' });
+    });
+
+    it('drops a pin with its last visible predecessor or its start, audited', async () => {
+      const item = (id: string): string => `/api/v1/projects/${projectId}/items/${id}`;
+      const pinOf = async (id: string) =>
+        (await prisma.workItem.findUniqueOrThrow({ where: { id } })).startNoEarlierThan;
+      const pinAudits = async (id: string) =>
+        (await prisma.auditLog.findMany({ where: { entityId: id } })).filter((a) =>
+          JSON.stringify(a.meta).includes('startNoEarlierThan'),
+        ).length;
+      // C is pinned and blocked by A and P: removing one link keeps the pin.
+      await prisma.workItemDependency.create({
+        data: { projectId, blockingItemId: items.p, blockedItemId: items.c },
+      });
+      expect(
+        (await as('pm', 'DELETE', `${item(items.c)}/dependencies/${items.a}`)).statusCode,
+      ).toBe(200);
+      expect(await pinOf(items.c)).not.toBeNull();
+      const last = await as('pm', 'DELETE', `${item(items.c)}/dependencies/${items.p}`);
+      expect(last.statusCode).toBe(200);
+      expect((last.json() as { startNoEarlierThan: unknown }).startNoEarlierThan).toBeNull();
+      expect(await pinOf(items.c)).toBeNull();
+      expect(await pinAudits(items.c)).toBe(1);
+      // Its dates stay where they were.
+      expect(await stored(items.c)).toEqual({ start: '2026-11-09', due: '2026-11-18' });
+
+      // Clearing the start through an ordinary edit drops the pin too.
+      await setDates(items.b, { start: '2026-11-09', due: '2026-11-11', pin: '2026-11-09' });
+      const cleared = await as('pm', 'PATCH', item(items.b), { startDate: null });
+      expect(cleared.statusCode).toBe(200);
+      expect(await pinOf(items.b)).toBeNull();
+      expect(await pinAudits(items.b)).toBe(1);
+    });
+
+    it('counts only predecessors the caller can see when dropping a pin', async () => {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: { settings: { planLeadsOnly: false } },
+      });
+      const bucketId = (await prisma.bucket.findFirstOrThrow({ where: { projectId } })).id;
+      const n = (await seedItem(prisma, projectId, { createdById: ids.own, bucketId })).id;
+      await setDates(n, { start: '2026-11-02', due: '2026-11-03' });
+      await setDates(items.m, { start: '2026-11-09', due: '2026-11-10', pin: '2026-11-09' });
+      await prisma.workItemDependency.create({
+        data: { projectId, blockingItemId: n, blockedItemId: items.m },
+      });
+      // M is still blocked by P, which `own` cannot see: the outcome is the
+      // same as without P, so it says nothing about hidden links.
+      const res = await as(
+        'own',
+        'DELETE',
+        `/api/v1/projects/${projectId}/items/${items.m}/dependencies/${n}`,
+      );
+      expect(res.statusCode).toBe(200);
+      const row = await prisma.workItem.findUniqueOrThrow({ where: { id: items.m } });
+      expect(row.startNoEarlierThan).toBeNull();
+      expect(JSON.stringify(res.json())).not.toContain(items.p);
     });
 
     it('applies the permission matrix', async () => {

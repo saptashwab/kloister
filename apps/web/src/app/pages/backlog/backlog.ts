@@ -1,4 +1,13 @@
-import { Component, computed, inject, type OnInit, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  type OnInit,
+  signal,
+  untracked,
+} from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -14,20 +23,23 @@ import {
   type WorkItemDto,
 } from '@kloister/shared';
 import { errorMessage } from '../../core/api';
+import { Today } from '../../core/today';
 import {
   activeFilterCount,
-  type BoardFilter,
+  type BacklogFilter,
+  backlogShow,
   buildTree,
-  EMPTY_FILTER,
+  EMPTY_BACKLOG_FILTER,
   flattenTree,
   endOfWeek,
-  isoDate,
   matchesFilter,
+  matchesShow,
   NONE,
   pruneTree,
   type TreeNode,
 } from '../../core/board-logic';
-import { type BulkField, planBulk, runBulk } from '../../core/bulk';
+import { assertUndone, type BulkField, planBulk, runBulk, undoBulk } from '../../core/bulk';
+import { ToastService } from '../../ui/toast.service';
 import { ItemsApiService } from '../../core/items-api.service';
 import { TYPE_LABELS } from '../../core/labels';
 import { EmptyState, Skeleton } from '../../ui/feedback';
@@ -182,6 +194,14 @@ const AD_HOC_GROUP = 'ad-hoc';
           @for (s of ctx.sprints(); track s.id) {
             <mat-option [value]="s.id">{{ s.name }}</mat-option>
           }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>Show</mat-label>
+        <mat-select [value]="filter().show" (valueChange)="setFilter({ show: $event })">
+          <mat-option value="">All items</mat-option>
+          <mat-option value="done-recent">Done in the last 14 days</mat-option>
+          <mat-option value="ad-hoc">Open ad-hoc items</mat-option>
         </mat-select>
       </mat-form-field>
       @if (ctx.project()?.ownerId === null) {
@@ -471,6 +491,7 @@ export class BacklogPage implements OnInit {
     activeFilters: activeFilterCount(this.filter()),
   }));
   private readonly api = inject(ItemsApiService);
+  private readonly toast = inject(ToastService);
   private readonly session = inject(SessionStore);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -492,13 +513,16 @@ export class BacklogPage implements OnInit {
       .items()
       .filter((i) => naturalChildType(i.type) !== null && !i.adHoc && !chosen.has(i.id));
   });
-  private readonly today = isoDate(new Date());
+  /** Today and the current minute, kept current on an open tab (v1.4.0). */
+  private readonly clock = inject(Today);
+  /** Today as `YYYY-MM-DD`. */
+  private readonly today = this.clock.date;
 
   /** Serializes every current screen filter for the server snapshot preview. */
   protected snapshotFilters(): Record<string, string | boolean> {
     const f = this.filter();
     return {
-      today: this.today,
+      today: this.today(),
       boardOnly: false,
       ...Object.fromEntries(
         Object.entries({
@@ -509,15 +533,26 @@ export class BacklogPage implements OnInit {
           assigneeId: f.assigneeId === 'none' ? '' : f.assigneeId,
           dueGroup: f.due === 'overdue' ? 'Overdue' : '',
           unassigned: f.assigneeId === 'none',
-          dueFrom: f.due === 'week' ? this.today : '',
-          dueTo: f.due === 'week' ? endOfWeek(this.today) : '',
+          dueFrom: f.due === 'week' ? this.today() : '',
+          dueTo: f.due === 'week' ? endOfWeek(this.today()) : '',
+          show: f.show,
         }).filter(([, value]) => value !== ''),
       ),
     };
   }
 
-  /** Current filters (the board's, minus label and due). */
-  protected readonly filter = signal<BoardFilter>(EMPTY_FILTER);
+  /** Current filters (the board's, minus label and due, plus "Show"). */
+  protected readonly filter = signal<BacklogFilter>(EMPTY_BACKLOG_FILTER);
+  /**
+   * `?show=done-recent|ad-hoc`: start with the "Show" filter set, from the
+   * Overview report's tiles (v1.4.0); the select changes it later.
+   */
+  readonly show = input<string>();
+  /** Applies a valid `?show=` from the address; other values leave the filter alone. */
+  private readonly showFromAddress = effect(() => {
+    const show = backlogShow(this.show());
+    if (show !== '') untracked(() => this.setFilter({ show }));
+  });
   /** Ids of collapsed nodes. */
   protected readonly collapsed = signal<ReadonlySet<string>>(new Set());
   /** Ids of selected items. */
@@ -554,7 +589,13 @@ export class BacklogPage implements OnInit {
   /** Rows to show: the filtered tree, flattened, without collapsed subtrees. */
   protected readonly rows = computed(() => {
     const filter = this.filter();
-    const pruned = pruneTree(this.tree(), (i) => matchesFilter(i, filter, this.today));
+    // Read every minute, so "Done in the last 14 days" stays a rolling window.
+    const minutes = this.clock.minutes();
+    const now = Date.now();
+    const pruned = pruneTree(
+      this.tree(),
+      (i) => matchesFilter(i, filter, this.today(), minutes) && matchesShow(i, filter.show, now),
+    );
     return flattenTree(pruned, this.collapsed());
   });
 
@@ -591,7 +632,7 @@ export class BacklogPage implements OnInit {
    *
    * @param change Filters to set.
    */
-  protected setFilter(change: Partial<BoardFilter>): void {
+  protected setFilter(change: Partial<BacklogFilter>): void {
     this.filter.update((f) => ({ ...f, ...change }));
   }
 
@@ -714,7 +755,8 @@ export class BacklogPage implements OnInit {
   /**
    * Sets a sprint, bucket or assignee on every selected item, one request
    * per item, and reports what changed, what was skipped and what the API
-   * refused.
+   * refused. A toast offers Undo, which puts every changed item back
+   * (v1.4.0).
    *
    * @param field What to set.
    * @param value The value, or the "none" value.
@@ -759,6 +801,23 @@ export class BacklogPage implements OnInit {
         ),
         ...result.failed.map((f) => `${f.item.key}: ${f.message}`),
       ],
+    });
+    if (result.updated.length === 0) return;
+    const before = new Map(plan.steps.map((step) => [step.item.id, step.item]));
+    const count = result.updated.length;
+    this.toast.show(`${count} ${count === 1 ? 'item' : 'items'} updated`, async () => {
+      this.busy.set(true);
+      const undone = await undoBulk(before, result.updated, {
+        move: (item, request) => this.api.move(project.id, item.id, request),
+        update: (item, request) => this.api.update(project.id, item.id, request),
+      }).finally(() => this.busy.set(false));
+      for (const item of undone.updated) this.ctx.upsert(item);
+      if (field === 'parent' || field === 'type') await this.ctx.refresh();
+      this.report.set({
+        summary: `${undone.updated.length} put back, ${undone.failed.length} refused.`,
+        problems: undone.failed.map((f) => `${f.item.key}: ${f.message}`),
+      });
+      assertUndone(undone);
     });
   }
 

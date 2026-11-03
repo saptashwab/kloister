@@ -51,8 +51,8 @@ import { firstValueFrom, map } from 'rxjs';
 import { errorMessage } from '../../core/api';
 import { buildTree, NONE, pruneTree } from '../../core/board-logic';
 import { OutlineApiService } from './outline-api.service';
-import { type BulkField, planBulk, runBulk } from '../../core/bulk';
-import { dayOf } from '../../core/format';
+import { assertUndone, type BulkField, planBulk, runBulk, undoBulk } from '../../core/bulk';
+import { Today } from '../../core/today';
 import { ItemsApiService } from '../../core/items-api.service';
 import { TrashApiService } from '../../core/trash-api.service';
 import { STATUS_LABELS, TYPE_LABELS } from '../../core/labels';
@@ -70,6 +70,7 @@ import {
   conflicts,
   dateOfDay,
   dayNumber,
+  openingDay,
   dueText,
   CELL_PADDING_PX,
   fitAvatars,
@@ -115,6 +116,7 @@ import {
   TimelineBarStyles,
   TimelineDragStyles,
   TimelineGridStyles,
+  TimelineMarkStyles,
   TimelineToolStyles,
 } from './timeline-styles';
 
@@ -278,11 +280,12 @@ interface BarDraft {
     TypeIcon,
     TimelineGridStyles,
     TimelineBarStyles,
+    TimelineMarkStyles,
     TimelineToolStyles,
     TimelineDragStyles,
   ],
   template: `
-    <app-timeline-grid-styles /><app-timeline-bar-styles /><app-timeline-tool-styles /><app-timeline-drag-styles />
+    <app-timeline-grid-styles /><app-timeline-bar-styles /><app-timeline-mark-styles /><app-timeline-tool-styles /><app-timeline-drag-styles />
     <div class="tools k-page-tools" role="toolbar" aria-label="Timeline">
       @if (canCreate()) {
         <button mat-stroked-button type="button" (click)="focusAdd(null)">
@@ -349,7 +352,7 @@ interface BarDraft {
           <mat-button-toggle [value]="z.id">{{ z.label }}</mat-button-toggle>
         }
       </mat-button-toggle-group>
-      <button mat-stroked-button type="button" (click)="scrollToDay(todayDay)">Today</button>
+      <button mat-stroked-button type="button" (click)="scrollToDay(todayDay())">Today</button>
       <button mat-stroked-button type="button" (click)="fitPlan()">Fit plan</button>
       <button mat-stroked-button type="button" (click)="openHolidays()">
         Holidays{{
@@ -717,6 +720,14 @@ interface BarDraft {
                   {{ t.label }}
                 </div>
               }
+              <div
+                class="today-mark"
+                role="img"
+                [attr.aria-label]="'Today, ' + shortDay(today())"
+                [style.left.px]="todayX()"
+              >
+                <span aria-hidden="true">Today</span>
+              </div>
             </div>
           </div>
 
@@ -1298,7 +1309,7 @@ export class TimelinePage implements OnInit {
    */
   private readonly pageActions = inject(PageActions).register(() => ({
     source: this.ctx.project()?.id ?? '',
-    filters: { today: this.today, boardOnly: false, ...(this.text() ? { q: this.text() } : {}) },
+    filters: { today: this.today(), boardOnly: false, ...(this.text() ? { q: this.text() } : {}) },
     msProject: true,
     tools: true,
     activeFilters: [
@@ -1338,10 +1349,10 @@ export class TimelinePage implements OnInit {
     { id: 'month', label: 'Month' },
     { id: 'quarter', label: 'Quarter' },
   ];
-  /** Today, `YYYY-MM-DD`. */
-  protected readonly today = dayOf(new Date());
+  /** Today, `YYYY-MM-DD`; kept current on an open tab (v1.4.0). */
+  protected readonly today = inject(Today).date;
   /** Today as a day number. */
-  protected readonly todayDay = dayNumber(this.today);
+  protected readonly todayDay = computed(() => dayNumber(this.today()));
 
   /** Phone width shows cards instead of the grid and bars. */
   protected readonly phone = toSignal(
@@ -1533,11 +1544,13 @@ export class TimelinePage implements OnInit {
           .map((r) => r.node.id),
       ),
   );
-  protected readonly scale = computed(() => timelineScale(this.planned(), this.today, this.zoom()));
+  protected readonly scale = computed(() =>
+    timelineScale(this.planned(), this.today(), this.zoom()),
+  );
   protected readonly barsWidth = computed(() => this.scale().days * this.scale().dayWidth);
   protected readonly ticks = computed(() => scaleTicks(this.scale(), this.zoom()));
   protected readonly todayX = computed(
-    () => (this.todayDay - this.scale().origin + 0.5) * this.scale().dayWidth,
+    () => (this.todayDay() - this.scale().origin + 0.5) * this.scale().dayWidth,
   );
   protected readonly conflictMap = computed(() =>
     conflicts(this.planned(), this.edges(), this.calendar()),
@@ -1627,7 +1640,7 @@ export class TimelinePage implements OnInit {
         await this.loadEdges();
         const wanted = Number(this.route.snapshot.queryParamMap.get('item'));
         if (Number.isInteger(wanted) && wanted > 0) this.reveal(wanted);
-        else this.scrollToDay(this.todayDay - 7);
+        else this.scrollToDay(openingDay(this.plan(), this.today()));
       } catch (error) {
         this.toast.error(error);
       }
@@ -1729,7 +1742,7 @@ export class TimelinePage implements OnInit {
         info: this.holidayInfo(),
         canManage: this.canManageHolidays(),
         canSwitch: this.ctx.writable() && this.ctx.has(ProjectPermission.MANAGE_PROJECT),
-        today: this.today,
+        today: this.today(),
       },
       // Wide enough for a holiday's name, both days and the button on one line.
       width: 'var(--k-size-880px)',
@@ -1765,7 +1778,7 @@ export class TimelinePage implements OnInit {
    * @returns E.g. "5 Nov".
    */
   protected shortDay(date: string): string {
-    return shortDay(date, this.today);
+    return shortDay(date, this.today());
   }
 
   /**
@@ -1775,7 +1788,7 @@ export class TimelinePage implements OnInit {
    * @returns E.g. "5 Nov, 2nd half".
    */
   protected startText(dates: ScheduleDates): string {
-    return startText(dates, this.today);
+    return startText(dates, this.today());
   }
 
   /**
@@ -1785,7 +1798,7 @@ export class TimelinePage implements OnInit {
    * @returns E.g. "11 Nov, 1st half".
    */
   protected dueText(dates: ScheduleDates): string {
-    return dueText(dates, this.today);
+    return dueText(dates, this.today());
   }
 
   /**
@@ -2456,7 +2469,7 @@ export class TimelinePage implements OnInit {
             this.toast.show('Type a duration of at least 0.5 working days, in halves');
             return;
           }
-          const start = item.startDate ?? item.dueDate ?? this.today;
+          const start = item.startDate ?? item.dueDate ?? this.today();
           const finish = finishAfter(
             { date: start, second: item.startDate !== null && item.startSecondHalf },
             days,
@@ -2514,7 +2527,7 @@ export class TimelinePage implements OnInit {
       return column === 'start'
         ? { item: item.id, startDate: null }
         : { item: item.id, dueDate: null };
-    const parsed = parseHalfDay(value, this.today);
+    const parsed = parseHalfDay(value, this.today());
     if (parsed === null) {
       this.toast.show('Type a date such as 5 Nov or 05/11/2026, optionally with 1st or 2nd half');
       return null;
@@ -3222,7 +3235,8 @@ export class TimelinePage implements OnInit {
   }
 
   /**
-   * Sets a field on every selected row, one request per row.
+   * Sets a field on every selected row, one request per row; a toast offers
+   * Undo, which puts every changed row back (v1.4.0).
    *
    * @param field What to set.
    * @param value The value.
@@ -3262,6 +3276,23 @@ export class TimelinePage implements OnInit {
         ),
         ...result.failed.map((f) => `${f.item.key}: ${f.message}`),
       ],
+    });
+    if (result.updated.length === 0) return;
+    const before = new Map(plan.steps.map((step) => [step.item.id, step.item]));
+    const count = result.updated.length;
+    this.toast.show(`${count} ${count === 1 ? 'row' : 'rows'} updated`, async () => {
+      this.busy.set(true);
+      const undone = await undoBulk(before, result.updated, {
+        move: (item, request) => this.api.move(project.id, item.id, request),
+        update: (item, request) => this.api.update(project.id, item.id, request),
+      }).finally(() => this.busy.set(false));
+      for (const item of undone.updated) this.ctx.upsert(item);
+      if (field === 'parent' || field === 'type') await this.ctx.refresh();
+      this.report.set({
+        summary: `${undone.updated.length} put back, ${undone.failed.length} refused.`,
+        problems: undone.failed.map((f) => `${f.item.key}: ${f.message}`),
+      });
+      assertUndone(undone);
     });
   }
 
@@ -3702,7 +3733,7 @@ export class TimelinePage implements OnInit {
       return;
     }
     const name = await this.dialogs.prompt({
-      title: `New sprint, ${shortDay(span.start.date, this.today)} – ${shortDay(span.finish.dueDate, this.today)}`,
+      title: `New sprint, ${shortDay(span.start.date, this.today())} – ${shortDay(span.finish.dueDate, this.today())}`,
       label: 'Sprint name',
       value: `Sprint ${this.ctx.sprints().length + 1}`,
       confirm: 'Create and assign',

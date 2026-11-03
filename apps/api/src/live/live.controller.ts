@@ -18,7 +18,7 @@ import { CurrentAuth, KeepSessionIdle } from '../auth/decorators.js';
 import { SettingsService } from '../settings/settings.service.js';
 import { parseClientId } from './client-id.js';
 import { LiveHub } from './live-hub.js';
-import { LivePresenceDto, LiveSubscribeDto } from './live.dto.js';
+import { LivePresenceDto, LiveSubscribeDto, LiveWorkDto } from './live.dto.js';
 
 /**
  * Live updates (M10 plan section 6): the Server-Sent Events stream and its
@@ -26,8 +26,9 @@ import { LivePresenceDto, LiveSubscribeDto } from './live.dto.js';
  *
  * Permissions: every route needs a session and none refreshes it
  * (`@KeepSessionIdle()`), so the stream itself never keeps a session alive. A
- * stream carries only its owner's notifications and the events of one
- * project they are a member of, filtered by their visibility (SPEC §3.3).
+ * stream carries only its owner's notifications, the events of one project
+ * they are a member of and of the work it follows (theirs, or a person's
+ * they may look up), filtered by their visibility (SPEC §3.3).
  */
 @Controller('events')
 @KeepSessionIdle()
@@ -115,6 +116,31 @@ export class LiveController {
     @Body() body: LiveSubscribeDto,
   ): Promise<void> {
     return this.hub.subscribe(auth, streamId, body.projectId);
+  }
+
+  /**
+   * Follows a person's work with the stream (v1.4.0), so "all their work"
+   * refreshes when their items change, or none (null: the caller's own work).
+   * Events still pass the caller's own visibility in each project they are a
+   * member of; personal spaces of others never match.
+   *
+   * Permissions: own stream only; the same people the caller may look up in
+   * `GET /users/:userId/work` (administrators anyone, others only people who
+   * share a project with them). 404 otherwise.
+   *
+   * @param auth The caller.
+   * @param streamId The stream.
+   * @param body The person.
+   * @returns Resolves once followed (204).
+   */
+  @Put(':streamId/work')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  work(
+    @CurrentAuth() auth: AuthContext,
+    @Param('streamId', ParseUUIDPipe) streamId: string,
+    @Body() body: LiveWorkDto,
+  ): Promise<void> {
+    return this.hub.followWork(auth, streamId, body.userId);
   }
 
   /**

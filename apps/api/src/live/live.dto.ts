@@ -1,6 +1,7 @@
 import {
   type LivePresenceRequest,
   type LiveSubscribeRequest,
+  type LiveWorkRequest,
   PRESENCE_FIELDS,
   PresenceAction,
   type PresenceField,
@@ -15,6 +16,15 @@ export class LiveSubscribeDto implements LiveSubscribeRequest {
   @IsString()
   @MaxLength(64)
   projectId: string | null;
+}
+
+/** Body of `PUT /events/:streamId/work` (v1.4.0). */
+export class LiveWorkDto implements LiveWorkRequest {
+  /** The person whose work the tab lists, or null for the caller's own. */
+  @ValidateIf((_o, value) => value !== null)
+  @LowercaseUuid()
+  @IsUUID()
+  userId: string | null;
 }
 
 /** Body of `PUT /events/:streamId/presence`. */

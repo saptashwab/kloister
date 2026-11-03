@@ -48,7 +48,8 @@ import {
 } from '@kloister/shared';
 import { AnnotationsApiService } from '../../core/annotations-api.service';
 import { errorMessage } from '../../core/api';
-import { isoDate, NONE } from '../../core/board-logic';
+import { NONE } from '../../core/board-logic';
+import { Today } from '../../core/today';
 import { dueState, dueText, revertMove, shortDate, undoFields } from '../../core/item-changes';
 import { ItemsApiService } from '../../core/items-api.service';
 import { TrashApiService } from '../../core/trash-api.service';
@@ -72,6 +73,7 @@ import { PresenceAvatars } from '../../ui/live-ui';
 import { PriorityIcon, StatusPill, TypeIcon } from '../../ui/signals';
 import { ToastService } from '../../ui/toast.service';
 import { ItemCopyAction } from '../../ui/item-copy-action';
+import { ItemLinkAction } from '../../ui/item-link-action';
 import { ShareButtons, ShareKeysDirective } from '../../ui/share-buttons';
 import { ItemActivity } from './item-activity';
 import { ItemAttachments } from './item-attachments';
@@ -123,6 +125,7 @@ const FIELD_NAMES: Record<string, string> = {
   encapsulation: ViewEncapsulation.None,
   imports: [
     ItemCopyAction,
+    ItemLinkAction,
     ShareButtons,
     ShareKeysDirective,
     NgTemplateOutlet,
@@ -224,10 +227,8 @@ const FIELD_NAMES: Record<string, string> = {
             </a>
           }
         }
-        <button type="button" class="k-icon-btn" aria-label="Copy link" (click)="copyLink()">
-          <app-icon name="link" [size]="17" />
-        </button>
         @if (detail(); as source) {
+          <app-item-link-action [item]="source" [size]="17" />
           <app-item-copy-action [item]="source" />
         }
         @if (canDelete() || canReorder()) {
@@ -1009,8 +1010,8 @@ export class ItemDrawer {
   protected readonly sprintStates = SPRINT_STATE_LABELS;
   /** Longest title accepted. */
   protected readonly titleMax = ITEM_TITLE_MAX;
-  /** Today, for the due pill. */
-  private readonly today = isoDate(new Date());
+  /** Today and the current minute, kept current on an open tab (v1.4.0). */
+  private readonly clock = inject(Today);
 
   /** The item, or null while loading or after an error. */
   protected readonly detail = signal<WorkItemDetailDto | null>(null);
@@ -1227,10 +1228,11 @@ export class ItemDrawer {
   /** The due pill's text and urgency, or null. */
   protected readonly due = computed(() => {
     const d = this.detail();
-    const state = d === null ? null : dueState(d, this.today);
+    const { date, minutes } = this.clock.now();
+    const state = d === null ? null : dueState(d, date, minutes);
     return d === null || state === null || state === 'later'
       ? null
-      : { state, text: dueText(d, this.today) };
+      : { state, text: dueText(d, date, minutes) };
   });
 
   /** Visible items that may be this item's parent (SPEC §4.1), minus its own subtree. */
@@ -1829,20 +1831,6 @@ export class ItemDrawer {
     const d = this.detail();
     if (d === null) return;
     await this.apply(() => this.api.get(this.projectId(), d.id));
-  }
-
-  /**
-   * Copies the item's link to the clipboard.
-   *
-   * @returns Resolves once copied.
-   */
-  protected async copyLink(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      this.toast.show('Link copied');
-    } catch {
-      this.toast.error('The link could not be copied; copy it from the address bar.');
-    }
   }
 
   /**

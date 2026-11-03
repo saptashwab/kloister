@@ -13,14 +13,6 @@ app-timeline {
     bottom: 0;
     pointer-events: none;
   }
-  .today {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: var(--k-primary);
-    opacity: 0.55;
-  }
   .bar {
     position: absolute;
     top: calc(var(--tl-row, var(--k-size-34px)) / 2 - var(--k-space-2));
@@ -187,19 +179,5 @@ app-timeline {
     .row.flash .cell {
       animation: none;
     }
-  }
-  // Holidays (M9.1): translucent shading over the bar area and a solid marker in the header.
-  .holiday {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    background: var(--k-warn-soft);
-    opacity: 0.6;
-  }
-  .hol {
-    position: absolute;
-    bottom: 0;
-    height: var(--k-space-1);
-    background: var(--k-warn-ink);
   }
 }

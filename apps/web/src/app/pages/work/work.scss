@@ -2,6 +2,27 @@
   display: block;
   min-width: 0;
 }
+/* Folded (v1.4.0): the title shrinks to one slim row with the actions. */
+.work-head.slim {
+  flex-wrap: nowrap;
+  padding-bottom: var(--k-space-2);
+  border-bottom: var(--k-line) solid var(--k-border);
+}
+.slim-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--k-body);
+  font-weight: 700;
+}
+/* The filters show over the list while peeking, so it does not jump. */
+.work-body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--k-space-4);
+}
 .controls {
   flex-wrap: wrap;
   gap: var(--k-space-3);

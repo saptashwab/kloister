@@ -8,6 +8,7 @@ import {
   type WorkItemDto,
 } from '@kloister/shared';
 import { errorMessage } from './api';
+import { revertFields, revertMove, undoFields } from './item-changes';
 import { TYPE_LABELS } from './labels';
 import { NONE } from './board-logic';
 import { shareOf, sharesOf, withShareFor } from './shares';
@@ -268,4 +269,70 @@ export async function runBulk(
     }
   }
   return result;
+}
+
+/** Sends the requests of a bulk Undo; each returns the item as the API answers. */
+export interface BulkUndoApi {
+  /** Moves an item back to its bucket. */
+  move(item: WorkItemDto, request: MoveItemRequest): Promise<WorkItemDto>;
+  /** Puts an item's fields back. */
+  update(item: WorkItemDto, request: UpdateItemRequest): Promise<WorkItemDto>;
+}
+
+/**
+ * Undoes a bulk edit (DESIGN §11, v1.4.0): every item the edit changed gets
+ * exactly its previous values back, one ordinary request (or two) per item
+ * like the edit itself. A card that changed bucket (a bucket edit, or a
+ * status rule) moves back first; then the fields the edit altered are put
+ * back, with the status again when the move ran a bucket entry rule. An item
+ * the edit put onto the board (an Epic or Feature that became a Story, Task
+ * or Bug) gets its type back first, since only then may it leave the board. Items
+ * the edit skipped or that were refused are left alone, as are fields the
+ * edit did not touch.
+ *
+ * @param before The items as they were before the edit, by id.
+ * @param updated The items the edit changed, as the API returned them.
+ * @param api Sends the requests.
+ * @returns The items put back and those the API refused.
+ */
+export async function undoBulk(
+  before: ReadonlyMap<string, WorkItemDto>,
+  updated: readonly WorkItemDto[],
+  api: BulkUndoApi,
+): Promise<BulkResult> {
+  const result: BulkResult = { updated: [], failed: [] };
+  for (const after of updated) {
+    const was = before.get(after.id);
+    if (was === undefined) continue;
+    try {
+      let current = after;
+      const move = was.bucketId === after.bucketId ? null : revertMove(was, after, undefined);
+      if (move !== null && was.bucketId === null) {
+        const fields = revertFields(was, after);
+        if (fields !== null) current = await api.update(current, fields);
+        current = await api.move(current, move);
+      } else {
+        if (move !== null) current = await api.move(current, move);
+        const fields = undoFields(was, after, current);
+        if (fields !== null) current = await api.update(current, fields);
+      }
+      result.updated.push(current);
+    } catch (error) {
+      result.failed.push({ item: after, message: errorMessage(error) });
+    }
+  }
+  return result;
+}
+
+/**
+ * Turns refusals of a bulk Undo into one error for the toast.
+ *
+ * @param result The Undo's result.
+ * @throws Error naming each item that could not be put back.
+ */
+export function assertUndone(result: BulkResult): void {
+  if (result.failed.length === 0) return;
+  throw new Error(
+    `Not put back: ${result.failed.map((f) => `${f.item.key} (${f.message})`).join('; ')}`,
+  );
 }

@@ -1,5 +1,58 @@
 # Decisions
 
+## v1.4.0 consistency and gaps (2026-11-03)
+
+- Owner-approved set of eight fixes before v1.4.0. Choices made while building, closest to SPEC:
+- **Today stays current.** One root `Today` service (`core/today.ts`) holds the date and minute as signals,
+  ticks just after each new minute and again when a hidden tab is shown, and stops with the app. Board cards,
+  the drawer, backlog and board due filters, My work, both calendars and the timeline read it instead of a
+  date captured on load. It loads with those lazy pages, not with the first page.
+- **Orphaned pins.** A pin is removed when an item's start is cleared through any path (the item update itself
+  clears it, so drawer, bulk and ADO edits are covered) and when its last predecessor link the caller can see is
+  removed (in the dependency delete path, as its own audited item change). The shared planner applies the same
+  rule to requested changes under the default pin action, so previews agree; an exact pin (Undo) still wins.
+  Only visible links count, as everywhere in the planner, so the result never hints at a hidden link; a hidden
+  predecessor that remains is then no longer held off by the pin, as it already did not constrain the caller's
+  plan. Re-adding a link does not bring a removed pin back. The pin goes only when a link is removed or the
+  start is cleared by that change; trashing the predecessor or making it ad hoc leaves the pin (it holds
+  nothing until a link returns, and Remove pin clears it), as does an edit that leaves an undated item as it
+  was.
+- **Report tiles.** The backlog gained one "Show" select (All items / Done in the last 14 days / Open ad-hoc
+  items) instead of two filters, read from `?show=` like the board's `?due=`. "Done in the last 14 days" is
+  the report's rolling 14 × 24 hours from `completedAt`. It counts toward the folded filter chip, and the
+  Excel "Current filtered view" applies it too (additive `show` snapshot query parameter).
+- **Folding My work.** The fold behaviour moved out of the project shell into `ui/fold.ts`: a `FoldHost` host
+  directive (classes, Escape, focus-out and press-elsewhere guards, focus to the fold button) and
+  `app-fold-controls` (chip, projected slim actions, show-toolbar button, the one fold/pin button). My work keeps
+  one header row in both states so the fold button keeps focus; its filter rows are the `k-page-tools` that
+  peek. Only narrowing filters count for the chip (source other than All, project, type, label, due); Done,
+  "items I created" and grouping do not narrow. Its buttons say "header and filters".
+- **Undo.** Backlog bulk edits and the timeline selection's field edits (sprint, bucket, assignee, status,
+  priority, labels, share, type, parent) offer Undo: `undoBulk()` moves a card back to its bucket first, then
+  sends `undoFields()` (the fields the edit changed, plus the status a bucket rule changed), one ordinary
+  request per item like the edit. My work's status menu and status-board drag already offered an exact Undo
+  (status and bucket); its list view has no status control, so nothing changed there. Link in order, Unlink
+  and Shift keep their behaviour: their date moves already go through the reschedule flow, which has its own
+  Undo; links themselves are explicit structural edits listed in the result line.
+- **Copy link.** The drawer's existing link button copied the address bar (which could be a backlog or
+  timeline address with query parameters); it now copies the item's own address built with the router and
+  the base href. Board cards have no menu, so the same small link button sits beside Duplicate. Copying uses
+  the CDK clipboard, which works without the async clipboard permission.
+- **Timeline today.** Opening scrolls to a week before today when the plan spans today or is empty, otherwise
+  to the plan start (`openingDay()` in `core/timeline-logic.ts`); `?item=` still wins. At midnight the
+  scale can start a week later when today was its earliest day; the bars then shift once, which is accepted. The today line is
+  solid and continues through the scale header with a "Today" tag. The day marks (today and holidays) moved
+  into their own lazy stylesheet (`_timeline-marks.scss`) to keep each timeline stylesheet within the
+  unchanged component style budget.
+- **Live "all their work".** Additive `PUT /events/:streamId/work` (`{ userId }`) lets a stream follow another
+  person's work. Who may be followed is the same rule as `GET /users/:userId/work` (administrators anyone,
+  others only people sharing an unarchived project; 404 otherwise). Delivery reuses the My work path: changes to
+  items that person created or is assigned to, checked with the viewer's own member access and visibility, so
+  administrators get nothing from projects they are not members of and personal spaces never match. The page
+  refetches quietly as My work does (it also refetches on the viewer's own item changes, which the same
+  stream carries). Removes the M10 accepted limit.
+- Bundle: initial 497.48 kB (was 497.31 kB); budgets unchanged.
+
 ## v1.4.0 room for the page (2026-11-03)
 
 - Owner request: the pinned sidebar and multi-row project header and toolbars take too much screen, especially

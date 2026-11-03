@@ -211,6 +211,60 @@ describe('live updates (db)', () => {
     expect(await follow('outsider', member, null)).toBe(404);
   });
 
+  it('follows another person’s work for people the caller may look up, within their scope (v1.4.0)', async () => {
+    const item = await seedItem(prisma, projectId, { createdById: ids.pm, bucketId: todo });
+    await prisma.workItemAssignee.create({
+      data: { workItemId: item.id, userId: ids.pm, projectId },
+    });
+    const member = await open('member');
+    const scoped = await open('scoped');
+    const outsider = await open('outsider');
+    const admin = await open('admin');
+    const work = (name: Name, stream: OpenStream, userId: string | null) =>
+      call(app, 'PUT', `/api/v1/events/${stream.id}/work`, { sid: sids[name], body: { userId } });
+    expect((await work('member', member, ids.pm)).statusCode).toBe(204);
+    expect((await work('scoped', scoped, ids.pm)).statusCode).toBe(204);
+    // People who share no project with the caller, and unknown people, are 404.
+    expect((await work('outsider', outsider, ids.pm)).statusCode).toBe(404);
+    expect((await work('member', member, '00000000-0000-4000-8000-000000000000')).statusCode).toBe(
+      404,
+    );
+    // Administrators may look anyone up, as for "View all their work".
+    expect((await work('admin', admin, ids.pm)).statusCode).toBe(204);
+    // Someone else's stream is unknown; a bad id is refused.
+    expect((await work('outsider', member, null)).statusCode).toBe(404);
+    expect((await work('member', member, 'nope')).statusCode).toBe(400);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/items/${item.id}/move`,
+      headers: { [CSRF_HEADER]: CSRF_HEADER_VALUE, [CLIENT_ID_HEADER]: 'tab-pm-0000' },
+      cookies: { sid: sids.pm },
+      payload: { bucketId: other },
+    });
+    expect(res.statusCode).toBe(200);
+    await until(() => events(member, 'item-changed').length > 0);
+    expect(events(member, 'item-changed')[0].data).toEqual({
+      projectId,
+      items: [{ id: item.id, actorId: ids.pm }],
+    });
+    await quiet();
+    // The OWN-scoped Member cannot see the PM's item; the admin is no member.
+    expect(scoped.events.filter((e) => e.event.startsWith('item'))).toEqual([]);
+    expect(admin.events.filter((e) => e.event.startsWith('item'))).toEqual([]);
+    // Back to their own work: no more of the PM's changes.
+    expect((await work('member', member, null)).statusCode).toBe(204);
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/projects/${projectId}/items/${item.id}/move`,
+      headers: { [CSRF_HEADER]: CSRF_HEADER_VALUE, [CLIENT_ID_HEADER]: 'tab-pm-0000' },
+      cookies: { sid: sids.pm },
+      payload: { bucketId: todo },
+    });
+    await quiet();
+    expect(events(member, 'item-changed')).toHaveLength(1);
+  });
+
   it('accepts presence only on visible items of the followed project, on own streams', async () => {
     const hidden = await seedItem(prisma, projectId, { createdById: ids.pm, bucketId: todo });
     const own = await seedItem(prisma, projectId, { createdById: ids.scoped, bucketId: todo });

@@ -94,6 +94,8 @@ export class LiveService {
   private presenceTimer: ReturnType<typeof setTimeout> | undefined;
   /** The follow requests in flight, answered one after another. */
   private following: Promise<void> = Promise.resolve();
+  /** The person whose work this tab lists ("all their work", v1.4.0), or null. */
+  private workUserId: string | null = null;
 
   /**
    * Notices the browser going offline at once (an open stream may not fail
@@ -148,6 +150,19 @@ export class LiveService {
     this.presence = { itemId: null, action: null, field: null };
     this.presenceSent = SAME_PRESENCE;
     void this.sendFollow();
+  }
+
+  /**
+   * Follows another person's work (v1.4.0), so "all their work" refreshes
+   * like My work, or none (null). The API checks the caller may look them
+   * up and still filters every event by the caller's own visibility.
+   *
+   * @param userId The person, or null.
+   */
+  followWork(userId: string | null): void {
+    if (this.workUserId === userId) return;
+    this.workUserId = userId;
+    void this.sendWork();
   }
 
   /**
@@ -249,6 +264,7 @@ export class LiveService {
     this.everConnected = true;
     this.presenceSent = SAME_PRESENCE;
     void this.sendFollow();
+    if (this.workUserId !== null) void this.sendWork();
     this.connected.next({ again });
     if (again) void this.notifications.refresh();
   }
@@ -323,6 +339,29 @@ export class LiveService {
     } catch (error) {
       this.lost(error);
     }
+  }
+
+  /**
+   * Tells the API whose work this stream follows, in turn with the project
+   * follow requests, so an earlier answer never lands last.
+   *
+   * @returns Resolves once this and earlier requests are answered.
+   */
+  private sendWork(): Promise<void> {
+    this.following = this.following.then(async () => {
+      const streamId = this.streamId;
+      if (streamId === null) return;
+      try {
+        await firstValueFrom(
+          this.http.put<void>(apiUrl(`events/${streamId}/work`), { userId: this.workUserId }),
+        );
+      } catch (error) {
+        // A person the caller may not look up gets no live updates; a lost
+        // stream is reopened.
+        this.lost(error);
+      }
+    });
+    return this.following;
   }
 
   /**

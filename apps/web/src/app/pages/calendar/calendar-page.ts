@@ -26,7 +26,7 @@ import {
 import { errorMessage } from '../../core/api';
 import { NONE } from '../../core/board-logic';
 import type { CalendarEntry, CalendarRange } from '../../core/calendar-logic';
-import { dayOf } from '../../core/format';
+import { Today } from '../../core/today';
 import { HolidaysApiService } from '../../core/holidays-api.service';
 import { ItemsApiService } from '../../core/items-api.service';
 import { TYPE_LABELS } from '../../core/labels';
@@ -135,7 +135,7 @@ const UNDATED_MAX = 100;
         [undated]="undated()"
         [holidays]="holidays()"
         [sprints]="sprintRanges()"
-        [today]="today"
+        [today]="today()"
         [phone]="phone()"
         (move)="move($event)"
         (movingChange)="moving($event)"
@@ -157,7 +157,7 @@ export class CalendarPage implements OnInit {
   protected readonly none = NONE;
   protected readonly types = Object.values(ItemType);
   protected readonly typeLabels = TYPE_LABELS;
-  protected readonly today = dayOf(new Date());
+  protected readonly today = inject(Today).date;
   protected readonly phone = phoneLayout();
 
   protected readonly assignee = signal('');
@@ -288,7 +288,7 @@ export class CalendarPage implements OnInit {
         this.holidayList.set([]);
         return;
       }
-      const mine = await this.reportsApi.myCalendar(this.today, this.today);
+      const mine = await this.reportsApi.myCalendar(this.today(), this.today());
       this.holidayList.set(mine.holidays.filter((h) => h.projectId === null));
     } catch {
       // Holidays only shade the calendar; without them it still works.

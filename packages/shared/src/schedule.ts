@@ -421,7 +421,15 @@ export function planSchedule(
     const earliest = earliestStart(preds.get(id) ?? [], byId, cal);
 
     if (change !== undefined) {
-      applyRequested(item, before, change, earliest, snapped, cal);
+      applyRequested(
+        item,
+        before,
+        change,
+        earliest,
+        (preds.get(id) ?? []).length > 0,
+        snapped,
+        cal,
+      );
     } else {
       const reason = reachedOutcome(item, earliest, cal);
       if (reason !== null) {
@@ -454,12 +462,15 @@ export function planSchedule(
 /**
  * Applies a requested change's pin rule to an item whose requested dates are
  * already set. Only Not started items get pins or snap to their earliest
- * start; a started item keeps whatever dates were asked for.
+ * start; a started item keeps whatever dates were asked for. Under the
+ * default rule a pin is dropped once nothing is left for it to hold: the
+ * start was cleared, or the item has no visible predecessor any more.
  *
  * @param item The item, already holding the requested dates.
  * @param before The item before the change.
  * @param change The change.
  * @param earliest Earliest start slot, or null without constraining predecessors.
+ * @param linked Whether the item has visible predecessors.
  * @param snapped Collects items whose start was moved to the earliest one.
  * @param cal Holidays.
  */
@@ -468,6 +479,7 @@ function applyRequested(
   before: PlanItem,
   change: PlanChange,
   earliest: number | null,
+  linked: boolean,
   snapped: Set<string>,
   cal: WorkCalendar,
 ): void {
@@ -475,6 +487,10 @@ function applyRequested(
   const start =
     item.startDate === null ? null : startSlot(item.startDate, item.startSecondHalf, cal);
   if (pin === PinAction.KEEP) return;
+  if (pin === PinAction.AUTO && (start === null || !linked)) {
+    // Orphaned pin: "start no earlier than" needs a start and a predecessor.
+    item.pin = null;
+  }
   if (pin === PinAction.SET) {
     item.pin = start === null ? null : slotHalfDay(start, cal);
     return;

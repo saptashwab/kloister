@@ -14,6 +14,8 @@ import {
   fitAvatars,
   durationText,
   indentTarget,
+  openingDay,
+  dayNumber,
   outdentTarget,
   parseDuration,
   parseHalfDay,
@@ -371,5 +373,30 @@ describe('fitAvatars', () => {
     expect(fitAvatars(3, 24)).toEqual({ shown: 0, more: 3 });
     expect(fitAvatars(1, 10)).toEqual({ shown: 1, more: 0 });
     expect(fitAvatars(0, 40)).toEqual({ shown: 0, more: 0 });
+  });
+});
+
+describe('openingDay (v1.4.0)', () => {
+  const span = (start: string, finish: string) => ({
+    start: { date: start, second: false },
+    finish: { dueDate: finish, dueFirstHalf: false },
+    duration: 1,
+    work: 1,
+  });
+
+  it('opens a week before today when the plan spans today or there is none', () => {
+    const today = dayNumber('2026-11-03');
+    expect(openingDay(null, '2026-11-03')).toBe(today - 7);
+    expect(openingDay(span('2026-10-01', '2026-12-01'), '2026-11-03')).toBe(today - 7);
+    expect(openingDay(span('2026-11-03', '2026-11-03'), '2026-11-03')).toBe(today - 7);
+  });
+
+  it('opens on the plan start when the plan is wholly past or future', () => {
+    expect(openingDay(span('2027-01-04', '2027-02-01'), '2026-11-03')).toBe(
+      dayNumber('2027-01-04'),
+    );
+    expect(openingDay(span('2026-01-05', '2026-02-02'), '2026-11-03')).toBe(
+      dayNumber('2026-01-05'),
+    );
   });
 });

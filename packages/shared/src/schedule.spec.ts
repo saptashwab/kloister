@@ -168,6 +168,26 @@ describe('planSchedule (M9)', () => {
     expect(plan.changes[0]?.pinTo).toBeNull();
   });
 
+  it('drops a pin whose start is cleared or whose last predecessor is gone', () => {
+    const cleared = planSchedule([workshop, templates], edges, [
+      { id: 't', dates: span(null, '2026-11-18') },
+    ]);
+    expect(cleared.changes[0]?.pinTo).toBeNull();
+    expect(cleared.changes[0]?.to).toEqual(span(null, '2026-11-18'));
+
+    // Rescheduled after its only link was removed: the dates stay, the pin goes.
+    const unlinked = planSchedule([workshop, templates], [], [{ id: 't' }]);
+    expect(unlinked.changes[0]?.pinTo).toBeNull();
+    expect(unlinked.changes[0]?.to).toEqual(span('2026-11-09', '2026-11-18'));
+
+    // Still linked: the pin holds, as before.
+    const linked = planSchedule([workshop, templates], edges, [{ id: 't' }]);
+    expect(linked.changes).toEqual([]);
+    // An exact pin (Undo) is kept whatever the links.
+    const undo = planSchedule([workshop, templates], [], [{ id: 't', pin: PinAction.KEEP }]);
+    expect(undo.changes).toEqual([]);
+  });
+
   it('ignores start-only predecessors and leaves items without predecessors alone', () => {
     const startOnly = item('s', span('2026-11-20', null));
     const plan = planSchedule(

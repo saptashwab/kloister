@@ -676,7 +676,11 @@ export class ItemsService {
         note('dueFirstHalf', current.dueFirstHalf, dueFirstHalf);
         data.dueFirstHalf = dueFirstHalf;
       }
-      if (options.pin !== undefined) {
+      // A pin holds a start; once this change clears the start it holds
+      // nothing and goes too, whichever path cleared it (drawer, bulk edit,
+      // ADO import). Clearing the start is itself a plan change.
+      const pinOption = startDate === null && current.startDate !== null ? null : options.pin;
+      if (pinOption !== undefined) {
         const pinBefore =
           current.startNoEarlierThan === null
             ? null
@@ -684,7 +688,7 @@ export class ItemsService {
                 date: fromDbDate(current.startNoEarlierThan)!,
                 second: current.startNoEarlierThanSecondHalf,
               };
-        const pin = options.pin;
+        const pin = pinOption;
         if (pin?.date !== pinBefore?.date || pin?.second !== pinBefore?.second) {
           note('startNoEarlierThan', pinBefore, pin);
           data.startNoEarlierThan = pin === null ? null : toDbDate(pin.date);

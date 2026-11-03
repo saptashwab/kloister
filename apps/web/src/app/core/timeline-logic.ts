@@ -210,6 +210,22 @@ export function dayNumber(date: string): number {
 }
 
 /**
+ * The day the timeline opens on (v1.4.0): a week before today when the plan
+ * spans today or there is no plan yet, so today is in view; otherwise the
+ * plan's first day, so a plan wholly in the past or future is not off screen.
+ *
+ * @param plan The plan's span, or null.
+ * @param today `YYYY-MM-DD`.
+ * @returns The day number to scroll to the left edge.
+ */
+export function openingDay(plan: ScheduleSpan | null, today: string): number {
+  const day = dayNumber(today);
+  if (plan === null) return day - 7;
+  const start = dayNumber(plan.start.date);
+  return start <= day && day <= dayNumber(plan.finish.dueDate) ? day - 7 : start;
+}
+
+/**
  * Date of a day number.
  *
  * @param day Days since 1970-01-01.
