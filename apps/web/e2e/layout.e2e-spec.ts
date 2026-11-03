@@ -26,13 +26,13 @@ test('folds the sidebar and project toolbar, peeks at the toolbar and remembers 
   await page.goto(`/p/${PROJECT_KEY}/timeline`);
   const toolbar = page.getByRole('toolbar', { name: 'Timeline' });
   await expect(toolbar).toBeVisible();
-  await expect(page.locator('app-project-shell .head h1')).toBeVisible();
+  await expect(page.locator('app-project-shell .k-page-head h1')).toBeVisible();
 
   // The shortcut folds both; it works with focus anywhere, including the grid.
   await page.keyboard.press('Control+Backslash');
   await expect(page.locator('.shell')).toHaveClass(/\brail\b/);
   await expect(page.getByRole('button', { name: 'Expand sidebar' })).toBeVisible();
-  await expect(page.locator('app-project-shell .head')).toHaveCount(0);
+  await expect(page.locator('app-project-shell .k-page-head')).toHaveCount(0);
   await expect(page.locator('.slim-name')).toBeVisible();
   await expect(toolbar).toBeHidden();
   await snap(page, 'layout-folded');
@@ -57,7 +57,7 @@ test('folds the sidebar and project toolbar, peeks at the toolbar and remembers 
 
   // The pin and the sidebar button open each again.
   await page.getByRole('button', { name: 'Keep the header and toolbar open' }).click();
-  await expect(page.locator('app-project-shell .head h1')).toBeVisible();
+  await expect(page.locator('app-project-shell .k-page-head h1')).toBeVisible();
   await expect(toolbar).toBeVisible();
   await page.getByRole('button', { name: 'Expand sidebar' }).click();
   await expect(page.locator('.shell')).not.toHaveClass(/\brail\b/);
