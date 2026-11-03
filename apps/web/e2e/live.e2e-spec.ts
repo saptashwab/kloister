@@ -204,7 +204,8 @@ test('the Member sees where the PM works: the field, the card, the page and Go t
   await member.goto(`/p/${PROJECT_KEY}`);
   const card = member.locator(`app-item-card[data-card="${item.id}"]`);
   await expect(card).toHaveClass(/k-pm-strong/, { timeout: 15_000 });
-  await expect(card.getByRole('img', { name: editing })).toBeAttached();
+  // The card's name tag, beside its small presence avatars that say the same.
+  await expect(card.locator('app-presence-tag')).toHaveAttribute('aria-label', editing);
   await snap(member, 'live-presence-card');
 
   // The header hover card says what the PM does and goes to the item.
