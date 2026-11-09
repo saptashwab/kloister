@@ -1,5 +1,12 @@
 # Decisions
 
+## Node runtime pin (2026-11-09)
+
+- New installations pin Node 24.22.2 (was 24.11.0), the latest Node 24 release, after recent Node security
+  releases. Existing installations keep their installed `scripts/install.conf`, so they change Node only through
+  the in-place steps in [ADMIN](ADMIN.md#updating-the-node-runtime). The `engines` floor (24.11) stays, so
+  development machines and CI need no change; CI already follows the latest Node 24 through `.nvmrc`.
+
 ## v1.4.1 timeline presence, ID column and edits that show at once (2026-11-04)
 
 - Owner-approved set after reviewing the presence screenshots and a report that timeline date edits felt

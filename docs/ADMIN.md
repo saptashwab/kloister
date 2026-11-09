@@ -45,6 +45,30 @@ new sign-ins. Password resets preserve introduction state; they are not a way to
 re-enroll users in the introduction. Temporary passwords are shown once. Check
 server time/timezone since backup, due-date and cleanup schedules use server time.
 
+## Updating the Node runtime
+
+Node lives in `runtime/node-v<NODE_VERSION>-linux-x64` inside the installation, and
+upgrades keep the installed `scripts/install.conf`, so a newer `NODE_VERSION` in a
+release package never changes an existing installation. To apply a Node 24 security
+release, as root:
+
+1. Download `node-v<version>-linux-x64.tar.xz` and `SHASUMS256.txt` from
+   `https://nodejs.org/dist/v<version>/` into a new mode-0700 folder, check them with
+   `sha256sum --check --ignore-missing SHASUMS256.txt` and unpack the archive into
+   `runtime/` with `tar -xJf … --no-same-owner`.
+2. As the app account, from `backend/`, check the password library with the new
+   binary: `<new node> --input-type=module -e 'import {hash} from "argon2"; await hash("probe")'`.
+   Every Node 24 release shares the native module interface, so no reinstall is needed.
+3. Stop the backend while `scripts/install.conf` still names the old version (the
+   control scripts only signal a process started from the configured binary).
+4. Keep a copy of `scripts/install.conf` outside the installation, then set the new
+   `NODE_VERSION` in it.
+5. Start again: with the optional service, rerun `scripts/enable-service.sh`, which
+   rewrites the unit's Node path and checks health; otherwise use `start.sh` and check
+   `/api/v1/health`. Remove the old runtime folder once the browser checks pass.
+
+To go back, stop, restore the saved `install.conf` and start again.
+
 ## Live updates
 
 Boards, backlogs, timelines, item details, My work and the notification bell update
